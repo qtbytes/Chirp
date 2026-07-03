@@ -142,6 +142,18 @@ def list_feed_tweets(
         )
 
     rows = db.execute(stmt).all()
+    tweet_ids = [tweet.id for _, tweet, *_ in rows]
+    liked_tweet_ids = set()
+    if tweet_ids:
+        liked_tweet_ids = {
+            tweet_id
+            for (tweet_id,) in db.execute(
+                select(Like.tweet_id).where(
+                    Like.user_id == owner_id,
+                    Like.tweet_id.in_(tweet_ids),
+                )
+            ).all()
+        }
 
     return [
         {
@@ -149,6 +161,7 @@ def list_feed_tweets(
             "like_count": int(like_count),
             "comment_count": int(comment_count),
             "retweet_count": int(retweet_count),
+            "liked_by_me": tweet.id in liked_tweet_ids,
             "cursor_created_at": feed_item.created_at,
             "cursor_id": feed_item.id,
         }

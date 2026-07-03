@@ -40,6 +40,7 @@ def list_tweets_by_authors(
     db: Session,
     author_ids: list[int],
     limit: int,
+    current_user_id: int | None = None,
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
 ) -> list[dict]:
@@ -92,6 +93,7 @@ def list_tweets_by_authors(
         .group_by(Retweet.tweet_id)
         .subquery()
     )
+    liked_tweet_ids: set[int] = set()
 
     stmt = (
         select(
@@ -121,6 +123,18 @@ def list_tweets_by_authors(
         )
 
     rows = db.execute(stmt).all()
+    if current_user_id is not None:
+        tweet_ids = [tweet.id for tweet, *_ in rows]
+        if tweet_ids:
+            liked_tweet_ids = {
+                tweet_id
+                for (tweet_id,) in db.execute(
+                    select(Like.tweet_id).where(
+                        Like.user_id == current_user_id,
+                        Like.tweet_id.in_(tweet_ids),
+                    )
+                ).all()
+            }
 
     return [
         {
@@ -128,6 +142,7 @@ def list_tweets_by_authors(
             "like_count": int(like_count),
             "comment_count": int(comment_count),
             "retweet_count": int(retweet_count),
+            "liked_by_me": tweet.id in liked_tweet_ids,
             "cursor_created_at": tweet.created_at,
             "cursor_id": tweet.id,
         }
@@ -138,6 +153,7 @@ def list_tweets_by_authors(
 def list_for_you_tweets(
     db: Session,
     limit: int,
+    current_user_id: int | None = None,
     cursor_score: int | None = None,
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
@@ -188,6 +204,19 @@ def list_for_you_tweets(
         .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
         .outerjoin(retweet_counts, retweet_counts.c.tweet_id == Tweet.id)
     ).all()
+    liked_tweet_ids: set[int] = set()
+    if current_user_id is not None:
+        tweet_ids = [tweet.id for tweet, *_ in rows]
+        if tweet_ids:
+            liked_tweet_ids = {
+                tweet_id
+                for (tweet_id,) in db.execute(
+                    select(Like.tweet_id).where(
+                        Like.user_id == current_user_id,
+                        Like.tweet_id.in_(tweet_ids),
+                    )
+                ).all()
+            }
 
     freshness_cutoff = datetime.now(timezone.utc) - timedelta(days=1)
     scored_rows = []
@@ -206,6 +235,7 @@ def list_for_you_tweets(
                 "like_count": int(like_count),
                 "comment_count": int(comment_count),
                 "retweet_count": int(retweet_count),
+                "liked_by_me": tweet.id in liked_tweet_ids,
                 "score": score,
                 "cursor_created_at": tweet.created_at,
                 "cursor_id": tweet.id,

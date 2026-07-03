@@ -56,6 +56,7 @@ def get_for_you_timeline(
         return service.get_for_you_timeline(
             limit=limit,
             cursor=cursor,
+            user_id=current_user_id,
         )
     except ValueError as exc:
         raise HTTPException(

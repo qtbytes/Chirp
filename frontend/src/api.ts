@@ -1,5 +1,6 @@
 import type {
   Comment,
+  LikeToggleResult,
   TimelineKind,
   TimelinePage,
   Tweet,
@@ -80,8 +81,10 @@ export function createTweet(content: string): Promise<Tweet> {
   });
 }
 
-export function likeTweet(tweetId: number): Promise<void> {
-  return request<void>(`/tweets/${tweetId}/likes`, { method: "POST" });
+export function toggleTweetLike(tweetId: number): Promise<LikeToggleResult> {
+  return request<LikeToggleResult>(`/tweets/${tweetId}/likes/toggle`, {
+    method: "POST",
+  });
 }
 
 export function createComment(tweetId: number, content: string): Promise<void> {

@@ -64,6 +64,25 @@ def unlike_tweet(db: Session, user_id: int, tweet_id: int) -> bool:
     return True
 
 
+def count_tweet_likes(db: Session, tweet_id: int) -> int:
+    return int(
+        db.scalar(select(func.count()).select_from(Like).where(Like.tweet_id == tweet_id))
+        or 0
+    )
+
+
+def has_liked_tweet(db: Session, user_id: int, tweet_id: int) -> bool:
+    return (
+        db.scalar(
+            select(Like).where(
+                Like.user_id == user_id,
+                Like.tweet_id == tweet_id,
+            )
+        )
+        is not None
+    )
+
+
 def retweet_tweet(db: Session, user_id: int, tweet_id: int) -> bool:
     """
     Create a retweet record.

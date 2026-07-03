@@ -23,7 +23,6 @@ import {
   getCurrentUser,
   getTimeline,
   likeComment,
-  likeTweet,
   listComments,
   listUsers,
   login,
@@ -32,6 +31,7 @@ import {
   replyToComment,
   retweetComment,
   retweetTweet,
+  toggleTweetLike,
   unfollowUser,
 } from "./api";
 import type {
@@ -457,6 +457,7 @@ function TweetCard({
 }) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [comment, setComment] = useState("");
+  const [localTweet, setLocalTweet] = useState(tweet);
   const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
   const [error, setError] = useState("");
   const displayDate = useMemo(() => {
@@ -468,11 +469,33 @@ function TweetCard({
     }).format(new Date(tweet.created_at));
   }, [tweet.created_at]);
 
-  async function runAction(action: "like" | "retweet", task: () => Promise<void>) {
-    setActing(action);
+  useEffect(() => {
+    setLocalTweet(tweet);
+  }, [tweet]);
+
+  async function runRetweetAction(task: () => Promise<void>) {
+    setActing("retweet");
     setError("");
     try {
       await task();
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function toggleLikeAction() {
+    setActing("like");
+    setError("");
+    try {
+      const result = await toggleTweetLike(localTweet.id);
+      setLocalTweet((value) => ({
+        ...value,
+        liked_by_me: result.liked,
+        like_count: result.like_count,
+      }));
       onChanged();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -518,14 +541,14 @@ function TweetCard({
       aria-label={`Open tweet by ${tweet.author.username}`}
     >
       <div className="avatar" aria-hidden="true">
-        {tweet.author.username.slice(0, 1).toUpperCase()}
+        {localTweet.author.username.slice(0, 1).toUpperCase()}
       </div>
       <div className="tweet-body">
         <header>
-          <strong>@{tweet.author.username}</strong>
+          <strong>@{localTweet.author.username}</strong>
           <span>{displayDate}</span>
         </header>
-        <p>{tweet.content}</p>
+        <p>{localTweet.content}</p>
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions">
           <button
@@ -537,29 +560,30 @@ function TweetCard({
             aria-expanded={commentOpen}
           >
             <MessageCircle size={18} aria-hidden="true" />
-            <span>{tweet.comment_count}</span>
+            <span>{localTweet.comment_count}</span>
           </button>
           <button
             className="tweet-action retweet"
             onClick={(event) => {
               event.stopPropagation();
-              void runAction("retweet", () => retweetTweet(tweet.id));
+              void runRetweetAction(() => retweetTweet(localTweet.id));
             }}
             disabled={acting === "retweet"}
           >
             <Repeat2 size={18} aria-hidden="true" />
-            <span>{tweet.retweet_count}</span>
+            <span>{localTweet.retweet_count}</span>
           </button>
           <button
-            className="tweet-action like"
+            className={localTweet.liked_by_me ? "tweet-action like active" : "tweet-action like"}
             onClick={(event) => {
               event.stopPropagation();
-              void runAction("like", () => likeTweet(tweet.id));
+              void toggleLikeAction();
             }}
             disabled={acting === "like"}
+            aria-pressed={localTweet.liked_by_me}
           >
-            <Heart size={18} aria-hidden="true" />
-            <span>{tweet.like_count}</span>
+            <Heart size={18} aria-hidden="true" fill={localTweet.liked_by_me ? "currentColor" : "none"} />
+            <span>{localTweet.like_count}</span>
           </button>
         </footer>
         {commentOpen ? (
@@ -628,15 +652,28 @@ function TweetDetail({
     void loadTweetComments();
   }, [loadTweetComments]);
 
-  async function runDetailAction(action: "like" | "retweet", task: () => Promise<void>) {
-    setActing(action);
+  async function runDetailRetweetAction(task: () => Promise<void>) {
+    setActing("retweet");
     setError("");
     try {
       await task();
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function toggleDetailLikeAction() {
+    setActing("like");
+    setError("");
+    try {
+      const result = await toggleTweetLike(currentTweet.id);
       setCurrentTweet((value) => ({
         ...value,
-        like_count: action === "like" ? value.like_count + 1 : value.like_count,
-        retweet_count: action === "retweet" ? value.retweet_count + 1 : value.retweet_count,
+        liked_by_me: result.liked,
+        like_count: result.like_count,
       }));
       onChanged();
     } catch (err) {
@@ -701,18 +738,23 @@ function TweetDetail({
           </button>
           <button
             className="tweet-action retweet"
-            onClick={() => void runDetailAction("retweet", () => retweetTweet(currentTweet.id))}
+            onClick={() => void runDetailRetweetAction(() => retweetTweet(currentTweet.id))}
             disabled={acting === "retweet"}
           >
             <Repeat2 size={18} aria-hidden="true" />
             <span>{currentTweet.retweet_count}</span>
           </button>
           <button
-            className="tweet-action like"
-            onClick={() => void runDetailAction("like", () => likeTweet(currentTweet.id))}
+            className={currentTweet.liked_by_me ? "tweet-action like active" : "tweet-action like"}
+            onClick={() => void toggleDetailLikeAction()}
             disabled={acting === "like"}
+            aria-pressed={currentTweet.liked_by_me}
           >
-            <Heart size={18} aria-hidden="true" />
+            <Heart
+              size={18}
+              aria-hidden="true"
+              fill={currentTweet.liked_by_me ? "currentColor" : "none"}
+            />
             <span>{currentTweet.like_count}</span>
           </button>
         </div>

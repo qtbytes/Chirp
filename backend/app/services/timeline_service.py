@@ -124,6 +124,7 @@ class TimelineService:
                 self.db,
                 author_ids=author_ids,
                 limit=limit,
+                current_user_id=user_id,
                 cursor_created_at=cursor_created_at,
                 cursor_id=cursor_id,
             )
@@ -144,6 +145,7 @@ class TimelineService:
         self,
         limit: int,
         cursor: str | None,
+        user_id: int | None = None,
     ) -> TimelinePage:
         cursor_score, cursor_created_at, cursor_id = decode_score_cursor(cursor)
         if cursor and (
@@ -154,6 +156,7 @@ class TimelineService:
         rows = tweet_repository.list_for_you_tweets(
             self.db,
             limit=limit,
+            current_user_id=user_id,
             cursor_score=cursor_score,
             cursor_created_at=cursor_created_at,
             cursor_id=cursor_id,
@@ -183,6 +186,7 @@ class TimelineService:
             like_count=row["like_count"],
             comment_count=row["comment_count"],
             retweet_count=row["retweet_count"],
+            liked_by_me=row.get("liked_by_me", False),
         )
 
     def _build_page(

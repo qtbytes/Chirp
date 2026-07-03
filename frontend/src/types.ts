@@ -17,6 +17,13 @@ export type Tweet = {
   like_count: number;
   comment_count: number;
   retweet_count: number;
+  liked_by_me: boolean;
+};
+
+export type LikeToggleResult = {
+  tweet_id: number;
+  liked: boolean;
+  like_count: number;
 };
 
 export type Comment = {

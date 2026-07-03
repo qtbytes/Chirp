@@ -181,6 +181,30 @@ def test_retweet_action_updates_timeline_count() -> None:
     assert timeline_tweet["retweet_count"] == 1
 
 
+def test_tweet_like_toggle_updates_state_and_count() -> None:
+    alice = TestClient(app)
+    bob = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "password": "password123"},
+    )
+    tweet = alice.post("/api/v1/tweets", json={"content": "like me"}).json()
+
+    liked_response = bob.post(f"/api/v1/tweets/{tweet['id']}/likes/toggle")
+    unliked_response = bob.post(f"/api/v1/tweets/{tweet['id']}/likes/toggle")
+
+    assert liked_response.status_code == 200
+    assert liked_response.json()["liked"] is True
+    assert liked_response.json()["like_count"] == 1
+    assert unliked_response.status_code == 200
+    assert unliked_response.json()["liked"] is False
+    assert unliked_response.json()["like_count"] == 0
+
+
 def test_comment_interactions_update_comment_counts() -> None:
     alice = TestClient(app)
     bob = TestClient(app)

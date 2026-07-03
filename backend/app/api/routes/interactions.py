@@ -66,6 +66,44 @@ def unlike_tweet(
     }
 
 
+@router.post("/{tweet_id}/likes/toggle", status_code=status.HTTP_200_OK)
+def toggle_tweet_like(
+    tweet_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    if engagement_repository.has_liked_tweet(
+        db,
+        user_id=current_user_id,
+        tweet_id=tweet_id,
+    ):
+        engagement_repository.unlike_tweet(
+            db,
+            user_id=current_user_id,
+            tweet_id=tweet_id,
+        )
+        liked = False
+    else:
+        try:
+            engagement_repository.like_tweet(
+                db,
+                user_id=current_user_id,
+                tweet_id=tweet_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        liked = True
+
+    return {
+        "tweet_id": tweet_id,
+        "liked": liked,
+        "like_count": engagement_repository.count_tweet_likes(db, tweet_id),
+    }
+
+
 @router.post("/{tweet_id}/retweets", status_code=status.HTTP_201_CREATED)
 def retweet_tweet(
     tweet_id: int,

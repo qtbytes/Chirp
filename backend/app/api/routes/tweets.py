@@ -56,6 +56,7 @@ def create_tweet(
             "like_count": 0,
             "comment_count": 0,
             "retweet_count": 0,
+            "liked_by_me": False,
             "cursor_created_at": tweet.created_at,
             "cursor_id": tweet.id,
         }

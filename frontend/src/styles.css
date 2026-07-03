@@ -546,6 +546,10 @@ textarea:focus {
   background: color-mix(in srgb, var(--like) 12%, transparent);
 }
 
+.tweet-action.like.active {
+  color: var(--like);
+}
+
 .comment-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
