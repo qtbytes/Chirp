@@ -106,7 +106,7 @@ def test_user_discovery_includes_follow_state() -> None:
     assert users["bob"]["is_following"] is True
 
 
-def test_for_you_scores_global_tweets() -> None:
+def test_for_you_lists_latest_first_then_score() -> None:
     alice = TestClient(app)
     bob = TestClient(app)
     carol = TestClient(app)
@@ -123,20 +123,54 @@ def test_for_you_scores_global_tweets() -> None:
         json={"username": "carol", "password": "password123"},
     )
 
-    plain_tweet = alice.post("/api/v1/tweets", json={"content": "plain"}).json()
-    scored_tweet = bob.post("/api/v1/tweets", json={"content": "scored"}).json()
+    first_tweet = alice.post("/api/v1/tweets", json={"content": "first"}).json()
+    latest_tweet = bob.post("/api/v1/tweets", json={"content": "latest"}).json()
 
-    carol.post(f"/api/v1/tweets/{scored_tweet['id']}/likes")
+    carol.post(f"/api/v1/tweets/{first_tweet['id']}/likes")
     carol.post(
-        f"/api/v1/tweets/{scored_tweet['id']}/comments",
+        f"/api/v1/tweets/{first_tweet['id']}/comments",
         json={"content": "reply"},
     )
 
     response = alice.get("/api/v1/timeline/for-you")
     assert response.status_code == 200
     items = response.json()["items"]
-    assert [item["id"] for item in items[:2]] == [scored_tweet["id"], plain_tweet["id"]]
+    assert [item["id"] for item in items[:2]] == [latest_tweet["id"], first_tweet["id"]]
     assert response.json()["strategy"] == "for_you"
+
+
+def test_for_you_uses_score_when_created_at_ties() -> None:
+    alice = TestClient(app)
+    bob = TestClient(app)
+    carol = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "password": "password123"},
+    )
+    carol.post(
+        "/api/v1/auth/register",
+        json={"username": "carol", "password": "password123"},
+    )
+
+    low_score = alice.post("/api/v1/tweets", json={"content": "low"}).json()
+    high_score = bob.post("/api/v1/tweets", json={"content": "high"}).json()
+    carol.post(f"/api/v1/tweets/{high_score['id']}/likes")
+
+    with TestingSessionLocal() as db:
+        from app.models.tweet import Tweet
+
+        same_created_at = db.get(Tweet, low_score["id"]).created_at
+        db.get(Tweet, high_score["id"]).created_at = same_created_at
+        db.commit()
+
+    response = alice.get("/api/v1/timeline/for-you")
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["id"] for item in items[:2]] == [high_score["id"], low_score["id"]]
 
 
 def test_session_can_create_tweet() -> None:
@@ -223,14 +257,24 @@ def test_comment_interactions_update_comment_counts() -> None:
         json={"content": "first"},
     ).json()
 
-    like_response = alice.post(f"/api/v1/comments/{comment['id']}/likes")
+    like_response = alice.post(f"/api/v1/comments/{comment['id']}/likes/toggle")
+    unlike_response = alice.post(f"/api/v1/comments/{comment['id']}/likes/toggle")
+    second_like_response = alice.post(f"/api/v1/comments/{comment['id']}/likes/toggle")
     retweet_response = alice.post(f"/api/v1/comments/{comment['id']}/retweets")
     reply_response = alice.post(
         f"/api/v1/comments/{comment['id']}/comments",
         json={"content": "reply"},
     )
 
-    assert like_response.status_code == 201
+    assert like_response.status_code == 200
+    assert like_response.json()["liked"] is True
+    assert like_response.json()["like_count"] == 1
+    assert unlike_response.status_code == 200
+    assert unlike_response.json()["liked"] is False
+    assert unlike_response.json()["like_count"] == 0
+    assert second_like_response.status_code == 200
+    assert second_like_response.json()["liked"] is True
+    assert second_like_response.json()["like_count"] == 1
     assert retweet_response.status_code == 201
     assert reply_response.status_code == 201
     assert reply_response.json()["parent_comment_id"] == comment["id"]
@@ -239,5 +283,10 @@ def test_comment_interactions_update_comment_counts() -> None:
     assert comments_response.status_code == 200
     comments = {item["id"]: item for item in comments_response.json()}
     assert comments[comment["id"]]["like_count"] == 1
+    assert comments[comment["id"]]["liked_by_me"] is True
     assert comments[comment["id"]]["comment_count"] == 1
     assert comments[comment["id"]]["retweet_count"] == 1
+    assert [item["id"] for item in comments_response.json()] == [
+        comment["id"],
+        reply_response.json()["id"],
+    ]
