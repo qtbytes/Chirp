@@ -1,0 +1,565 @@
+:root {
+  color: #0f1419;
+  background: #f7f9f9;
+  font-family:
+    ui-sans-serif,
+    "Segoe UI",
+    "Helvetica Neue",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --line: #d9e1e8;
+  --muted: #536471;
+  --ink: #0f1419;
+  --accent: #1d9bf0;
+  --accent-strong: #0f80d8;
+  --panel: #ffffff;
+  --soft: #eff3f4;
+  --danger: #b3261e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.boot-screen,
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-page {
+  background:
+    linear-gradient(90deg, rgba(15, 20, 25, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(15, 20, 25, 0.04) 1px, transparent 1px),
+    #f7f9f9;
+  background-size: 42px 42px;
+}
+
+.auth-panel {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 34px;
+  box-shadow: 0 20px 60px rgba(15, 20, 25, 0.12);
+}
+
+.brand-mark,
+.rail-brand {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+
+.auth-panel h1 {
+  margin: 14px 0 28px;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.auth-form,
+.auth-form label {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form {
+  gap: 18px;
+}
+
+.auth-form span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+}
+
+input {
+  height: 46px;
+  padding: 0 14px;
+}
+
+textarea {
+  min-height: 110px;
+  resize: vertical;
+  padding: 14px 0;
+  border: 0;
+  border-radius: 0;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+input:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(29, 155, 240, 0.16);
+}
+
+textarea:focus {
+  box-shadow: none;
+}
+
+.primary-button,
+.follow-button,
+.load-more,
+.text-button,
+.icon-button,
+.tab {
+  border: 0;
+  background: transparent;
+}
+
+.primary-button {
+  min-height: 46px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  font-weight: 800;
+  padding: 0 20px;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.primary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.primary-button.compact {
+  min-height: 38px;
+  padding: 0 22px;
+}
+
+.text-button {
+  margin-top: 18px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.form-error {
+  color: var(--danger);
+  margin: 0;
+  font-size: 14px;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(76px, 280px) minmax(0, 640px) minmax(280px, 360px);
+  justify-content: center;
+  background: var(--panel);
+}
+
+.rail,
+.discovery-column {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 18px;
+}
+
+.rail {
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.rail-nav {
+  display: grid;
+  gap: 6px;
+}
+
+.rail-link {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 20px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0 16px;
+}
+
+.rail-link:hover,
+.rail-link.active {
+  background: var(--soft);
+}
+
+.rail-link.muted {
+  color: var(--muted);
+}
+
+.rail-user {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.rail-user strong,
+.rail-user span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.rail-user span,
+.tweet-body header span,
+.tweet-body footer,
+.counter,
+.user-copy span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.icon-button:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.feed-column {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+}
+
+.feed-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--line);
+}
+
+.feed-header h1 {
+  margin: 0;
+  padding: 16px 18px 8px;
+  font-size: 22px;
+}
+
+.tab-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.tab {
+  min-height: 52px;
+  color: var(--muted);
+  font-weight: 800;
+  position: relative;
+}
+
+.tab.active {
+  color: var(--ink);
+}
+
+.tab.active::after {
+  content: "";
+  position: absolute;
+  width: 58px;
+  height: 4px;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.composer {
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.counter.warn {
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.tweet-list {
+  display: grid;
+}
+
+.tweet-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tweet-card:hover {
+  background: #f8fbfd;
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #0f1419;
+  color: white;
+  font-weight: 900;
+}
+
+.avatar.small {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+}
+
+.tweet-body {
+  min-width: 0;
+}
+
+.tweet-body header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.tweet-body p {
+  margin: 6px 0 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.tweet-body footer {
+  display: flex;
+  gap: 22px;
+}
+
+.status-panel,
+.loading-row,
+.load-more {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.status-panel.error {
+  color: var(--danger);
+}
+
+.load-more {
+  width: 100%;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.discovery-column {
+  padding-top: 12px;
+}
+
+.discovery-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.discovery-panel h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.search-box {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--muted);
+  padding: 0 14px;
+}
+
+.search-box input {
+  border: 0;
+  background: transparent;
+  height: 40px;
+  padding: 0;
+}
+
+.search-box input:focus {
+  box-shadow: none;
+}
+
+.user-list {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.user-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 68px;
+  padding: 12px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+
+.user-row:last-child {
+  border-bottom: 0;
+}
+
+.user-copy {
+  min-width: 0;
+}
+
+.user-copy strong,
+.user-copy span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.follow-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 800;
+  padding: 0 12px;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1040px) {
+  .app-shell {
+    grid-template-columns: 76px minmax(0, 640px);
+  }
+
+  .rail-link span,
+  .rail-user div {
+    display: none;
+  }
+
+  .discovery-column {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    display: block;
+  }
+
+  .rail {
+    position: fixed;
+    z-index: 4;
+    inset: auto 0 0 0;
+    height: 58px;
+    flex-direction: row;
+    align-items: center;
+    padding: 4px 10px;
+    border-top: 1px solid var(--line);
+    border-right: 0;
+    background: #fff;
+  }
+
+  .rail-brand,
+  .rail-user,
+  .rail-link.muted {
+    display: none;
+  }
+
+  .rail-nav {
+    width: 100%;
+    display: flex;
+    justify-content: space-around;
+  }
+
+  .rail-link {
+    min-height: 46px;
+    padding: 0 14px;
+  }
+
+  .rail-link span {
+    display: none;
+  }
+
+  .feed-column {
+    border-right: 0;
+    padding-bottom: 58px;
+  }
+
+  .tweet-card {
+    grid-template-columns: 42px minmax(0, 1fr);
+    padding: 14px;
+  }
+
+  .auth-panel {
+    padding: 26px;
+  }
+}
