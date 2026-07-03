@@ -16,6 +16,7 @@ export type Tweet = {
   author: UserSummary;
   like_count: number;
   comment_count: number;
+  retweet_count: number;
 };
 
 export type TimelinePage = {

@@ -73,6 +73,21 @@ export function createTweet(content: string): Promise<Tweet> {
   });
 }
 
+export function likeTweet(tweetId: number): Promise<void> {
+  return request<void>(`/tweets/${tweetId}/likes`, { method: "POST" });
+}
+
+export function createComment(tweetId: number, content: string): Promise<void> {
+  return request<void>(`/tweets/${tweetId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function retweetTweet(tweetId: number): Promise<void> {
+  return request<void>(`/tweets/${tweetId}/retweets`, { method: "POST" });
+}
+
 export function getTimeline(kind: TimelineKind, cursor?: string | null): Promise<TimelinePage> {
   const params = new URLSearchParams({ limit: "20" });
   if (cursor) {

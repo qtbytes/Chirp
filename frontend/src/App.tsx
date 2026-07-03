@@ -3,9 +3,12 @@ import {
   Bell,
   Feather,
   Home,
+  Heart,
   Loader2,
   LogOut,
   Moon,
+  MessageCircle,
+  Repeat2,
   Search,
   Sun,
   UserPlus,
@@ -13,14 +16,17 @@ import {
 } from "lucide-react";
 import {
   ApiError,
+  createComment,
   createTweet,
   followUser,
   getCurrentUser,
   getTimeline,
+  likeTweet,
   listUsers,
   login,
   logout,
   register,
+  retweetTweet,
   unfollowUser,
 } from "./api";
 import type { TimelineKind, TimelinePage, Tweet, UserDiscovery, UserSummary } from "./types";
@@ -309,7 +315,7 @@ function MainApp({
         ) : null}
         <section className="tweet-list" aria-live="polite">
           {tweets.map((tweet) => (
-            <TweetCard key={tweet.id} tweet={tweet} />
+            <TweetCard key={tweet.id} tweet={tweet} onChanged={() => setRefreshToken((value) => value + 1)} />
           ))}
         </section>
         {loadingFeed ? (
@@ -406,7 +412,11 @@ function Composer({ onPosted }: { onPosted: () => void }) {
   );
 }
 
-function TweetCard({ tweet }: { tweet: Tweet }) {
+function TweetCard({ tweet, onChanged }: { tweet: Tweet; onChanged: () => void }) {
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [comment, setComment] = useState("");
+  const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
+  const [error, setError] = useState("");
   const displayDate = useMemo(() => {
     return new Intl.DateTimeFormat(undefined, {
       month: "short",
@@ -415,6 +425,39 @@ function TweetCard({ tweet }: { tweet: Tweet }) {
       minute: "2-digit",
     }).format(new Date(tweet.created_at));
   }, [tweet.created_at]);
+
+  async function runAction(action: "like" | "retweet", task: () => Promise<void>) {
+    setActing(action);
+    setError("");
+    try {
+      await task();
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function submitComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!comment.trim()) {
+      return;
+    }
+
+    setActing("comment");
+    setError("");
+    try {
+      await createComment(tweet.id, comment.trim());
+      setComment("");
+      setCommentOpen(false);
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setActing(null);
+    }
+  }
 
   return (
     <article className="tweet-card">
@@ -427,10 +470,47 @@ function TweetCard({ tweet }: { tweet: Tweet }) {
           <span>{displayDate}</span>
         </header>
         <p>{tweet.content}</p>
-        <footer>
-          <span>{tweet.like_count} likes</span>
-          <span>{tweet.comment_count} comments</span>
+        {error ? <p className="tweet-error">{error}</p> : null}
+        <footer className="tweet-actions">
+          <button
+            className="tweet-action comment"
+            onClick={() => setCommentOpen((open) => !open)}
+            aria-expanded={commentOpen}
+          >
+            <MessageCircle size={18} aria-hidden="true" />
+            <span>{tweet.comment_count}</span>
+          </button>
+          <button
+            className="tweet-action retweet"
+            onClick={() => void runAction("retweet", () => retweetTweet(tweet.id))}
+            disabled={acting === "retweet"}
+          >
+            <Repeat2 size={18} aria-hidden="true" />
+            <span>{tweet.retweet_count}</span>
+          </button>
+          <button
+            className="tweet-action like"
+            onClick={() => void runAction("like", () => likeTweet(tweet.id))}
+            disabled={acting === "like"}
+          >
+            <Heart size={18} aria-hidden="true" />
+            <span>{tweet.like_count}</span>
+          </button>
         </footer>
+        {commentOpen ? (
+          <form className="comment-form" onSubmit={submitComment}>
+            <input
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              maxLength={1000}
+              placeholder="Post your reply"
+              aria-label="Comment"
+            />
+            <button className="primary-button compact" disabled={acting === "comment" || !comment.trim()}>
+              Reply
+            </button>
+          </form>
+        ) : null}
       </div>
     </article>
   );
