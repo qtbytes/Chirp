@@ -609,21 +609,6 @@ textarea:focus {
   white-space: pre-wrap;
 }
 
-.detail-counts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-}
-
-.detail-counts strong {
-  color: var(--ink);
-}
-
 .detail-actions {
   max-width: none;
   padding: 8px 0;

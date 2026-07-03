@@ -687,14 +687,6 @@ function TweetDetail({
           </div>
         </div>
         <p>{currentTweet.content}</p>
-        <div className="detail-counts" aria-label="Tweet metrics">
-          <strong>{currentTweet.comment_count}</strong>
-          <span>Comments</span>
-          <strong>{currentTweet.retweet_count}</strong>
-          <span>Retweets</span>
-          <strong>{currentTweet.like_count}</strong>
-          <span>Likes</span>
-        </div>
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="tweet-actions detail-actions">
           <button
