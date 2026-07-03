@@ -23,4 +23,4 @@ class TweetOut(BaseModel):
 class TimelinePage(BaseModel):
     items: list[TweetOut]
     next_cursor: str | None = None
-    strategy: Literal["read", "write"]
+    strategy: Literal["read", "write", "for_you"]

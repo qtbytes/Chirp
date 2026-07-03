@@ -3,6 +3,7 @@ from app.core.config import settings
 from app.db.database import Base, engine
 from app.models import Comment, FeedItem, Follow, Like, Tweet, User  # noqa: F401
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 Base.metadata.create_all(bind=engine)
 
@@ -10,6 +11,14 @@ app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
     description="Interview-focused Twitter system skeleton with pull/push timeline strategies.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_origin],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(api_router)

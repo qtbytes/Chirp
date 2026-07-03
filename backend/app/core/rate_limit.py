@@ -4,6 +4,7 @@ from time import time_ns
 from fastapi import HTTPException, Request, status
 from redis.exceptions import RedisError
 
+from app.core.config import settings
 from app.db.redis_client import get_redis_client
 
 
@@ -29,6 +30,9 @@ def rate_limiter(bucket_name: str, max_requests: int, window_seconds: int) -> Ca
     """
 
     def dependency(request: Request) -> None:
+        if not settings.rate_limit_enabled:
+            return
+
         redis_client = get_redis_client()
         if redis_client is None:
             raise HTTPException(

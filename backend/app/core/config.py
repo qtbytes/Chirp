@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     app_name: str = "FastAPI Twitter System"
     database_url: str = "sqlite:///./twitter.db"
     redis_url: str = "redis://localhost:6379/0"
+    frontend_origin: str = "http://localhost:5173"
+    session_cookie_name: str = "twitter_session"
+    session_secret_key: str = "dev-session-secret-change-me"
 
     timeline_cache_ttl_seconds: int = 30
     default_timeline_strategy: str = "read"

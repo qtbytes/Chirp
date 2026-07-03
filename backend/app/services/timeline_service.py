@@ -41,6 +41,23 @@ def decode_cursor(cursor: str | None) -> tuple[datetime | None, int | None]:
         return None, None
 
 
+def encode_score_cursor(score: int, created_at: datetime, row_id: int) -> str:
+    return f"{score}|{created_at.isoformat()}|{row_id}"
+
+
+def decode_score_cursor(
+    cursor: str | None,
+) -> tuple[int | None, datetime | None, int | None]:
+    if not cursor:
+        return None, None, None
+
+    try:
+        score_raw, created_at_raw, row_id_raw = cursor.split("|", maxsplit=2)
+        return int(score_raw), datetime.fromisoformat(created_at_raw), int(row_id_raw)
+    except (TypeError, ValueError):
+        return None, None, None
+
+
 class TimelineService:
     """
     Home timeline service supporting two common interview strategies:
@@ -123,6 +140,26 @@ class TimelineService:
 
         return page
 
+    def get_for_you_timeline(
+        self,
+        limit: int,
+        cursor: str | None,
+    ) -> TimelinePage:
+        cursor_score, cursor_created_at, cursor_id = decode_score_cursor(cursor)
+        if cursor and (
+            cursor_score is None or cursor_created_at is None or cursor_id is None
+        ):
+            raise ValueError("invalid cursor")
+
+        rows = tweet_repository.list_for_you_tweets(
+            self.db,
+            limit=limit,
+            cursor_score=cursor_score,
+            cursor_created_at=cursor_created_at,
+            cursor_id=cursor_id,
+        )
+        return self._build_page(rows=rows, limit=limit, strategy="for_you")
+
     def serialize_tweet(self, row: dict) -> TweetOut:
         """
         Convert repository row data into API schema.
@@ -151,7 +188,7 @@ class TimelineService:
         self,
         rows: list[dict],
         limit: int,
-        strategy: Literal["read", "write"],
+        strategy: Literal["read", "write", "for_you"],
     ) -> TimelinePage:
         """
         Build a timeline page and next cursor.
@@ -166,10 +203,17 @@ class TimelineService:
         next_cursor = None
         if has_next and page_rows:
             last_row = page_rows[-1]
-            next_cursor = encode_cursor(
-                last_row["cursor_created_at"],
-                last_row["cursor_id"],
-            )
+            if strategy == "for_you":
+                next_cursor = encode_score_cursor(
+                    last_row["score"],
+                    last_row["cursor_created_at"],
+                    last_row["cursor_id"],
+                )
+            else:
+                next_cursor = encode_cursor(
+                    last_row["cursor_created_at"],
+                    last_row["cursor_id"],
+                )
 
         return TimelinePage(
             items=items,

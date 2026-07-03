@@ -1,3 +1,10 @@
 twitter.db
 dump.rdb
 twitter_system.egg-info
+backend/twitter.db
+backend/.pytest_cache
+backend/.pycache
+backend/twitter_system.egg-info
+frontend/node_modules
+frontend/dist
+frontend/.vite

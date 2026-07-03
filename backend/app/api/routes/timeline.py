@@ -41,3 +41,24 @@ def get_home_timeline(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+
+@router.get("/for-you", response_model=TimelinePage)
+def get_for_you_timeline(
+    limit: int = Query(default=settings.timeline_page_size, ge=1, le=50),
+    cursor: str | None = None,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> TimelinePage:
+    service = TimelineService(db)
+
+    try:
+        return service.get_for_you_timeline(
+            limit=limit,
+            cursor=cursor,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc

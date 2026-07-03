@@ -1,0 +1,152 @@
+from collections.abc import Generator
+
+from app.core.config import settings
+from app.db.database import Base, get_db
+from main import app
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+engine = create_engine(
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+TestingSessionLocal = sessionmaker(
+    bind=engine,
+    autocommit=False,
+    autoflush=False,
+    class_=Session,
+)
+
+
+def override_get_db() -> Generator[Session, None, None]:
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+app.dependency_overrides[get_db] = override_get_db
+settings.rate_limit_enabled = False
+
+
+def setup_function() -> None:
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+
+def test_register_login_me_and_logout() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    assert response.status_code == 201
+    assert response.json()["username"] == "alice"
+    assert "twitter_session" in response.cookies
+
+    me_response = client.get("/api/v1/auth/me")
+    assert me_response.status_code == 200
+    assert me_response.json()["username"] == "alice"
+
+    logout_response = client.post("/api/v1/auth/logout")
+    assert logout_response.status_code == 204
+
+    failed_me_response = client.get("/api/v1/auth/me")
+    assert failed_me_response.status_code == 401
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "alice", "password": "password123"},
+    )
+    assert login_response.status_code == 200
+    assert login_response.json()["username"] == "alice"
+
+
+def test_login_rejects_bad_password() -> None:
+    client = TestClient(app)
+    client.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    client.post("/api/v1/auth/logout")
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "alice", "password": "wrongpass"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_user_discovery_includes_follow_state() -> None:
+    alice = TestClient(app)
+    bob = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    bob_response = bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "password": "password123"},
+    )
+    bob_id = bob_response.json()["id"]
+
+    follow_response = alice.post(f"/api/v1/follows/{bob_id}")
+    assert follow_response.status_code == 200
+
+    response = alice.get("/api/v1/users")
+    assert response.status_code == 200
+    users = {user["username"]: user for user in response.json()}
+    assert users["alice"]["is_current_user"] is True
+    assert users["bob"]["is_following"] is True
+
+
+def test_for_you_scores_global_tweets() -> None:
+    alice = TestClient(app)
+    bob = TestClient(app)
+    carol = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "password": "password123"},
+    )
+    carol.post(
+        "/api/v1/auth/register",
+        json={"username": "carol", "password": "password123"},
+    )
+
+    plain_tweet = alice.post("/api/v1/tweets", json={"content": "plain"}).json()
+    scored_tweet = bob.post("/api/v1/tweets", json={"content": "scored"}).json()
+
+    carol.post(f"/api/v1/tweets/{scored_tweet['id']}/likes")
+    carol.post(
+        f"/api/v1/tweets/{scored_tweet['id']}/comments",
+        json={"content": "reply"},
+    )
+
+    response = alice.get("/api/v1/timeline/for-you")
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["id"] for item in items[:2]] == [scored_tweet["id"], plain_tweet["id"]]
+    assert response.json()["strategy"] == "for_you"
+
+
+def test_session_can_create_tweet() -> None:
+    client = TestClient(app)
+    client.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+
+    response = client.post("/api/v1/tweets", json={"content": "hello"})
+
+    assert response.status_code == 201
+    assert response.json()["author"]["username"] == "alice"

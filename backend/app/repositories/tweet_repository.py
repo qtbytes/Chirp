@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
@@ -120,3 +120,96 @@ def list_tweets_by_authors(
         }
         for tweet, like_count, comment_count in rows
     ]
+
+
+def list_for_you_tweets(
+    db: Session,
+    limit: int,
+    cursor_score: int | None = None,
+    cursor_created_at: datetime | None = None,
+    cursor_id: int | None = None,
+) -> list[dict]:
+    """
+    Return a global scored feed.
+
+    The score is intentionally simple and explainable:
+    likes are worth 3 points, comments are worth 5 points, and tweets from the
+    last day get a small freshness boost.
+    """
+    like_counts = (
+        select(
+            Like.tweet_id,
+            func.count().label("like_count"),
+        )
+        .group_by(Like.tweet_id)
+        .subquery()
+    )
+
+    comment_counts = (
+        select(
+            Comment.tweet_id,
+            func.count().label("comment_count"),
+        )
+        .group_by(Comment.tweet_id)
+        .subquery()
+    )
+
+    rows = db.execute(
+        select(
+            Tweet,
+            func.coalesce(like_counts.c.like_count, 0).label("like_count"),
+            func.coalesce(comment_counts.c.comment_count, 0).label("comment_count"),
+        )
+        .options(joinedload(Tweet.author))
+        .outerjoin(like_counts, like_counts.c.tweet_id == Tweet.id)
+        .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
+    ).all()
+
+    freshness_cutoff = datetime.now(timezone.utc) - timedelta(days=1)
+    scored_rows = []
+    for tweet, like_count, comment_count in rows:
+        created_at = tweet.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+
+        score = int(like_count) * 3 + int(comment_count) * 5
+        if created_at >= freshness_cutoff:
+            score += 2
+
+        scored_rows.append(
+            {
+                "tweet": tweet,
+                "like_count": int(like_count),
+                "comment_count": int(comment_count),
+                "score": score,
+                "cursor_created_at": tweet.created_at,
+                "cursor_id": tweet.id,
+            }
+        )
+
+    scored_rows.sort(
+        key=lambda row: (
+            row["score"],
+            row["cursor_created_at"],
+            row["cursor_id"],
+        ),
+        reverse=True,
+    )
+
+    if (
+        cursor_score is not None
+        and cursor_created_at is not None
+        and cursor_id is not None
+    ):
+        scored_rows = [
+            row
+            for row in scored_rows
+            if (
+                row["score"],
+                row["cursor_created_at"],
+                row["cursor_id"],
+            )
+            < (cursor_score, cursor_created_at, cursor_id)
+        ]
+
+    return scored_rows[: limit + 1]
