@@ -5,7 +5,9 @@ import {
   Home,
   Loader2,
   LogOut,
+  Moon,
   Search,
+  Sun,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -24,10 +26,50 @@ import {
 import type { TimelineKind, TimelinePage, Tweet, UserDiscovery, UserSummary } from "./types";
 
 type AuthMode = "login" | "register";
+type Theme = "light" | "dark";
+
+const THEME_STORAGE_KEY = "twitter-system-theme";
+
+function getSystemTheme(): Theme {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 function App() {
   const [currentUser, setCurrentUser] = useState<UserSummary | null>(null);
   const [booting, setBooting] = useState(true);
+  const [theme, setTheme] = useState<Theme>(() => {
+    const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return savedTheme === "light" || savedTheme === "dark" ? savedTheme : getSystemTheme();
+  });
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (savedTheme === "light" || savedTheme === "dark") {
+      return;
+    }
+
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncSystemTheme = () => {
+      const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (savedTheme !== "light" && savedTheme !== "dark") {
+        setTheme(media.matches ? "dark" : "light");
+      }
+    };
+    media.addEventListener("change", syncSystemTheme);
+    return () => media.removeEventListener("change", syncSystemTheme);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((currentTheme) => {
+      const nextTheme = currentTheme === "dark" ? "light" : "dark";
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+      return nextTheme;
+    });
+  }
 
   useEffect(() => {
     getCurrentUser()
@@ -45,13 +87,34 @@ function App() {
   }
 
   if (!currentUser) {
-    return <AuthScreen onAuthenticated={setCurrentUser} />;
+    return (
+      <AuthScreen
+        onAuthenticated={setCurrentUser}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    );
   }
 
-  return <MainApp currentUser={currentUser} onLogout={() => setCurrentUser(null)} />;
+  return (
+    <MainApp
+      currentUser={currentUser}
+      onLogout={() => setCurrentUser(null)}
+      theme={theme}
+      onToggleTheme={toggleTheme}
+    />
+  );
 }
 
-function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: UserSummary) => void }) {
+function AuthScreen({
+  onAuthenticated,
+  theme,
+  onToggleTheme,
+}: {
+  onAuthenticated: (user: UserSummary) => void;
+  theme: Theme;
+  onToggleTheme: () => void;
+}) {
   const [mode, setMode] = useState<AuthMode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -78,6 +141,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: UserSummary) 
 
   return (
     <main className="auth-page">
+      <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} className="auth-theme-toggle" />
       <section className="auth-panel" aria-labelledby="auth-title">
         <div className="brand-mark">
           <Feather size={30} aria-hidden="true" />
@@ -129,9 +193,13 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: UserSummary) 
 function MainApp({
   currentUser,
   onLogout,
+  theme,
+  onToggleTheme,
 }: {
   currentUser: UserSummary;
   onLogout: () => void;
+  theme: Theme;
+  onToggleTheme: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<TimelineKind>("for-you");
   const [page, setPage] = useState<TimelinePage | null>(null);
@@ -191,6 +259,7 @@ function MainApp({
             <span>Updates</span>
           </a>
         </nav>
+        <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} />
         <div className="rail-user">
           <div>
             <strong>@{currentUser.username}</strong>
@@ -204,7 +273,14 @@ function MainApp({
 
       <main id="feed" className="feed-column">
         <header className="feed-header">
-          <h1>Home</h1>
+          <div className="feed-title-row">
+            <h1>Home</h1>
+            <ThemeToggle
+              theme={theme}
+              onToggleTheme={onToggleTheme}
+              className="feed-theme-toggle"
+            />
+          </div>
           <div className="tab-list" role="tablist" aria-label="Timeline">
             <button
               className={activeTab === "for-you" ? "tab active" : "tab"}
@@ -257,6 +333,31 @@ function MainApp({
         <UserDiscoveryPanel onChanged={() => setRefreshToken((value) => value + 1)} />
       </aside>
     </div>
+  );
+}
+
+function ThemeToggle({
+  theme,
+  onToggleTheme,
+  className = "",
+}: {
+  theme: Theme;
+  onToggleTheme: () => void;
+  className?: string;
+}) {
+  const Icon = theme === "dark" ? Sun : Moon;
+  const nextTheme = theme === "dark" ? "light" : "dark";
+
+  return (
+    <button
+      className={`theme-toggle ${className}`.trim()}
+      onClick={onToggleTheme}
+      aria-label={`Use ${nextTheme} mode`}
+      title={`Use ${nextTheme} mode`}
+    >
+      <Icon size={19} aria-hidden="true" />
+      <span>{theme === "dark" ? "Light" : "Dark"}</span>
+    </button>
   );
 }
 
