@@ -466,7 +466,7 @@ function TweetCard({
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    }).format(new Date(tweet.created_at));
+    }).format(parseBackendDate(tweet.created_at));
   }, [tweet.created_at]);
 
   useEffect(() => {
@@ -629,7 +629,7 @@ function TweetDetail({
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: "medium",
       timeStyle: "short",
-    }).format(new Date(currentTweet.created_at));
+    }).format(parseBackendDate(currentTweet.created_at));
   }, [currentTweet.created_at]);
 
   const loadTweetComments = useCallback(async () => {
@@ -1034,7 +1034,12 @@ function formatCompactDate(value: string): string {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(parseBackendDate(value));
+}
+
+function parseBackendDate(value: string): Date {
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value);
+  return new Date(hasTimezone ? value : `${value}Z`);
 }
 
 export default App;
