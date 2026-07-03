@@ -1,5 +1,6 @@
 import type {
   Comment,
+  CommentLikeToggleResult,
   LikeToggleResult,
   TimelineKind,
   TimelinePage,
@@ -99,8 +100,10 @@ export function listComments(tweetId: number, limit = 100): Promise<Comment[]> {
   return request<Comment[]>(`/tweets/${tweetId}/comments?${params.toString()}`);
 }
 
-export function likeComment(commentId: number): Promise<void> {
-  return request<void>(`/comments/${commentId}/likes`, { method: "POST" });
+export function toggleCommentLike(commentId: number): Promise<CommentLikeToggleResult> {
+  return request<CommentLikeToggleResult>(`/comments/${commentId}/likes/toggle`, {
+    method: "POST",
+  });
 }
 
 export function replyToComment(commentId: number, content: string): Promise<Comment> {

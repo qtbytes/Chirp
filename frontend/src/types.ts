@@ -26,6 +26,12 @@ export type LikeToggleResult = {
   like_count: number;
 };
 
+export type CommentLikeToggleResult = {
+  comment_id: number;
+  liked: boolean;
+  like_count: number;
+};
+
 export type Comment = {
   id: number;
   tweet_id: number;
@@ -36,6 +42,7 @@ export type Comment = {
   like_count: number;
   comment_count: number;
   retweet_count: number;
+  liked_by_me: boolean;
 };
 
 export type TimelinePage = {

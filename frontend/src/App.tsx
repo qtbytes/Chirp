@@ -22,7 +22,6 @@ import {
   followUser,
   getCurrentUser,
   getTimeline,
-  likeComment,
   listComments,
   listUsers,
   login,
@@ -31,6 +30,7 @@ import {
   replyToComment,
   retweetComment,
   retweetTweet,
+  toggleCommentLike,
   toggleTweetLike,
   unfollowUser,
 } from "./api";
@@ -818,15 +818,28 @@ function CommentCard({
     setLocalComment(comment);
   }, [comment]);
 
-  async function runCommentAction(action: "like" | "retweet", task: () => Promise<void>) {
-    setActing(action);
+  async function runCommentRetweetAction(task: () => Promise<void>) {
+    setActing("retweet");
     setError("");
     try {
       await task();
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function toggleCommentLikeAction() {
+    setActing("like");
+    setError("");
+    try {
+      const result = await toggleCommentLike(localComment.id);
       setLocalComment((value) => ({
         ...value,
-        like_count: action === "like" ? value.like_count + 1 : value.like_count,
-        retweet_count: action === "retweet" ? value.retweet_count + 1 : value.retweet_count,
+        liked_by_me: result.liked,
+        like_count: result.like_count,
       }));
       onChanged();
     } catch (err) {
@@ -885,7 +898,7 @@ function CommentCard({
           <button
             className="tweet-action retweet"
             onClick={() =>
-              void runCommentAction("retweet", () => retweetComment(localComment.id))
+              void runCommentRetweetAction(() => retweetComment(localComment.id))
             }
             disabled={acting === "retweet"}
           >
@@ -893,11 +906,16 @@ function CommentCard({
             <span>{localComment.retweet_count}</span>
           </button>
           <button
-            className="tweet-action like"
-            onClick={() => void runCommentAction("like", () => likeComment(localComment.id))}
+            className={localComment.liked_by_me ? "tweet-action like active" : "tweet-action like"}
+            onClick={() => void toggleCommentLikeAction()}
             disabled={acting === "like"}
+            aria-pressed={localComment.liked_by_me}
           >
-            <Heart size={16} aria-hidden="true" />
+            <Heart
+              size={16}
+              aria-hidden="true"
+              fill={localComment.liked_by_me ? "currentColor" : "none"}
+            />
             <span>{localComment.like_count}</span>
           </button>
         </footer>

@@ -173,7 +173,8 @@ def list_comments_by_tweet(
     db: Session,
     tweet_id: int,
     limit: int = 20,
-) -> list[tuple[Comment, User, int, int, int]]:
+    current_user_id: int | None = None,
+) -> list[tuple[Comment, User, int, int, int, bool]]:
     """
     Return recent comments for a tweet with comment authors.
 
@@ -226,9 +227,23 @@ def list_comments_by_tweet(
         .outerjoin(reply_counts, reply_counts.c.comment_id == Comment.id)
         .outerjoin(retweet_counts, retweet_counts.c.comment_id == Comment.id)
         .where(Comment.tweet_id == tweet_id)
-        .order_by(Comment.created_at.desc(), Comment.id.desc())
+        .order_by(Comment.created_at.asc(), Comment.id.asc())
         .limit(limit)
     )
+    rows = db.execute(stmt).all()
+    liked_comment_ids: set[int] = set()
+    if current_user_id is not None:
+        comment_ids = [comment.id for comment, *_ in rows]
+        if comment_ids:
+            liked_comment_ids = {
+                comment_id
+                for (comment_id,) in db.execute(
+                    select(CommentLike.comment_id).where(
+                        CommentLike.user_id == current_user_id,
+                        CommentLike.comment_id.in_(comment_ids),
+                    )
+                ).all()
+            }
 
     return [
         (
@@ -237,10 +252,9 @@ def list_comments_by_tweet(
             int(like_count),
             int(comment_count),
             int(retweet_count),
+            comment.id in liked_comment_ids,
         )
-        for comment, user, like_count, comment_count, retweet_count in db.execute(
-            stmt
-        ).all()
+        for comment, user, like_count, comment_count, retweet_count in rows
     ]
 
 
@@ -276,6 +290,29 @@ def unlike_comment(db: Session, user_id: int, comment_id: int) -> bool:
     db.delete(existing)
     db.commit()
     return True
+
+
+def count_comment_likes(db: Session, comment_id: int) -> int:
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(CommentLike)
+            .where(CommentLike.comment_id == comment_id)
+        )
+        or 0
+    )
+
+
+def has_liked_comment(db: Session, user_id: int, comment_id: int) -> bool:
+    return (
+        db.scalar(
+            select(CommentLike).where(
+                CommentLike.user_id == user_id,
+                CommentLike.comment_id == comment_id,
+            )
+        )
+        is not None
+    )
 
 
 def retweet_comment(db: Session, user_id: int, comment_id: int) -> bool:

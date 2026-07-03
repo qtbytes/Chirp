@@ -188,6 +188,7 @@ def create_comment(
         like_count=0,
         comment_count=0,
         retweet_count=0,
+        liked_by_me=False,
     )
 
 
@@ -199,6 +200,7 @@ def create_comment(
 def list_comments(
     tweet_id: int,
     limit: int = 20,
+    current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> list[CommentOut]:
     """
@@ -213,6 +215,7 @@ def list_comments(
             db,
             tweet_id=tweet_id,
             limit=limit,
+            current_user_id=current_user_id,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -231,6 +234,7 @@ def list_comments(
             like_count=like_count,
             comment_count=comment_count,
             retweet_count=retweet_count,
+            liked_by_me=liked_by_me,
         )
-        for comment, author, like_count, comment_count, retweet_count in rows
+        for comment, author, like_count, comment_count, retweet_count, liked_by_me in rows
     ]

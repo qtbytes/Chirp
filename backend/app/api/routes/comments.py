@@ -53,6 +53,44 @@ def unlike_comment(
     }
 
 
+@router.post("/{comment_id}/likes/toggle", status_code=status.HTTP_200_OK)
+def toggle_comment_like(
+    comment_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    if engagement_repository.has_liked_comment(
+        db,
+        user_id=current_user_id,
+        comment_id=comment_id,
+    ):
+        engagement_repository.unlike_comment(
+            db,
+            user_id=current_user_id,
+            comment_id=comment_id,
+        )
+        liked = False
+    else:
+        try:
+            engagement_repository.like_comment(
+                db,
+                user_id=current_user_id,
+                comment_id=comment_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+        liked = True
+
+    return {
+        "comment_id": comment_id,
+        "liked": liked,
+        "like_count": engagement_repository.count_comment_likes(db, comment_id),
+    }
+
+
 @router.post("/{comment_id}/retweets", status_code=status.HTTP_201_CREATED)
 def retweet_comment(
     comment_id: int,
@@ -138,4 +176,5 @@ def reply_to_comment(
         like_count=0,
         comment_count=0,
         retweet_count=0,
+        liked_by_me=False,
     )
