@@ -182,6 +182,7 @@ class TimelineService:
             author=UserSummary.model_validate(tweet.author),
             like_count=row["like_count"],
             comment_count=row["comment_count"],
+            retweet_count=row["retweet_count"],
         )
 
     def _build_page(

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.models.comment import Comment
 from app.models.like import Like
+from app.models.retweet import Retweet
 from app.models.tweet import Tweet
 from app.models.user import User
 
@@ -51,6 +52,52 @@ def unlike_tweet(db: Session, user_id: int, tweet_id: int) -> bool:
         select(Like).where(
             Like.user_id == user_id,
             Like.tweet_id == tweet_id,
+        )
+    )
+    if existing is None:
+        return False
+
+    db.delete(existing)
+    db.commit()
+    return True
+
+
+def retweet_tweet(db: Session, user_id: int, tweet_id: int) -> bool:
+    """
+    Create a retweet record.
+
+    Returns True when a new retweet is created and False when the user had
+    already retweeted the tweet.
+    """
+    tweet = db.get(Tweet, tweet_id)
+    if tweet is None:
+        raise ValueError("tweet not found")
+
+    existing = db.scalar(
+        select(Retweet).where(
+            Retweet.user_id == user_id,
+            Retweet.tweet_id == tweet_id,
+        )
+    )
+    if existing:
+        return False
+
+    retweet = Retweet(user_id=user_id, tweet_id=tweet_id)
+    db.add(retweet)
+    db.commit()
+    return True
+
+
+def unretweet_tweet(db: Session, user_id: int, tweet_id: int) -> bool:
+    """
+    Remove a retweet record.
+
+    Returns True if a retweet existed and was removed, otherwise False.
+    """
+    existing = db.scalar(
+        select(Retweet).where(
+            Retweet.user_id == user_id,
+            Retweet.tweet_id == tweet_id,
         )
     )
     if existing is None:

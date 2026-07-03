@@ -150,3 +150,32 @@ def test_session_can_create_tweet() -> None:
 
     assert response.status_code == 201
     assert response.json()["author"]["username"] == "alice"
+
+
+def test_retweet_action_updates_timeline_count() -> None:
+    alice = TestClient(app)
+    bob = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "password": "password123"},
+    )
+
+    tweet = alice.post("/api/v1/tweets", json={"content": "retweet me"}).json()
+    response = bob.post(f"/api/v1/tweets/{tweet['id']}/retweets")
+    assert response.status_code == 201
+    assert response.json()["created"] is True
+
+    duplicate_response = bob.post(f"/api/v1/tweets/{tweet['id']}/retweets")
+    assert duplicate_response.status_code == 201
+    assert duplicate_response.json()["created"] is False
+
+    timeline_response = bob.get("/api/v1/timeline/for-you")
+    assert timeline_response.status_code == 200
+    timeline_tweet = next(
+        item for item in timeline_response.json()["items"] if item["id"] == tweet["id"]
+    )
+    assert timeline_tweet["retweet_count"] == 1

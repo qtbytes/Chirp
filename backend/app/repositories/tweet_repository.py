@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.comment import Comment
 from app.models.like import Like
+from app.models.retweet import Retweet
 from app.models.tweet import Tweet
 
 
@@ -83,15 +84,26 @@ def list_tweets_by_authors(
         .subquery()
     )
 
+    retweet_counts = (
+        select(
+            Retweet.tweet_id,
+            func.count().label("retweet_count"),
+        )
+        .group_by(Retweet.tweet_id)
+        .subquery()
+    )
+
     stmt = (
         select(
             Tweet,
             func.coalesce(like_counts.c.like_count, 0).label("like_count"),
             func.coalesce(comment_counts.c.comment_count, 0).label("comment_count"),
+            func.coalesce(retweet_counts.c.retweet_count, 0).label("retweet_count"),
         )
         .options(joinedload(Tweet.author))
         .outerjoin(like_counts, like_counts.c.tweet_id == Tweet.id)
         .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
+        .outerjoin(retweet_counts, retweet_counts.c.tweet_id == Tweet.id)
         .where(Tweet.user_id.in_(author_ids))
         .order_by(Tweet.created_at.desc(), Tweet.id.desc())
         .limit(limit + 1)
@@ -115,10 +127,11 @@ def list_tweets_by_authors(
             "tweet": tweet,
             "like_count": int(like_count),
             "comment_count": int(comment_count),
+            "retweet_count": int(retweet_count),
             "cursor_created_at": tweet.created_at,
             "cursor_id": tweet.id,
         }
-        for tweet, like_count, comment_count in rows
+        for tweet, like_count, comment_count, retweet_count in rows
     ]
 
 
@@ -133,8 +146,8 @@ def list_for_you_tweets(
     Return a global scored feed.
 
     The score is intentionally simple and explainable:
-    likes are worth 3 points, comments are worth 5 points, and tweets from the
-    last day get a small freshness boost.
+    likes are worth 3 points, retweets are worth 4 points, comments are worth
+    5 points, and tweets from the last day get a small freshness boost.
     """
     like_counts = (
         select(
@@ -154,25 +167,36 @@ def list_for_you_tweets(
         .subquery()
     )
 
+    retweet_counts = (
+        select(
+            Retweet.tweet_id,
+            func.count().label("retweet_count"),
+        )
+        .group_by(Retweet.tweet_id)
+        .subquery()
+    )
+
     rows = db.execute(
         select(
             Tweet,
             func.coalesce(like_counts.c.like_count, 0).label("like_count"),
             func.coalesce(comment_counts.c.comment_count, 0).label("comment_count"),
+            func.coalesce(retweet_counts.c.retweet_count, 0).label("retweet_count"),
         )
         .options(joinedload(Tweet.author))
         .outerjoin(like_counts, like_counts.c.tweet_id == Tweet.id)
         .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
+        .outerjoin(retweet_counts, retweet_counts.c.tweet_id == Tweet.id)
     ).all()
 
     freshness_cutoff = datetime.now(timezone.utc) - timedelta(days=1)
     scored_rows = []
-    for tweet, like_count, comment_count in rows:
+    for tweet, like_count, comment_count, retweet_count in rows:
         created_at = tweet.created_at
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=timezone.utc)
 
-        score = int(like_count) * 3 + int(comment_count) * 5
+        score = int(like_count) * 3 + int(retweet_count) * 4 + int(comment_count) * 5
         if created_at >= freshness_cutoff:
             score += 2
 
@@ -181,6 +205,7 @@ def list_for_you_tweets(
                 "tweet": tweet,
                 "like_count": int(like_count),
                 "comment_count": int(comment_count),
+                "retweet_count": int(retweet_count),
                 "score": score,
                 "cursor_created_at": tweet.created_at,
                 "cursor_id": tweet.id,

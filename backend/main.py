@@ -1,7 +1,7 @@
 from app.api.router import api_router
 from app.core.config import settings
 from app.db.database import Base, engine
-from app.models import Comment, FeedItem, Follow, Like, Tweet, User  # noqa: F401
+from app.models import Comment, FeedItem, Follow, Like, Retweet, Tweet, User  # noqa: F401
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

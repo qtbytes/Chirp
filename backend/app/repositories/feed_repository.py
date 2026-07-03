@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.comment import Comment
 from app.models.feed import FeedItem
 from app.models.like import Like
+from app.models.retweet import Retweet
 from app.models.tweet import Tweet
 
 
@@ -102,17 +103,28 @@ def list_feed_tweets(
         .subquery()
     )
 
+    retweet_counts = (
+        select(
+            Retweet.tweet_id,
+            func.count().label("retweet_count"),
+        )
+        .group_by(Retweet.tweet_id)
+        .subquery()
+    )
+
     stmt = (
         select(
             FeedItem,
             Tweet,
             func.coalesce(like_counts.c.like_count, 0),
             func.coalesce(comment_counts.c.comment_count, 0),
+            func.coalesce(retweet_counts.c.retweet_count, 0),
         )
         .join(Tweet, Tweet.id == FeedItem.tweet_id)
         .options(joinedload(Tweet.author))
         .outerjoin(like_counts, like_counts.c.tweet_id == Tweet.id)
         .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
+        .outerjoin(retweet_counts, retweet_counts.c.tweet_id == Tweet.id)
         .where(FeedItem.owner_id == owner_id)
         .order_by(FeedItem.created_at.desc(), FeedItem.id.desc())
         .limit(limit + 1)
@@ -136,8 +148,9 @@ def list_feed_tweets(
             "tweet": tweet,
             "like_count": int(like_count),
             "comment_count": int(comment_count),
+            "retweet_count": int(retweet_count),
             "cursor_created_at": feed_item.created_at,
             "cursor_id": feed_item.id,
         }
-        for feed_item, tweet, like_count, comment_count in rows
+        for feed_item, tweet, like_count, comment_count, retweet_count in rows
     ]

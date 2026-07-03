@@ -66,6 +66,49 @@ def unlike_tweet(
     }
 
 
+@router.post("/{tweet_id}/retweets", status_code=status.HTTP_201_CREATED)
+def retweet_tweet(
+    tweet_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        created = engagement_repository.retweet_tweet(
+            db,
+            user_id=current_user_id,
+            tweet_id=tweet_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "tweet_id": tweet_id,
+        "retweeted": True,
+        "created": created,
+    }
+
+
+@router.delete("/{tweet_id}/retweets", status_code=status.HTTP_200_OK)
+def unretweet_tweet(
+    tweet_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    removed = engagement_repository.unretweet_tweet(
+        db,
+        user_id=current_user_id,
+        tweet_id=tweet_id,
+    )
+    return {
+        "tweet_id": tweet_id,
+        "retweeted": False,
+        "removed": removed,
+    }
+
+
 @router.post(
     "/{tweet_id}/comments",
     response_model=CommentOut,

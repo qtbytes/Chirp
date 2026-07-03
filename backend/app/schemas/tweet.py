@@ -16,6 +16,7 @@ class TweetOut(BaseModel):
     author: UserSummary
     like_count: int = 0
     comment_count: int = 0
+    retweet_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
