@@ -1,4 +1,11 @@
-import type { TimelineKind, TimelinePage, Tweet, UserDiscovery, UserSummary } from "./types";
+import type {
+  Comment,
+  TimelineKind,
+  TimelinePage,
+  Tweet,
+  UserDiscovery,
+  UserSummary,
+} from "./types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -82,6 +89,11 @@ export function createComment(tweetId: number, content: string): Promise<void> {
     method: "POST",
     body: JSON.stringify({ content }),
   });
+}
+
+export function listComments(tweetId: number, limit = 100): Promise<Comment[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return request<Comment[]>(`/tweets/${tweetId}/comments?${params.toString()}`);
 }
 
 export function retweetTweet(tweetId: number): Promise<void> {

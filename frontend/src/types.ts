@@ -19,6 +19,14 @@ export type Tweet = {
   retweet_count: number;
 };
 
+export type Comment = {
+  id: number;
+  tweet_id: number;
+  content: string;
+  created_at: string;
+  author: UserSummary;
+};
+
 export type TimelinePage = {
   items: Tweet[];
   next_cursor: string | null;

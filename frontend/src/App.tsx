@@ -1,5 +1,6 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ArrowLeft,
   Bell,
   Feather,
   Home,
@@ -22,6 +23,7 @@ import {
   getCurrentUser,
   getTimeline,
   likeTweet,
+  listComments,
   listUsers,
   login,
   logout,
@@ -29,7 +31,14 @@ import {
   retweetTweet,
   unfollowUser,
 } from "./api";
-import type { TimelineKind, TimelinePage, Tweet, UserDiscovery, UserSummary } from "./types";
+import type {
+  Comment,
+  TimelineKind,
+  TimelinePage,
+  Tweet,
+  UserDiscovery,
+  UserSummary,
+} from "./types";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
@@ -213,6 +222,7 @@ function MainApp({
   const [loadingFeed, setLoadingFeed] = useState(false);
   const [feedError, setFeedError] = useState("");
   const [refreshToken, setRefreshToken] = useState(0);
+  const [selectedTweet, setSelectedTweet] = useState<Tweet | null>(null);
 
   const loadFeed = useCallback(
     async (cursor?: string | null, append = false) => {
@@ -290,7 +300,10 @@ function MainApp({
           <div className="tab-list" role="tablist" aria-label="Timeline">
             <button
               className={activeTab === "for-you" ? "tab active" : "tab"}
-              onClick={() => setActiveTab("for-you")}
+              onClick={() => {
+                setSelectedTweet(null);
+                setActiveTab("for-you");
+              }}
               role="tab"
               aria-selected={activeTab === "for-you"}
             >
@@ -298,7 +311,10 @@ function MainApp({
             </button>
             <button
               className={activeTab === "following" ? "tab active" : "tab"}
-              onClick={() => setActiveTab("following")}
+              onClick={() => {
+                setSelectedTweet(null);
+                setActiveTab("following");
+              }}
               role="tab"
               aria-selected={activeTab === "following"}
             >
@@ -307,32 +323,47 @@ function MainApp({
           </div>
         </header>
 
-        <Composer onPosted={() => setRefreshToken((value) => value + 1)} />
+        {selectedTweet ? (
+          <TweetDetail
+            tweet={selectedTweet}
+            onBack={() => setSelectedTweet(null)}
+            onChanged={() => setRefreshToken((value) => value + 1)}
+          />
+        ) : (
+          <>
+            <Composer onPosted={() => setRefreshToken((value) => value + 1)} />
 
-        {feedError ? <div className="status-panel error">{feedError}</div> : null}
-        {!loadingFeed && tweets.length === 0 && !feedError ? (
-          <div className="status-panel">No tweets yet.</div>
-        ) : null}
-        <section className="tweet-list" aria-live="polite">
-          {tweets.map((tweet) => (
-            <TweetCard key={tweet.id} tweet={tweet} onChanged={() => setRefreshToken((value) => value + 1)} />
-          ))}
-        </section>
-        {loadingFeed ? (
-          <div className="loading-row">
-            <Loader2 className="spin" size={18} aria-hidden="true" />
-            <span>Loading</span>
-          </div>
-        ) : null}
-        {page?.next_cursor ? (
-          <button
-            className="load-more"
-            onClick={() => void loadFeed(page.next_cursor, true)}
-            disabled={loadingFeed}
-          >
-            Load more
-          </button>
-        ) : null}
+            {feedError ? <div className="status-panel error">{feedError}</div> : null}
+            {!loadingFeed && tweets.length === 0 && !feedError ? (
+              <div className="status-panel">No tweets yet.</div>
+            ) : null}
+            <section className="tweet-list" aria-live="polite">
+              {tweets.map((tweet) => (
+                <TweetCard
+                  key={tweet.id}
+                  tweet={tweet}
+                  onOpen={() => setSelectedTweet(tweet)}
+                  onChanged={() => setRefreshToken((value) => value + 1)}
+                />
+              ))}
+            </section>
+            {loadingFeed ? (
+              <div className="loading-row">
+                <Loader2 className="spin" size={18} aria-hidden="true" />
+                <span>Loading</span>
+              </div>
+            ) : null}
+            {page?.next_cursor ? (
+              <button
+                className="load-more"
+                onClick={() => void loadFeed(page.next_cursor, true)}
+                disabled={loadingFeed}
+              >
+                Load more
+              </button>
+            ) : null}
+          </>
+        )}
       </main>
 
       <aside id="discover" className="discovery-column">
@@ -412,7 +443,15 @@ function Composer({ onPosted }: { onPosted: () => void }) {
   );
 }
 
-function TweetCard({ tweet, onChanged }: { tweet: Tweet; onChanged: () => void }) {
+function TweetCard({
+  tweet,
+  onOpen,
+  onChanged,
+}: {
+  tweet: Tweet;
+  onOpen: () => void;
+  onChanged: () => void;
+}) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [comment, setComment] = useState("");
   const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
@@ -459,8 +498,22 @@ function TweetCard({ tweet, onChanged }: { tweet: Tweet; onChanged: () => void }
     }
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onOpen();
+    }
+  }
+
   return (
-    <article className="tweet-card">
+    <article
+      className="tweet-card clickable"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={handleKeyDown}
+      aria-label={`Open tweet by ${tweet.author.username}`}
+    >
       <div className="avatar" aria-hidden="true">
         {tweet.author.username.slice(0, 1).toUpperCase()}
       </div>
@@ -474,7 +527,10 @@ function TweetCard({ tweet, onChanged }: { tweet: Tweet; onChanged: () => void }
         <footer className="tweet-actions">
           <button
             className="tweet-action comment"
-            onClick={() => setCommentOpen((open) => !open)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setCommentOpen((open) => !open);
+            }}
             aria-expanded={commentOpen}
           >
             <MessageCircle size={18} aria-hidden="true" />
@@ -482,7 +538,10 @@ function TweetCard({ tweet, onChanged }: { tweet: Tweet; onChanged: () => void }
           </button>
           <button
             className="tweet-action retweet"
-            onClick={() => void runAction("retweet", () => retweetTweet(tweet.id))}
+            onClick={(event) => {
+              event.stopPropagation();
+              void runAction("retweet", () => retweetTweet(tweet.id));
+            }}
             disabled={acting === "retweet"}
           >
             <Repeat2 size={18} aria-hidden="true" />
@@ -490,7 +549,10 @@ function TweetCard({ tweet, onChanged }: { tweet: Tweet; onChanged: () => void }
           </button>
           <button
             className="tweet-action like"
-            onClick={() => void runAction("like", () => likeTweet(tweet.id))}
+            onClick={(event) => {
+              event.stopPropagation();
+              void runAction("like", () => likeTweet(tweet.id));
+            }}
             disabled={acting === "like"}
           >
             <Heart size={18} aria-hidden="true" />
@@ -498,7 +560,11 @@ function TweetCard({ tweet, onChanged }: { tweet: Tweet; onChanged: () => void }
           </button>
         </footer>
         {commentOpen ? (
-          <form className="comment-form" onSubmit={submitComment}>
+          <form
+            className="comment-form"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={submitComment}
+          >
             <input
               value={comment}
               onChange={(event) => setComment(event.target.value)}
@@ -513,6 +579,192 @@ function TweetCard({ tweet, onChanged }: { tweet: Tweet; onChanged: () => void }
         ) : null}
       </div>
     </article>
+  );
+}
+
+function TweetDetail({
+  tweet,
+  onBack,
+  onChanged,
+}: {
+  tweet: Tweet;
+  onBack: () => void;
+  onChanged: () => void;
+}) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [comment, setComment] = useState("");
+  const [currentTweet, setCurrentTweet] = useState(tweet);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
+  const [error, setError] = useState("");
+
+  const displayDate = useMemo(() => {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(currentTweet.created_at));
+  }, [currentTweet.created_at]);
+
+  const loadTweetComments = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setComments(await listComments(currentTweet.id));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [currentTweet.id]);
+
+  useEffect(() => {
+    setCurrentTweet(tweet);
+  }, [tweet]);
+
+  useEffect(() => {
+    void loadTweetComments();
+  }, [loadTweetComments]);
+
+  async function runDetailAction(action: "like" | "retweet", task: () => Promise<void>) {
+    setActing(action);
+    setError("");
+    try {
+      await task();
+      setCurrentTweet((value) => ({
+        ...value,
+        like_count: action === "like" ? value.like_count + 1 : value.like_count,
+        retweet_count: action === "retweet" ? value.retweet_count + 1 : value.retweet_count,
+      }));
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function submitDetailComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!comment.trim()) {
+      return;
+    }
+
+    setActing("comment");
+    setError("");
+    try {
+      await createComment(currentTweet.id, comment.trim());
+      setComment("");
+      setCurrentTweet((value) => ({
+        ...value,
+        comment_count: value.comment_count + 1,
+      }));
+      await loadTweetComments();
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setActing(null);
+    }
+  }
+
+  return (
+    <section className="tweet-detail" aria-labelledby="tweet-detail-title">
+      <div className="detail-toolbar">
+        <button className="icon-button" onClick={onBack} aria-label="Back to timeline">
+          <ArrowLeft size={20} aria-hidden="true" />
+        </button>
+        <h2 id="tweet-detail-title">Tweet</h2>
+      </div>
+
+      <article className="detail-tweet">
+        <div className="detail-author">
+          <div className="avatar" aria-hidden="true">
+            {currentTweet.author.username.slice(0, 1).toUpperCase()}
+          </div>
+          <div>
+            <strong>@{currentTweet.author.username}</strong>
+            <span>{displayDate}</span>
+          </div>
+        </div>
+        <p>{currentTweet.content}</p>
+        <div className="detail-counts" aria-label="Tweet metrics">
+          <strong>{currentTweet.comment_count}</strong>
+          <span>Comments</span>
+          <strong>{currentTweet.retweet_count}</strong>
+          <span>Retweets</span>
+          <strong>{currentTweet.like_count}</strong>
+          <span>Likes</span>
+        </div>
+        {error ? <p className="tweet-error">{error}</p> : null}
+        <div className="tweet-actions detail-actions">
+          <button
+            className="tweet-action comment"
+            onClick={() => document.getElementById("detail-comment-input")?.focus()}
+          >
+            <MessageCircle size={18} aria-hidden="true" />
+            <span>{currentTweet.comment_count}</span>
+          </button>
+          <button
+            className="tweet-action retweet"
+            onClick={() => void runDetailAction("retweet", () => retweetTweet(currentTweet.id))}
+            disabled={acting === "retweet"}
+          >
+            <Repeat2 size={18} aria-hidden="true" />
+            <span>{currentTweet.retweet_count}</span>
+          </button>
+          <button
+            className="tweet-action like"
+            onClick={() => void runDetailAction("like", () => likeTweet(currentTweet.id))}
+            disabled={acting === "like"}
+          >
+            <Heart size={18} aria-hidden="true" />
+            <span>{currentTweet.like_count}</span>
+          </button>
+        </div>
+        <form className="comment-form detail-comment-form" onSubmit={submitDetailComment}>
+          <input
+            id="detail-comment-input"
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            maxLength={1000}
+            placeholder="Post your reply"
+            aria-label="Comment"
+          />
+          <button
+            className="primary-button compact"
+            disabled={acting === "comment" || !comment.trim()}
+          >
+            Reply
+          </button>
+        </form>
+      </article>
+
+      <section className="comment-list" aria-label="Comments">
+        {loading ? (
+          <div className="loading-row">
+            <Loader2 className="spin" size={18} aria-hidden="true" />
+            <span>Loading comments</span>
+          </div>
+        ) : null}
+        {!loading && comments.length === 0 ? (
+          <div className="status-panel">No comments yet.</div>
+        ) : null}
+        {comments.map((item) => (
+          <article className="comment-card" key={item.id}>
+            <div className="avatar small" aria-hidden="true">
+              {item.author.username.slice(0, 1).toUpperCase()}
+            </div>
+            <div>
+              <header>
+                <strong>@{item.author.username}</strong>
+                <span>{formatCompactDate(item.created_at)}</span>
+              </header>
+              <p>{item.content}</p>
+            </div>
+          </article>
+        ))}
+      </section>
+    </section>
   );
 }
 
@@ -601,6 +853,15 @@ function getErrorMessage(err: unknown): string {
     return err.message;
   }
   return "Something went wrong.";
+}
+
+function formatCompactDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 export default App;

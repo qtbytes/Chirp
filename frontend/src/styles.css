@@ -452,6 +452,15 @@ textarea:focus {
   background: var(--hover);
 }
 
+.tweet-card.clickable {
+  cursor: pointer;
+}
+
+.tweet-card.clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .avatar {
   width: 44px;
   height: 44px;
@@ -547,6 +556,108 @@ textarea:focus {
 
 .comment-form input {
   height: 38px;
+}
+
+.tweet-detail {
+  min-height: 100vh;
+}
+
+.detail-toolbar {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.detail-toolbar h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.detail-tweet {
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-author {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.detail-author strong,
+.detail-author span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.detail-author span,
+.comment-card header span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.detail-tweet > p {
+  margin: 0 0 18px;
+  font-size: 26px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.detail-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.detail-counts strong {
+  color: var(--ink);
+}
+
+.detail-actions {
+  max-width: none;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-comment-form {
+  margin-top: 16px;
+}
+
+.comment-list {
+  display: grid;
+}
+
+.comment-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.comment-card header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.comment-card p {
+  margin: 6px 0 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .status-panel,
