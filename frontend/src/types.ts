@@ -26,10 +26,32 @@ export type LikeToggleResult = {
   like_count: number;
 };
 
+export type TweetStats = {
+  id: number;
+  like_count: number;
+  comment_count: number;
+  retweet_count: number;
+  liked_by_me: boolean;
+};
+
+export type RetweetResult = {
+  tweet_id: number;
+  retweeted: boolean;
+  created: boolean;
+};
+
 export type CommentLikeToggleResult = {
   comment_id: number;
   liked: boolean;
   like_count: number;
+};
+
+export type CommentStats = {
+  id: number;
+  like_count: number;
+  comment_count: number;
+  retweet_count: number;
+  liked_by_me: boolean;
 };
 
 export type Comment = {

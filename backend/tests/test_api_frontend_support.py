@@ -239,6 +239,78 @@ def test_tweet_like_toggle_updates_state_and_count() -> None:
     assert unliked_response.json()["like_count"] == 0
 
 
+def test_tweet_stats_endpoint_returns_counts_and_current_user_state() -> None:
+    alice = TestClient(app)
+    bob = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "password": "password123"},
+    )
+    tweet = alice.post("/api/v1/tweets", json={"content": "stats"}).json()
+
+    bob.post(f"/api/v1/tweets/{tweet['id']}/likes/toggle")
+    bob.post(f"/api/v1/tweets/{tweet['id']}/retweets")
+    bob.post(
+        f"/api/v1/tweets/{tweet['id']}/comments",
+        json={"content": "reply"},
+    )
+
+    response = bob.get(f"/api/v1/tweets/stats?ids={tweet['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": tweet["id"],
+            "like_count": 1,
+            "comment_count": 1,
+            "retweet_count": 1,
+            "liked_by_me": True,
+        }
+    ]
+
+
+def test_comment_stats_endpoint_returns_counts_and_current_user_state() -> None:
+    alice = TestClient(app)
+    bob = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "password": "password123"},
+    )
+    tweet = alice.post("/api/v1/tweets", json={"content": "comments"}).json()
+    comment = bob.post(
+        f"/api/v1/tweets/{tweet['id']}/comments",
+        json={"content": "first"},
+    ).json()
+
+    alice.post(f"/api/v1/comments/{comment['id']}/likes/toggle")
+    alice.post(f"/api/v1/comments/{comment['id']}/retweets")
+    alice.post(
+        f"/api/v1/comments/{comment['id']}/comments",
+        json={"content": "reply"},
+    )
+
+    response = alice.get(f"/api/v1/comments/stats?ids={comment['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": comment["id"],
+            "like_count": 1,
+            "comment_count": 1,
+            "retweet_count": 1,
+            "liked_by_me": True,
+        }
+    ]
+
+
 def test_comment_interactions_update_comment_counts() -> None:
     alice = TestClient(app)
     bob = TestClient(app)

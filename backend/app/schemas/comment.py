@@ -21,3 +21,11 @@ class CommentOut(BaseModel):
     liked_by_me: bool = False
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CommentStatsOut(BaseModel):
+    id: int
+    like_count: int = 0
+    comment_count: int = 0
+    retweet_count: int = 0
+    liked_by_me: bool = False

@@ -22,6 +22,14 @@ class TweetOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TweetStatsOut(BaseModel):
+    id: int
+    like_count: int = 0
+    comment_count: int = 0
+    retweet_count: int = 0
+    liked_by_me: bool = False
+
+
 class TimelinePage(BaseModel):
     items: list[TweetOut]
     next_cursor: str | None = None

@@ -2,12 +2,47 @@ from app.api.deps import get_current_user_id
 from app.db.database import get_db
 from app.models.comment import Comment
 from app.repositories import engagement_repository
-from app.schemas.comment import CommentCreate, CommentOut
+from app.schemas.comment import CommentCreate, CommentOut, CommentStatsOut
 from app.schemas.user import UserSummary
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/comments", tags=["comments"])
+
+
+@router.get("/stats", response_model=list[CommentStatsOut])
+def list_comment_stats(
+    ids: str = Query(..., min_length=1),
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> list[CommentStatsOut]:
+    try:
+        comment_ids = [int(value) for value in ids.split(",") if value.strip()]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ids must be comma-separated integers",
+        ) from exc
+
+    if not comment_ids or any(comment_id <= 0 for comment_id in comment_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ids must contain positive integers",
+        )
+    if len(comment_ids) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ids supports at most 100 comments",
+        )
+
+    return [
+        CommentStatsOut(**stats)
+        for stats in engagement_repository.list_comment_stats(
+            db,
+            comment_ids=comment_ids,
+            current_user_id=current_user_id,
+        )
+    ]
 
 
 @router.post("/{comment_id}/likes", status_code=status.HTTP_201_CREATED)

@@ -36,6 +36,84 @@ def get_tweet(db: Session, tweet_id: int) -> Tweet | None:
     )
 
 
+def list_tweet_stats(
+    db: Session,
+    tweet_ids: list[int],
+    current_user_id: int,
+) -> list[dict]:
+    """
+    Return engagement stats for existing tweets in the same order as requested.
+    """
+    ordered_ids = list(dict.fromkeys(tweet_ids))
+    if not ordered_ids:
+        return []
+
+    like_counts = (
+        select(
+            Like.tweet_id,
+            func.count().label("like_count"),
+        )
+        .where(Like.tweet_id.in_(ordered_ids))
+        .group_by(Like.tweet_id)
+        .subquery()
+    )
+
+    comment_counts = (
+        select(
+            Comment.tweet_id,
+            func.count().label("comment_count"),
+        )
+        .where(Comment.tweet_id.in_(ordered_ids))
+        .group_by(Comment.tweet_id)
+        .subquery()
+    )
+
+    retweet_counts = (
+        select(
+            Retweet.tweet_id,
+            func.count().label("retweet_count"),
+        )
+        .where(Retweet.tweet_id.in_(ordered_ids))
+        .group_by(Retweet.tweet_id)
+        .subquery()
+    )
+
+    rows = db.execute(
+        select(
+            Tweet.id,
+            func.coalesce(like_counts.c.like_count, 0).label("like_count"),
+            func.coalesce(comment_counts.c.comment_count, 0).label("comment_count"),
+            func.coalesce(retweet_counts.c.retweet_count, 0).label("retweet_count"),
+        )
+        .outerjoin(like_counts, like_counts.c.tweet_id == Tweet.id)
+        .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
+        .outerjoin(retweet_counts, retweet_counts.c.tweet_id == Tweet.id)
+        .where(Tweet.id.in_(ordered_ids))
+    ).all()
+
+    liked_tweet_ids = {
+        tweet_id
+        for (tweet_id,) in db.execute(
+            select(Like.tweet_id).where(
+                Like.user_id == current_user_id,
+                Like.tweet_id.in_(ordered_ids),
+            )
+        ).all()
+    }
+
+    stats_by_id = {
+        tweet_id: {
+            "id": tweet_id,
+            "like_count": int(like_count),
+            "comment_count": int(comment_count),
+            "retweet_count": int(retweet_count),
+            "liked_by_me": tweet_id in liked_tweet_ids,
+        }
+        for tweet_id, like_count, comment_count, retweet_count in rows
+    }
+    return [stats_by_id[tweet_id] for tweet_id in ordered_ids if tweet_id in stats_by_id]
+
+
 def list_tweets_by_authors(
     db: Session,
     author_ids: list[int],

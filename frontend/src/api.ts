@@ -1,10 +1,13 @@
 import type {
   Comment,
   CommentLikeToggleResult,
+  CommentStats,
   LikeToggleResult,
+  RetweetResult,
   TimelineKind,
   TimelinePage,
   Tweet,
+  TweetStats,
   UserDiscovery,
   UserSummary,
 } from "./types";
@@ -88,8 +91,13 @@ export function toggleTweetLike(tweetId: number): Promise<LikeToggleResult> {
   });
 }
 
-export function createComment(tweetId: number, content: string): Promise<void> {
-  return request<void>(`/tweets/${tweetId}/comments`, {
+export function getTweetStats(tweetIds: number[]): Promise<TweetStats[]> {
+  const params = new URLSearchParams({ ids: tweetIds.join(",") });
+  return request<TweetStats[]>(`/tweets/stats?${params.toString()}`);
+}
+
+export function createComment(tweetId: number, content: string): Promise<Comment> {
+  return request<Comment>(`/tweets/${tweetId}/comments`, {
     method: "POST",
     body: JSON.stringify({ content }),
   });
@@ -106,6 +114,11 @@ export function toggleCommentLike(commentId: number): Promise<CommentLikeToggleR
   });
 }
 
+export function getCommentStats(commentIds: number[]): Promise<CommentStats[]> {
+  const params = new URLSearchParams({ ids: commentIds.join(",") });
+  return request<CommentStats[]>(`/comments/stats?${params.toString()}`);
+}
+
 export function replyToComment(commentId: number, content: string): Promise<Comment> {
   return request<Comment>(`/comments/${commentId}/comments`, {
     method: "POST",
@@ -117,8 +130,8 @@ export function retweetComment(commentId: number): Promise<void> {
   return request<void>(`/comments/${commentId}/retweets`, { method: "POST" });
 }
 
-export function retweetTweet(tweetId: number): Promise<void> {
-  return request<void>(`/tweets/${tweetId}/retweets`, { method: "POST" });
+export function retweetTweet(tweetId: number): Promise<RetweetResult> {
+  return request<RetweetResult>(`/tweets/${tweetId}/retweets`, { method: "POST" });
 }
 
 export function getTimeline(kind: TimelineKind, cursor?: string | null): Promise<TimelinePage> {

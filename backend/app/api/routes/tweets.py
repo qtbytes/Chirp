@@ -1,14 +1,49 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
 from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.repositories import tweet_repository, user_repository
-from app.schemas.tweet import TweetCreate, TweetOut
+from app.schemas.tweet import TweetCreate, TweetOut, TweetStatsOut
 from app.services.timeline_service import TimelineService, enqueue_feed_fanout_job
 
 router = APIRouter(prefix="/tweets", tags=["tweets"])
+
+
+@router.get("/stats", response_model=list[TweetStatsOut])
+def list_tweet_stats(
+    ids: str = Query(..., min_length=1),
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> list[TweetStatsOut]:
+    try:
+        tweet_ids = [int(value) for value in ids.split(",") if value.strip()]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ids must be comma-separated integers",
+        ) from exc
+
+    if not tweet_ids or any(tweet_id <= 0 for tweet_id in tweet_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ids must contain positive integers",
+        )
+    if len(tweet_ids) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ids supports at most 100 tweets",
+        )
+
+    return [
+        TweetStatsOut(**stats)
+        for stats in tweet_repository.list_tweet_stats(
+            db,
+            tweet_ids=tweet_ids,
+            current_user_id=current_user_id,
+        )
+    ]
 
 
 @router.post(

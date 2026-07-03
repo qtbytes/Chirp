@@ -258,6 +258,81 @@ def list_comments_by_tweet(
     ]
 
 
+def list_comment_stats(
+    db: Session,
+    comment_ids: list[int],
+    current_user_id: int,
+) -> list[dict]:
+    ordered_ids = list(dict.fromkeys(comment_ids))
+    if not ordered_ids:
+        return []
+
+    like_counts = (
+        select(
+            CommentLike.comment_id,
+            func.count().label("like_count"),
+        )
+        .where(CommentLike.comment_id.in_(ordered_ids))
+        .group_by(CommentLike.comment_id)
+        .subquery()
+    )
+
+    reply_counts = (
+        select(
+            Comment.parent_comment_id.label("comment_id"),
+            func.count().label("comment_count"),
+        )
+        .where(Comment.parent_comment_id.in_(ordered_ids))
+        .group_by(Comment.parent_comment_id)
+        .subquery()
+    )
+
+    retweet_counts = (
+        select(
+            CommentRetweet.comment_id,
+            func.count().label("retweet_count"),
+        )
+        .where(CommentRetweet.comment_id.in_(ordered_ids))
+        .group_by(CommentRetweet.comment_id)
+        .subquery()
+    )
+
+    rows = db.execute(
+        select(
+            Comment.id,
+            func.coalesce(like_counts.c.like_count, 0).label("like_count"),
+            func.coalesce(reply_counts.c.comment_count, 0).label("comment_count"),
+            func.coalesce(retweet_counts.c.retweet_count, 0).label("retweet_count"),
+        )
+        .outerjoin(like_counts, like_counts.c.comment_id == Comment.id)
+        .outerjoin(reply_counts, reply_counts.c.comment_id == Comment.id)
+        .outerjoin(retweet_counts, retweet_counts.c.comment_id == Comment.id)
+        .where(Comment.id.in_(ordered_ids))
+    ).all()
+
+    liked_comment_ids = {
+        comment_id
+        for (comment_id,) in db.execute(
+            select(CommentLike.comment_id).where(
+                CommentLike.user_id == current_user_id,
+                CommentLike.comment_id.in_(ordered_ids),
+            )
+        ).all()
+    }
+
+    stats_by_id = {
+        comment_id: {
+            "id": comment_id,
+            "like_count": int(like_count),
+            "comment_count": int(comment_count),
+            "retweet_count": int(retweet_count),
+            "liked_by_me": comment_id in liked_comment_ids,
+        }
+        for comment_id, like_count, comment_count, retweet_count in rows
+    }
+    return [stats_by_id[comment_id] for comment_id in ordered_ids if comment_id in stats_by_id]
+
+
 def like_comment(db: Session, user_id: int, comment_id: int) -> bool:
     comment = db.get(Comment, comment_id)
     if comment is None:

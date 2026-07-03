@@ -20,8 +20,10 @@ import {
   createComment,
   createTweet,
   followUser,
+  getCommentStats,
   getCurrentUser,
   getTimeline,
+  getTweetStats,
   listComments,
   listUsers,
   login,
@@ -36,9 +38,11 @@ import {
 } from "./api";
 import type {
   Comment,
+  CommentStats,
   TimelineKind,
   TimelinePage,
   Tweet,
+  TweetStats,
   UserDiscovery,
   UserSummary,
 } from "./types";
@@ -221,11 +225,38 @@ function MainApp({
 }) {
   const [activeTab, setActiveTab] = useState<TimelineKind>("for-you");
   const [page, setPage] = useState<TimelinePage | null>(null);
-  const [tweets, setTweets] = useState<Tweet[]>([]);
+  const [tweetById, setTweetById] = useState<Record<number, Tweet>>({});
+  const [tweetIds, setTweetIds] = useState<number[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
   const [feedError, setFeedError] = useState("");
   const [refreshToken, setRefreshToken] = useState(0);
-  const [selectedTweet, setSelectedTweet] = useState<Tweet | null>(null);
+  const [selectedTweetId, setSelectedTweetId] = useState<number | null>(null);
+
+  const tweets = useMemo(
+    () => tweetIds.map((tweetId) => tweetById[tweetId]).filter((tweet): tweet is Tweet => Boolean(tweet)),
+    [tweetById, tweetIds],
+  );
+  const selectedTweet = selectedTweetId === null ? null : tweetById[selectedTweetId] ?? null;
+  const visibleTweetIdsKey = useMemo(() => {
+    const visibleIds = selectedTweetId === null ? tweetIds : [...tweetIds, selectedTweetId];
+    return Array.from(new Set(visibleIds)).join(",");
+  }, [selectedTweetId, tweetIds]);
+
+  const patchTweet = useCallback((tweetId: number, patch: Partial<Tweet>) => {
+    setTweetById((current) => {
+      const existing = current[tweetId];
+      if (!existing) {
+        return current;
+      }
+      return {
+        ...current,
+        [tweetId]: {
+          ...existing,
+          ...patch,
+        },
+      };
+    });
+  }, []);
 
   const loadFeed = useCallback(
     async (cursor?: string | null, append = false) => {
@@ -235,7 +266,21 @@ function MainApp({
       try {
         const nextPage = await getTimeline(activeTab, cursor);
         setPage(nextPage);
-        setTweets((current) => (append ? [...current, ...nextPage.items] : nextPage.items));
+        setTweetById((current) => {
+          const next = { ...current };
+          for (const tweet of nextPage.items) {
+            next[tweet.id] = tweet;
+          }
+          return next;
+        });
+        setTweetIds((current) => {
+          const nextIds = nextPage.items.map((tweet) => tweet.id);
+          if (!append) {
+            return nextIds;
+          }
+          const existing = new Set(current);
+          return [...current, ...nextIds.filter((tweetId) => !existing.has(tweetId))];
+        });
       } catch (err) {
         setFeedError(getErrorMessage(err));
       } finally {
@@ -248,6 +293,42 @@ function MainApp({
   useEffect(() => {
     void loadFeed();
   }, [loadFeed, refreshToken]);
+
+  useEffect(() => {
+    if (!visibleTweetIdsKey) {
+      return;
+    }
+
+    const tweetIdsToSync = visibleTweetIdsKey.split(",").map(Number);
+    let cancelled = false;
+
+    async function syncTweetStats() {
+      try {
+        const stats = await getTweetStats(tweetIdsToSync);
+        if (cancelled) {
+          return;
+        }
+        setTweetById((current) => mergeTweetStats(current, stats));
+      } catch {
+        // Stats polling is a background sync; keep the current UI if it fails.
+      }
+    }
+
+    void syncTweetStats();
+    const timer = window.setInterval(() => void syncTweetStats(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [visibleTweetIdsKey]);
+
+  function insertPostedTweet(tweet: Tweet) {
+    setTweetById((current) => ({
+      ...current,
+      [tweet.id]: tweet,
+    }));
+    setTweetIds((current) => [tweet.id, ...current.filter((tweetId) => tweetId !== tweet.id)]);
+  }
 
   async function handleLogout() {
     await logout().catch(() => undefined);
@@ -304,7 +385,7 @@ function MainApp({
             <button
               className={activeTab === "for-you" ? "tab active" : "tab"}
               onClick={() => {
-                setSelectedTweet(null);
+                setSelectedTweetId(null);
                 setActiveTab("for-you");
               }}
               role="tab"
@@ -315,7 +396,7 @@ function MainApp({
             <button
               className={activeTab === "following" ? "tab active" : "tab"}
               onClick={() => {
-                setSelectedTweet(null);
+                setSelectedTweetId(null);
                 setActiveTab("following");
               }}
               role="tab"
@@ -329,12 +410,12 @@ function MainApp({
         {selectedTweet ? (
           <TweetDetail
             tweet={selectedTweet}
-            onBack={() => setSelectedTweet(null)}
-            onChanged={() => setRefreshToken((value) => value + 1)}
+            onBack={() => setSelectedTweetId(null)}
+            onTweetPatch={patchTweet}
           />
         ) : (
           <>
-            <Composer onPosted={() => setRefreshToken((value) => value + 1)} />
+            <Composer onPosted={insertPostedTweet} />
 
             {feedError ? <div className="status-panel error">{feedError}</div> : null}
             {!loadingFeed && tweets.length === 0 && !feedError ? (
@@ -345,8 +426,8 @@ function MainApp({
                 <TweetCard
                   key={tweet.id}
                   tweet={tweet}
-                  onOpen={() => setSelectedTweet(tweet)}
-                  onChanged={() => setRefreshToken((value) => value + 1)}
+                  onOpen={() => setSelectedTweetId(tweet.id)}
+                  onTweetPatch={patchTweet}
                 />
               ))}
             </section>
@@ -401,7 +482,7 @@ function ThemeToggle({
   );
 }
 
-function Composer({ onPosted }: { onPosted: () => void }) {
+function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
@@ -416,9 +497,9 @@ function Composer({ onPosted }: { onPosted: () => void }) {
     setPosting(true);
     setError("");
     try {
-      await createTweet(content.trim());
+      const tweet = await createTweet(content.trim());
       setContent("");
-      onPosted();
+      onPosted(tweet);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -449,15 +530,14 @@ function Composer({ onPosted }: { onPosted: () => void }) {
 function TweetCard({
   tweet,
   onOpen,
-  onChanged,
+  onTweetPatch,
 }: {
   tweet: Tweet;
   onOpen: () => void;
-  onChanged: () => void;
+  onTweetPatch: (tweetId: number, patch: Partial<Tweet>) => void;
 }) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [comment, setComment] = useState("");
-  const [localTweet, setLocalTweet] = useState(tweet);
   const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
   const [error, setError] = useState("");
   const displayDate = useMemo(() => {
@@ -469,16 +549,14 @@ function TweetCard({
     }).format(parseBackendDate(tweet.created_at));
   }, [tweet.created_at]);
 
-  useEffect(() => {
-    setLocalTweet(tweet);
-  }, [tweet]);
-
-  async function runRetweetAction(task: () => Promise<void>) {
+  async function runRetweetAction() {
     setActing("retweet");
     setError("");
     try {
-      await task();
-      onChanged();
+      const result = await retweetTweet(tweet.id);
+      if (result.created) {
+        onTweetPatch(tweet.id, { retweet_count: tweet.retweet_count + 1 });
+      }
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -490,13 +568,11 @@ function TweetCard({
     setActing("like");
     setError("");
     try {
-      const result = await toggleTweetLike(localTweet.id);
-      setLocalTweet((value) => ({
-        ...value,
+      const result = await toggleTweetLike(tweet.id);
+      onTweetPatch(tweet.id, {
         liked_by_me: result.liked,
         like_count: result.like_count,
-      }));
-      onChanged();
+      });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -516,7 +592,7 @@ function TweetCard({
       await createComment(tweet.id, comment.trim());
       setComment("");
       setCommentOpen(false);
-      onChanged();
+      onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -541,14 +617,14 @@ function TweetCard({
       aria-label={`Open tweet by ${tweet.author.username}`}
     >
       <div className="avatar" aria-hidden="true">
-        {localTweet.author.username.slice(0, 1).toUpperCase()}
+        {tweet.author.username.slice(0, 1).toUpperCase()}
       </div>
       <div className="tweet-body">
         <header>
-          <strong>@{localTweet.author.username}</strong>
+          <strong>@{tweet.author.username}</strong>
           <span>{displayDate}</span>
         </header>
-        <p>{localTweet.content}</p>
+        <p>{tweet.content}</p>
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions">
           <button
@@ -560,30 +636,30 @@ function TweetCard({
             aria-expanded={commentOpen}
           >
             <MessageCircle size={18} aria-hidden="true" />
-            <span>{localTweet.comment_count}</span>
+            <span>{tweet.comment_count}</span>
           </button>
           <button
             className="tweet-action retweet"
             onClick={(event) => {
               event.stopPropagation();
-              void runRetweetAction(() => retweetTweet(localTweet.id));
+              void runRetweetAction();
             }}
             disabled={acting === "retweet"}
           >
             <Repeat2 size={18} aria-hidden="true" />
-            <span>{localTweet.retweet_count}</span>
+            <span>{tweet.retweet_count}</span>
           </button>
           <button
-            className={localTweet.liked_by_me ? "tweet-action like active" : "tweet-action like"}
+            className={tweet.liked_by_me ? "tweet-action like active" : "tweet-action like"}
             onClick={(event) => {
               event.stopPropagation();
               void toggleLikeAction();
             }}
             disabled={acting === "like"}
-            aria-pressed={localTweet.liked_by_me}
+            aria-pressed={tweet.liked_by_me}
           >
-            <Heart size={18} aria-hidden="true" fill={localTweet.liked_by_me ? "currentColor" : "none"} />
-            <span>{localTweet.like_count}</span>
+            <Heart size={18} aria-hidden="true" fill={tweet.liked_by_me ? "currentColor" : "none"} />
+            <span>{tweet.like_count}</span>
           </button>
         </footer>
         {commentOpen ? (
@@ -612,52 +688,80 @@ function TweetCard({
 function TweetDetail({
   tweet,
   onBack,
-  onChanged,
+  onTweetPatch,
 }: {
   tweet: Tweet;
   onBack: () => void;
-  onChanged: () => void;
+  onTweetPatch: (tweetId: number, patch: Partial<Tweet>) => void;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [comment, setComment] = useState("");
-  const [currentTweet, setCurrentTweet] = useState(tweet);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
   const [error, setError] = useState("");
+  const commentIdsKey = useMemo(
+    () => comments.map((item) => item.id).join(","),
+    [comments],
+  );
 
   const displayDate = useMemo(() => {
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: "medium",
       timeStyle: "short",
-    }).format(parseBackendDate(currentTweet.created_at));
-  }, [currentTweet.created_at]);
+    }).format(parseBackendDate(tweet.created_at));
+  }, [tweet.created_at]);
 
   const loadTweetComments = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      setComments(await listComments(currentTweet.id));
+      setComments(await listComments(tweet.id));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [currentTweet.id]);
-
-  useEffect(() => {
-    setCurrentTweet(tweet);
-  }, [tweet]);
+  }, [tweet.id]);
 
   useEffect(() => {
     void loadTweetComments();
   }, [loadTweetComments]);
 
-  async function runDetailRetweetAction(task: () => Promise<void>) {
+  useEffect(() => {
+    if (!commentIdsKey) {
+      return;
+    }
+
+    const commentIdsToSync = commentIdsKey.split(",").map(Number);
+    let cancelled = false;
+
+    async function syncCommentStats() {
+      try {
+        const stats = await getCommentStats(commentIdsToSync);
+        if (cancelled) {
+          return;
+        }
+        setComments((current) => mergeCommentStats(current, stats));
+      } catch {
+        // Keep comment stats polling quiet; the full comment loader handles visible errors.
+      }
+    }
+
+    const timer = window.setInterval(() => void syncCommentStats(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [commentIdsKey]);
+
+  async function runDetailRetweetAction() {
     setActing("retweet");
     setError("");
     try {
-      await task();
-      onChanged();
+      const result = await retweetTweet(tweet.id);
+      if (result.created) {
+        onTweetPatch(tweet.id, { retweet_count: tweet.retweet_count + 1 });
+      }
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -669,13 +773,11 @@ function TweetDetail({
     setActing("like");
     setError("");
     try {
-      const result = await toggleTweetLike(currentTweet.id);
-      setCurrentTweet((value) => ({
-        ...value,
+      const result = await toggleTweetLike(tweet.id);
+      onTweetPatch(tweet.id, {
         liked_by_me: result.liked,
         like_count: result.like_count,
-      }));
-      onChanged();
+      });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -692,14 +794,10 @@ function TweetDetail({
     setActing("comment");
     setError("");
     try {
-      await createComment(currentTweet.id, comment.trim());
+      await createComment(tweet.id, comment.trim());
       setComment("");
-      setCurrentTweet((value) => ({
-        ...value,
-        comment_count: value.comment_count + 1,
-      }));
+      onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
       await loadTweetComments();
-      onChanged();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -719,14 +817,14 @@ function TweetDetail({
       <article className="detail-tweet">
         <div className="detail-author">
           <div className="avatar" aria-hidden="true">
-            {currentTweet.author.username.slice(0, 1).toUpperCase()}
+            {tweet.author.username.slice(0, 1).toUpperCase()}
           </div>
           <div>
-            <strong>@{currentTweet.author.username}</strong>
+            <strong>@{tweet.author.username}</strong>
             <span>{displayDate}</span>
           </div>
         </div>
-        <p>{currentTweet.content}</p>
+        <p>{tweet.content}</p>
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="tweet-actions detail-actions">
           <button
@@ -734,28 +832,28 @@ function TweetDetail({
             onClick={() => document.getElementById("detail-comment-input")?.focus()}
           >
             <MessageCircle size={18} aria-hidden="true" />
-            <span>{currentTweet.comment_count}</span>
+            <span>{tweet.comment_count}</span>
           </button>
           <button
             className="tweet-action retweet"
-            onClick={() => void runDetailRetweetAction(() => retweetTweet(currentTweet.id))}
+            onClick={() => void runDetailRetweetAction()}
             disabled={acting === "retweet"}
           >
             <Repeat2 size={18} aria-hidden="true" />
-            <span>{currentTweet.retweet_count}</span>
+            <span>{tweet.retweet_count}</span>
           </button>
           <button
-            className={currentTweet.liked_by_me ? "tweet-action like active" : "tweet-action like"}
+            className={tweet.liked_by_me ? "tweet-action like active" : "tweet-action like"}
             onClick={() => void toggleDetailLikeAction()}
             disabled={acting === "like"}
-            aria-pressed={currentTweet.liked_by_me}
+            aria-pressed={tweet.liked_by_me}
           >
             <Heart
               size={18}
               aria-hidden="true"
-              fill={currentTweet.liked_by_me ? "currentColor" : "none"}
+              fill={tweet.liked_by_me ? "currentColor" : "none"}
             />
-            <span>{currentTweet.like_count}</span>
+            <span>{tweet.like_count}</span>
           </button>
         </div>
         <form className="comment-form detail-comment-form" onSubmit={submitDetailComment}>
@@ -792,7 +890,9 @@ function TweetDetail({
             comment={item}
             onChanged={() => {
               void loadTweetComments();
-              onChanged();
+            }}
+            onReplyCreated={() => {
+              onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
             }}
           />
         ))}
@@ -804,9 +904,11 @@ function TweetDetail({
 function CommentCard({
   comment,
   onChanged,
+  onReplyCreated,
 }: {
   comment: Comment;
   onChanged: () => void;
+  onReplyCreated: () => void;
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [reply, setReply] = useState("");
@@ -841,7 +943,6 @@ function CommentCard({
         liked_by_me: result.liked,
         like_count: result.like_count,
       }));
-      onChanged();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -865,6 +966,7 @@ function CommentCard({
         ...value,
         comment_count: value.comment_count + 1,
       }));
+      onReplyCreated();
       onChanged();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1019,6 +1121,74 @@ function UserDiscoveryPanel({ onChanged }: { onChanged: () => void }) {
       ) : null}
     </section>
   );
+}
+
+function mergeTweetStats(
+  current: Record<number, Tweet>,
+  stats: TweetStats[],
+): Record<number, Tweet> {
+  let changed = false;
+  const next = { ...current };
+
+  for (const item of stats) {
+    const tweet = current[item.id];
+    if (!tweet) {
+      continue;
+    }
+
+    if (
+      tweet.like_count !== item.like_count ||
+      tweet.comment_count !== item.comment_count ||
+      tweet.retweet_count !== item.retweet_count ||
+      tweet.liked_by_me !== item.liked_by_me
+    ) {
+      next[item.id] = {
+        ...tweet,
+        like_count: item.like_count,
+        comment_count: item.comment_count,
+        retweet_count: item.retweet_count,
+        liked_by_me: item.liked_by_me,
+      };
+      changed = true;
+    }
+  }
+
+  return changed ? next : current;
+}
+
+function mergeCommentStats(current: Comment[], stats: CommentStats[]): Comment[] {
+  if (stats.length === 0) {
+    return current;
+  }
+
+  let changed = false;
+  const statsById = new Map(stats.map((item) => [item.id, item]));
+  const next = current.map((comment) => {
+    const item = statsById.get(comment.id);
+    if (!item) {
+      return comment;
+    }
+
+    if (
+      comment.like_count === item.like_count &&
+      comment.comment_count === item.comment_count &&
+      comment.retweet_count === item.retweet_count &&
+      comment.liked_by_me === item.liked_by_me
+    ) {
+      return comment;
+    }
+
+    changed = true;
+    return {
+      ...comment,
+      like_count: item.like_count,
+      comment_count: item.comment_count,
+      retweet_count: item.retweet_count,
+      liked_by_me: item.liked_by_me,
+    };
+  });
+
+  return changed ? next : current;
 }
 
 function getErrorMessage(err: unknown): string {
