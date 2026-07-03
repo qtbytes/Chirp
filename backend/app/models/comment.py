@@ -17,6 +17,10 @@ class Comment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     tweet_id: Mapped[int] = mapped_column(ForeignKey("tweets.id"), nullable=False)
+    parent_comment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("comments.id"),
+        nullable=True,
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

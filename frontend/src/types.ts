@@ -22,9 +22,13 @@ export type Tweet = {
 export type Comment = {
   id: number;
   tweet_id: number;
+  parent_comment_id: number | null;
   content: string;
   created_at: string;
   author: UserSummary;
+  like_count: number;
+  comment_count: number;
+  retweet_count: number;
 };
 
 export type TimelinePage = {

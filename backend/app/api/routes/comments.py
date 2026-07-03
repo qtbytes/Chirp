@@ -1,0 +1,141 @@
+from app.api.deps import get_current_user_id
+from app.db.database import get_db
+from app.models.comment import Comment
+from app.repositories import engagement_repository
+from app.schemas.comment import CommentCreate, CommentOut
+from app.schemas.user import UserSummary
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+router = APIRouter(prefix="/comments", tags=["comments"])
+
+
+@router.post("/{comment_id}/likes", status_code=status.HTTP_201_CREATED)
+def like_comment(
+    comment_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        created = engagement_repository.like_comment(
+            db,
+            user_id=current_user_id,
+            comment_id=comment_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "comment_id": comment_id,
+        "liked": True,
+        "created": created,
+    }
+
+
+@router.delete("/{comment_id}/likes", status_code=status.HTTP_200_OK)
+def unlike_comment(
+    comment_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    removed = engagement_repository.unlike_comment(
+        db,
+        user_id=current_user_id,
+        comment_id=comment_id,
+    )
+    return {
+        "comment_id": comment_id,
+        "liked": False,
+        "removed": removed,
+    }
+
+
+@router.post("/{comment_id}/retweets", status_code=status.HTTP_201_CREATED)
+def retweet_comment(
+    comment_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        created = engagement_repository.retweet_comment(
+            db,
+            user_id=current_user_id,
+            comment_id=comment_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "comment_id": comment_id,
+        "retweeted": True,
+        "created": created,
+    }
+
+
+@router.delete("/{comment_id}/retweets", status_code=status.HTTP_200_OK)
+def unretweet_comment(
+    comment_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    removed = engagement_repository.unretweet_comment(
+        db,
+        user_id=current_user_id,
+        comment_id=comment_id,
+    )
+    return {
+        "comment_id": comment_id,
+        "retweeted": False,
+        "removed": removed,
+    }
+
+
+@router.post(
+    "/{comment_id}/comments",
+    response_model=CommentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def reply_to_comment(
+    comment_id: int,
+    payload: CommentCreate,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> CommentOut:
+    parent = db.get(Comment, comment_id)
+    if parent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="comment not found",
+        )
+
+    try:
+        comment, author = engagement_repository.create_comment(
+            db,
+            user_id=current_user_id,
+            tweet_id=parent.tweet_id,
+            parent_comment_id=comment_id,
+            content=payload.content,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return CommentOut(
+        id=comment.id,
+        tweet_id=comment.tweet_id,
+        parent_comment_id=comment.parent_comment_id,
+        content=comment.content,
+        created_at=comment.created_at,
+        author=UserSummary.model_validate(author),
+        like_count=0,
+        comment_count=0,
+        retweet_count=0,
+    )

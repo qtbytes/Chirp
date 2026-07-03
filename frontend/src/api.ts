@@ -96,6 +96,21 @@ export function listComments(tweetId: number, limit = 100): Promise<Comment[]> {
   return request<Comment[]>(`/tweets/${tweetId}/comments?${params.toString()}`);
 }
 
+export function likeComment(commentId: number): Promise<void> {
+  return request<void>(`/comments/${commentId}/likes`, { method: "POST" });
+}
+
+export function replyToComment(commentId: number, content: string): Promise<Comment> {
+  return request<Comment>(`/comments/${commentId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function retweetComment(commentId: number): Promise<void> {
+  return request<void>(`/comments/${commentId}/retweets`, { method: "POST" });
+}
+
 export function retweetTweet(tweetId: number): Promise<void> {
   return request<void>(`/tweets/${tweetId}/retweets`, { method: "POST" });
 }

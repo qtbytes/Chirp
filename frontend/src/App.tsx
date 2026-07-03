@@ -22,12 +22,15 @@ import {
   followUser,
   getCurrentUser,
   getTimeline,
+  likeComment,
   likeTweet,
   listComments,
   listUsers,
   login,
   logout,
   register,
+  replyToComment,
+  retweetComment,
   retweetTweet,
   unfollowUser,
 } from "./api";
@@ -742,21 +745,139 @@ function TweetDetail({
           <div className="status-panel">No comments yet.</div>
         ) : null}
         {comments.map((item) => (
-          <article className="comment-card" key={item.id}>
-            <div className="avatar small" aria-hidden="true">
-              {item.author.username.slice(0, 1).toUpperCase()}
-            </div>
-            <div>
-              <header>
-                <strong>@{item.author.username}</strong>
-                <span>{formatCompactDate(item.created_at)}</span>
-              </header>
-              <p>{item.content}</p>
-            </div>
-          </article>
+          <CommentCard
+            key={item.id}
+            comment={item}
+            onChanged={() => {
+              void loadTweetComments();
+              onChanged();
+            }}
+          />
         ))}
       </section>
     </section>
+  );
+}
+
+function CommentCard({
+  comment,
+  onChanged,
+}: {
+  comment: Comment;
+  onChanged: () => void;
+}) {
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [reply, setReply] = useState("");
+  const [localComment, setLocalComment] = useState(comment);
+  const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setLocalComment(comment);
+  }, [comment]);
+
+  async function runCommentAction(action: "like" | "retweet", task: () => Promise<void>) {
+    setActing(action);
+    setError("");
+    try {
+      await task();
+      setLocalComment((value) => ({
+        ...value,
+        like_count: action === "like" ? value.like_count + 1 : value.like_count,
+        retweet_count: action === "retweet" ? value.retweet_count + 1 : value.retweet_count,
+      }));
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function submitReply(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!reply.trim()) {
+      return;
+    }
+
+    setActing("comment");
+    setError("");
+    try {
+      await replyToComment(localComment.id, reply.trim());
+      setReply("");
+      setReplyOpen(false);
+      setLocalComment((value) => ({
+        ...value,
+        comment_count: value.comment_count + 1,
+      }));
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setActing(null);
+    }
+  }
+
+  return (
+    <article className={localComment.parent_comment_id ? "comment-card reply" : "comment-card"}>
+      <div className="avatar small" aria-hidden="true">
+        {localComment.author.username.slice(0, 1).toUpperCase()}
+      </div>
+      <div className="comment-body">
+        <header>
+          <strong>@{localComment.author.username}</strong>
+          <span>{formatCompactDate(localComment.created_at)}</span>
+          {localComment.parent_comment_id ? <span>Reply</span> : null}
+        </header>
+        <p>{localComment.content}</p>
+        {error ? <p className="tweet-error">{error}</p> : null}
+        <footer className="tweet-actions comment-actions">
+          <button
+            className="tweet-action comment"
+            onClick={() => setReplyOpen((open) => !open)}
+            aria-expanded={replyOpen}
+          >
+            <MessageCircle size={16} aria-hidden="true" />
+            <span>{localComment.comment_count}</span>
+          </button>
+          <button
+            className="tweet-action retweet"
+            onClick={() =>
+              void runCommentAction("retweet", () => retweetComment(localComment.id))
+            }
+            disabled={acting === "retweet"}
+          >
+            <Repeat2 size={16} aria-hidden="true" />
+            <span>{localComment.retweet_count}</span>
+          </button>
+          <button
+            className="tweet-action like"
+            onClick={() => void runCommentAction("like", () => likeComment(localComment.id))}
+            disabled={acting === "like"}
+          >
+            <Heart size={16} aria-hidden="true" />
+            <span>{localComment.like_count}</span>
+          </button>
+        </footer>
+        {replyOpen ? (
+          <form className="comment-form comment-reply-form" onSubmit={submitReply}>
+            <input
+              value={reply}
+              onChange={(event) => setReply(event.target.value)}
+              maxLength={1000}
+              placeholder="Reply to this comment"
+              aria-label="Reply to comment"
+            />
+            <button
+              className="primary-button compact"
+              disabled={acting === "comment" || !reply.trim()}
+            >
+              Reply
+            </button>
+          </form>
+        ) : null}
+      </div>
+    </article>
   );
 }
 

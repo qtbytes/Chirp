@@ -143,9 +143,13 @@ def create_comment(
     return CommentOut(
         id=comment.id,
         tweet_id=comment.tweet_id,
+        parent_comment_id=comment.parent_comment_id,
         content=comment.content,
         created_at=comment.created_at,
         author=UserSummary.model_validate(author),
+        like_count=0,
+        comment_count=0,
+        retweet_count=0,
     )
 
 
@@ -182,9 +186,13 @@ def list_comments(
         CommentOut(
             id=comment.id,
             tweet_id=comment.tweet_id,
+            parent_comment_id=comment.parent_comment_id,
             content=comment.content,
             created_at=comment.created_at,
             author=UserSummary.model_validate(author),
+            like_count=like_count,
+            comment_count=comment_count,
+            retweet_count=retweet_count,
         )
-        for comment, author in rows
+        for comment, author, like_count, comment_count, retweet_count in rows
     ]

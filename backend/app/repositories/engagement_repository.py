@@ -1,7 +1,9 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.comment import Comment
+from app.models.comment_like import CommentLike
+from app.models.comment_retweet import CommentRetweet
 from app.models.like import Like
 from app.models.retweet import Retweet
 from app.models.tweet import Tweet
@@ -113,6 +115,7 @@ def create_comment(
     user_id: int,
     tweet_id: int,
     content: str,
+    parent_comment_id: int | None = None,
 ) -> tuple[Comment, User]:
     """
     Create a comment on a tweet and return the comment with its author.
@@ -129,9 +132,15 @@ def create_comment(
     if author is None:
         raise ValueError("user not found")
 
+    if parent_comment_id is not None:
+        parent_comment = db.get(Comment, parent_comment_id)
+        if parent_comment is None or parent_comment.tweet_id != tweet_id:
+            raise ValueError("parent comment not found")
+
     comment = Comment(
         user_id=user_id,
         tweet_id=tweet_id,
+        parent_comment_id=parent_comment_id,
         content=content,
     )
     db.add(comment)
@@ -145,7 +154,7 @@ def list_comments_by_tweet(
     db: Session,
     tweet_id: int,
     limit: int = 20,
-) -> list[tuple[Comment, User]]:
+) -> list[tuple[Comment, User, int, int, int]]:
     """
     Return recent comments for a tweet with comment authors.
 
@@ -157,12 +166,128 @@ def list_comments_by_tweet(
     if tweet is None:
         raise ValueError("tweet not found")
 
+    like_counts = (
+        select(
+            CommentLike.comment_id,
+            func.count().label("like_count"),
+        )
+        .group_by(CommentLike.comment_id)
+        .subquery()
+    )
+
+    reply_counts = (
+        select(
+            Comment.parent_comment_id.label("comment_id"),
+            func.count().label("comment_count"),
+        )
+        .where(Comment.parent_comment_id.is_not(None))
+        .group_by(Comment.parent_comment_id)
+        .subquery()
+    )
+
+    retweet_counts = (
+        select(
+            CommentRetweet.comment_id,
+            func.count().label("retweet_count"),
+        )
+        .group_by(CommentRetweet.comment_id)
+        .subquery()
+    )
+
     stmt = (
-        select(Comment, User)
+        select(
+            Comment,
+            User,
+            func.coalesce(like_counts.c.like_count, 0),
+            func.coalesce(reply_counts.c.comment_count, 0),
+            func.coalesce(retweet_counts.c.retweet_count, 0),
+        )
         .join(User, User.id == Comment.user_id)
+        .outerjoin(like_counts, like_counts.c.comment_id == Comment.id)
+        .outerjoin(reply_counts, reply_counts.c.comment_id == Comment.id)
+        .outerjoin(retweet_counts, retweet_counts.c.comment_id == Comment.id)
         .where(Comment.tweet_id == tweet_id)
         .order_by(Comment.created_at.desc(), Comment.id.desc())
         .limit(limit)
     )
 
-    return [(comment, user) for comment, user in db.execute(stmt).all()]
+    return [
+        (
+            comment,
+            user,
+            int(like_count),
+            int(comment_count),
+            int(retweet_count),
+        )
+        for comment, user, like_count, comment_count, retweet_count in db.execute(
+            stmt
+        ).all()
+    ]
+
+
+def like_comment(db: Session, user_id: int, comment_id: int) -> bool:
+    comment = db.get(Comment, comment_id)
+    if comment is None:
+        raise ValueError("comment not found")
+
+    existing = db.scalar(
+        select(CommentLike).where(
+            CommentLike.user_id == user_id,
+            CommentLike.comment_id == comment_id,
+        )
+    )
+    if existing:
+        return False
+
+    db.add(CommentLike(user_id=user_id, comment_id=comment_id))
+    db.commit()
+    return True
+
+
+def unlike_comment(db: Session, user_id: int, comment_id: int) -> bool:
+    existing = db.scalar(
+        select(CommentLike).where(
+            CommentLike.user_id == user_id,
+            CommentLike.comment_id == comment_id,
+        )
+    )
+    if existing is None:
+        return False
+
+    db.delete(existing)
+    db.commit()
+    return True
+
+
+def retweet_comment(db: Session, user_id: int, comment_id: int) -> bool:
+    comment = db.get(Comment, comment_id)
+    if comment is None:
+        raise ValueError("comment not found")
+
+    existing = db.scalar(
+        select(CommentRetweet).where(
+            CommentRetweet.user_id == user_id,
+            CommentRetweet.comment_id == comment_id,
+        )
+    )
+    if existing:
+        return False
+
+    db.add(CommentRetweet(user_id=user_id, comment_id=comment_id))
+    db.commit()
+    return True
+
+
+def unretweet_comment(db: Session, user_id: int, comment_id: int) -> bool:
+    existing = db.scalar(
+        select(CommentRetweet).where(
+            CommentRetweet.user_id == user_id,
+            CommentRetweet.comment_id == comment_id,
+        )
+    )
+    if existing is None:
+        return False
+
+    db.delete(existing)
+    db.commit()
+    return True

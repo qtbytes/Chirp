@@ -631,6 +631,15 @@ textarea:focus {
   border-bottom: 1px solid var(--line);
 }
 
+.comment-card.reply {
+  padding-left: 38px;
+  background: color-mix(in srgb, var(--soft) 34%, transparent);
+}
+
+.comment-body {
+  min-width: 0;
+}
+
 .comment-card header {
   display: flex;
   flex-wrap: wrap;
@@ -643,6 +652,15 @@ textarea:focus {
   line-height: 1.45;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.comment-actions {
+  max-width: 320px;
+  margin-top: 8px;
+}
+
+.comment-reply-form {
+  margin-top: 10px;
 }
 
 .status-panel,

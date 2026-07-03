@@ -179,3 +179,41 @@ def test_retweet_action_updates_timeline_count() -> None:
         item for item in timeline_response.json()["items"] if item["id"] == tweet["id"]
     )
     assert timeline_tweet["retweet_count"] == 1
+
+
+def test_comment_interactions_update_comment_counts() -> None:
+    alice = TestClient(app)
+    bob = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "password": "password123"},
+    )
+
+    tweet = alice.post("/api/v1/tweets", json={"content": "thread"}).json()
+    comment = bob.post(
+        f"/api/v1/tweets/{tweet['id']}/comments",
+        json={"content": "first"},
+    ).json()
+
+    like_response = alice.post(f"/api/v1/comments/{comment['id']}/likes")
+    retweet_response = alice.post(f"/api/v1/comments/{comment['id']}/retweets")
+    reply_response = alice.post(
+        f"/api/v1/comments/{comment['id']}/comments",
+        json={"content": "reply"},
+    )
+
+    assert like_response.status_code == 201
+    assert retweet_response.status_code == 201
+    assert reply_response.status_code == 201
+    assert reply_response.json()["parent_comment_id"] == comment["id"]
+
+    comments_response = alice.get(f"/api/v1/tweets/{tweet['id']}/comments")
+    assert comments_response.status_code == 200
+    comments = {item["id"]: item for item in comments_response.json()}
+    assert comments[comment["id"]]["like_count"] == 1
+    assert comments[comment["id"]]["comment_count"] == 1
+    assert comments[comment["id"]]["retweet_count"] == 1
