@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
     session_cookie_name: str = "twitter_session"
     session_secret_key: str = "dev-session-secret-change-me"
+    dev_auto_sync_sqlite_schema: bool = True
 
     timeline_cache_ttl_seconds: int = 30
     default_timeline_strategy: str = "read"
