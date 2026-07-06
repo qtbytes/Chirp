@@ -60,6 +60,7 @@ import {
   mergeTweetStats,
   parseBackendDate,
 } from "./components";
+import { ProfileView } from "./ProfileView";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
@@ -148,6 +149,14 @@ function App() {
         <Route path="/" element={<HomeView />} />
         <Route path="/following" element={<HomeView />} />
         <Route path="/tweet/:tweetId" element={<TweetDetailRoute />} />
+        <Route
+          path="/profile/:username"
+          element={<ProfileView currentUser={currentUser} onCurrentUserChange={setCurrentUser} />}
+        />
+        <Route
+          path="/profile/:username/replies"
+          element={<ProfileView currentUser={currentUser} onCurrentUserChange={setCurrentUser} />}
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
