@@ -290,12 +290,21 @@ async def upload_avatar(
             detail="avatar must be a JPEG, PNG, or WebP image",
         )
 
-    data = await file.read()
-    if len(data) > MAX_AVATAR_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="avatar must be 2 MB or smaller",
-        )
+    # Read in bounded chunks so an oversized upload is rejected before the
+    # full body is ever held in memory, rather than trusting a client-
+    # supplied Content-Length header.
+    chunks = bytearray()
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        chunks.extend(chunk)
+        if len(chunks) > MAX_AVATAR_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="avatar must be 2 MB or smaller",
+            )
+    data = bytes(chunks)
 
     if user_repository.get_user(db, current_user_id) is None:
         raise HTTPException(
