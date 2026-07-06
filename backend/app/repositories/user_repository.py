@@ -62,3 +62,14 @@ def update_user_bio(db: Session, user_id: int, bio: str | None) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def update_user_avatar(db: Session, user_id: int, avatar_url: str) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise ValueError("user not found")
+
+    user.avatar_url = avatar_url
+    db.commit()
+    db.refresh(user)
+    return user

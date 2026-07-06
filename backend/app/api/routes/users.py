@@ -1,4 +1,8 @@
+import time
+from pathlib import Path
+
 from app.api.deps import get_current_user_id
+from app.core.config import settings
 from app.core.security import hash_password
 from app.db.database import get_db
 from app.models.user import User
@@ -18,7 +22,7 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.services.timeline_service import TimelineService, decode_cursor, encode_cursor
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -262,4 +266,57 @@ def update_current_user(
             detail=str(exc),
         ) from exc
 
+    return _build_profile(db, user, current_user_id)
+
+
+ALLOWED_AVATAR_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
+MAX_AVATAR_BYTES = 2 * 1024 * 1024
+
+
+@router.post("/me/avatar", response_model=UserProfileOut)
+async def upload_avatar(
+    file: UploadFile,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> UserProfileOut:
+    extension = ALLOWED_AVATAR_TYPES.get(file.content_type or "")
+    if extension is None:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="avatar must be a JPEG, PNG, or WebP image",
+        )
+
+    data = await file.read()
+    if len(data) > MAX_AVATAR_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="avatar must be 2 MB or smaller",
+        )
+
+    if user_repository.get_user(db, current_user_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+
+    avatars_dir = Path(settings.uploads_dir) / "avatars"
+    avatars_dir.mkdir(parents=True, exist_ok=True)
+    for old_file in avatars_dir.glob(f"{current_user_id}.*"):
+        old_file.unlink(missing_ok=True)
+    (avatars_dir / f"{current_user_id}{extension}").write_bytes(data)
+
+    # The ?v= timestamp busts browser caches when the avatar is replaced;
+    # StaticFiles ignores the query string when resolving the file.
+    avatar_url = (
+        f"/uploads/avatars/{current_user_id}{extension}?v={int(time.time())}"
+    )
+    user = user_repository.update_user_avatar(
+        db,
+        user_id=current_user_id,
+        avatar_url=avatar_url,
+    )
     return _build_profile(db, user, current_user_id)

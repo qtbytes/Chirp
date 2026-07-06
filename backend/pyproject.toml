@@ -12,6 +12,7 @@ dependencies = [
     "redis>=6.4.0",
     "rq<=2.6.1", # https://github.com/rq/rq/issues/2369
     "uvicorn>=0.42.0",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]

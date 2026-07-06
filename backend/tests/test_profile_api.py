@@ -1,3 +1,4 @@
+from app.core.config import settings
 from fastapi.testclient import TestClient
 from main import app
 
@@ -209,3 +210,39 @@ def test_update_bio_rejects_too_long() -> None:
     register(client, "alice")
     response = client.patch("/api/v1/users/me", json={"bio": "x" * 161})
     assert response.status_code == 422
+
+
+def test_avatar_upload_updates_profile(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+    client = TestClient(app)
+    register(client, "alice")
+
+    response = client.post(
+        "/api/v1/users/me/avatar",
+        files={"file": ("me.png", b"fake-png-bytes", "image/png")},
+    )
+    assert response.status_code == 200
+    avatar_url = response.json()["avatar_url"]
+    assert avatar_url.startswith("/uploads/avatars/")
+    assert (tmp_path / "avatars").exists()
+
+    me = client.get("/api/v1/auth/me").json()
+    assert me["avatar_url"] == avatar_url
+
+
+def test_avatar_upload_rejects_bad_type_and_size(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+    client = TestClient(app)
+    register(client, "alice")
+
+    bad_type = client.post(
+        "/api/v1/users/me/avatar",
+        files={"file": ("note.txt", b"hello", "text/plain")},
+    )
+    assert bad_type.status_code == 415
+
+    too_big = client.post(
+        "/api/v1/users/me/avatar",
+        files={"file": ("big.png", b"x" * (2 * 1024 * 1024 + 1), "image/png")},
+    )
+    assert too_big.status_code == 413
