@@ -162,3 +162,7 @@ export function followUser(userId: number): Promise<void> {
 export function unfollowUser(userId: number): Promise<void> {
   return request<void>(`/follows/${userId}`, { method: "DELETE" });
 }
+
+export function getTweet(tweetId: number): Promise<Tweet> {
+  return request<Tweet>(`/tweets/${tweetId}`);
+}
