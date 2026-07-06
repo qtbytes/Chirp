@@ -4,6 +4,7 @@ import {
   Outlet,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useOutletContext,
   useParams,
@@ -144,6 +145,7 @@ function App() {
         }
       >
         <Route path="/" element={<HomeView />} />
+        <Route path="/following" element={<HomeView />} />
         <Route path="/tweet/:tweetId" element={<TweetDetailRoute />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
@@ -303,7 +305,8 @@ function AppLayout({
 function HomeView() {
   const { refreshToken } = useOutletContext<LayoutContext>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TimelineKind>("for-you");
+  const location = useLocation();
+  const activeTab: TimelineKind = location.pathname === "/following" ? "following" : "for-you";
   const [page, setPage] = useState<TimelinePage | null>(null);
   const [tweetById, setTweetById] = useState<Record<number, Tweet>>({});
   const [tweetIds, setTweetIds] = useState<number[]>([]);
@@ -413,7 +416,7 @@ function HomeView() {
         <div className="tab-list" role="tablist" aria-label="Timeline">
           <button
             className={activeTab === "for-you" ? "tab active" : "tab"}
-            onClick={() => setActiveTab("for-you")}
+            onClick={() => navigate("/")}
             role="tab"
             aria-selected={activeTab === "for-you"}
           >
@@ -421,7 +424,7 @@ function HomeView() {
           </button>
           <button
             className={activeTab === "following" ? "tab active" : "tab"}
-            onClick={() => setActiveTab("following")}
+            onClick={() => navigate("/following")}
             role="tab"
             aria-selected={activeTab === "following"}
           >
