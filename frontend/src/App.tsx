@@ -52,6 +52,7 @@ import type {
   UserSummary,
 } from "./types";
 import {
+  Avatar,
   CommentCard,
   TweetCard,
   getErrorMessage,
@@ -736,9 +737,7 @@ function TweetDetail({
 
       <article className="detail-tweet">
         <div className="detail-author">
-          <div className="avatar" aria-hidden="true">
-            {tweet.author.username.slice(0, 1).toUpperCase()}
-          </div>
+          <Avatar user={tweet.author} />
           <div>
             <strong>@{tweet.author.username}</strong>
             <span>{displayDate}</span>
@@ -876,9 +875,7 @@ function UserDiscoveryPanel({ onChanged }: { onChanged: () => void }) {
       <div className="user-list">
         {users.map((user) => (
           <div className="user-row" key={user.id}>
-            <div className="avatar small" aria-hidden="true">
-              {user.username.slice(0, 1).toUpperCase()}
-            </div>
+            <Avatar user={user} size="small" />
             <div className="user-copy">
               <strong>@{user.username}</strong>
               <span>{user.is_current_user ? "You" : `User ${user.id}`}</span>

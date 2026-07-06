@@ -795,6 +795,17 @@ textarea:focus {
   }
 }
 
+.avatar-image {
+  object-fit: cover;
+  background: var(--soft);
+}
+
+.avatar.large {
+  width: 128px;
+  height: 128px;
+  font-size: 42px;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     display: block;

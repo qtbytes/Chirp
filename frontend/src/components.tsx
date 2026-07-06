@@ -4,12 +4,34 @@ import {
   ApiError,
   createComment,
   replyToComment,
+  resolveMediaUrl,
   retweetComment,
   retweetTweet,
   toggleCommentLike,
   toggleTweetLike,
 } from "./api";
-import type { Comment, CommentStats, Tweet, TweetStats } from "./types";
+import type { Comment, CommentStats, Tweet, TweetStats, UserSummary } from "./types";
+
+export function Avatar({
+  user,
+  size = "regular",
+}: {
+  user: UserSummary;
+  size?: "small" | "regular" | "large";
+}) {
+  const src = resolveMediaUrl(user.avatar_url);
+  const sizeClass =
+    size === "small" ? "avatar small" : size === "large" ? "avatar large" : "avatar";
+
+  if (src) {
+    return <img className={`${sizeClass} avatar-image`} src={src} alt="" aria-hidden="true" />;
+  }
+  return (
+    <div className={sizeClass} aria-hidden="true">
+      {user.username.slice(0, 1).toUpperCase()}
+    </div>
+  );
+}
 
 export function TweetCard({
   tweet,
@@ -100,9 +122,7 @@ export function TweetCard({
       onKeyDown={handleKeyDown}
       aria-label={`Open tweet by ${tweet.author.username}`}
     >
-      <div className="avatar" aria-hidden="true">
-        {tweet.author.username.slice(0, 1).toUpperCase()}
-      </div>
+      <Avatar user={tweet.author} />
       <div className="tweet-body">
         <header>
           <strong>@{tweet.author.username}</strong>
@@ -245,9 +265,7 @@ export function CommentCard({
 
   return (
     <article className={localComment.parent_comment_id ? "comment-card reply" : "comment-card"}>
-      <div className="avatar small" aria-hidden="true">
-        {localComment.author.username.slice(0, 1).toUpperCase()}
-      </div>
+      <Avatar user={localComment.author} size="small" />
       <div className="comment-body">
         <header>
           <strong>@{localComment.author.username}</strong>
