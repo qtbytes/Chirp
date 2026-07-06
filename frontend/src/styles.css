@@ -997,3 +997,81 @@ a.tab {
   align-items: center;
   justify-content: center;
 }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(91, 112, 131, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8vh;
+  z-index: 30;
+}
+
+.modal {
+  background: var(--panel);
+  border-radius: 16px;
+  width: min(560px, calc(100vw - 32px));
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  flex: 1;
+}
+
+.modal-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.edit-avatar {
+  position: relative;
+  width: 128px;
+}
+
+.edit-avatar-button {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(15, 20, 25, 0.6);
+  color: #ffffff;
+}
+
+.edit-bio {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edit-bio span:first-child {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.edit-bio textarea {
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--input);
+  color: var(--ink);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.edit-bio .counter {
+  align-self: flex-end;
+}

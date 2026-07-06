@@ -22,6 +22,7 @@ import {
   getErrorMessage,
   parseBackendDate,
 } from "./components";
+import { EditProfileModal } from "./EditProfileModal";
 
 export function ProfileView({
   currentUser,
@@ -30,9 +31,6 @@ export function ProfileView({
   currentUser: UserSummary;
   onCurrentUserChange: (user: UserSummary) => void;
 }) {
-  void currentUser;
-  void onCurrentUserChange;
-
   const { username = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -44,6 +42,7 @@ export function ProfileView({
   const [notFound, setNotFound] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const [tweets, setTweets] = useState<Tweet[]>([]);
   const [tweetsCursor, setTweetsCursor] = useState<string | null>(null);
@@ -213,7 +212,7 @@ export function ProfileView({
         <div className="profile-header-top">
           <Avatar user={profile} size="large" />
           {profile.is_current_user ? (
-            <button className="outline-button" disabled>
+            <button className="outline-button" onClick={() => setEditing(true)}>
               Edit profile
             </button>
           ) : (
@@ -337,6 +336,22 @@ export function ProfileView({
           <Loader2 className="spin" size={18} aria-hidden="true" />
           <span>Loading</span>
         </div>
+      ) : null}
+
+      {editing && profile.is_current_user ? (
+        <EditProfileModal
+          profile={profile}
+          onClose={() => setEditing(false)}
+          onSaved={(updated) => {
+            setProfile(updated);
+            if (updated.id === currentUser.id) {
+              onCurrentUserChange({
+                ...currentUser,
+                avatar_url: updated.avatar_url,
+              });
+            }
+          }}
+        />
       ) : null}
     </section>
   );
