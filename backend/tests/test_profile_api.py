@@ -82,3 +82,16 @@ def test_user_tweets_newest_first_with_cursor() -> None:
     ).json()
     assert [item["content"] for item in page2["items"]] == ["tweet 0"]
     assert page2["next_cursor"] is None
+
+
+def test_user_tweets_error_paths() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+
+    assert client.get("/api/v1/users/ghost/tweets").status_code == 404
+
+    invalid = client.get(
+        "/api/v1/users/alice/tweets",
+        params={"cursor": "not-a-cursor"},
+    )
+    assert invalid.status_code == 400
