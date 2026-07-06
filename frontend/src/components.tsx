@@ -1,4 +1,5 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Heart, MessageCircle, Repeat2 } from "lucide-react";
 import {
   ApiError,
@@ -122,10 +123,23 @@ export function TweetCard({
       onKeyDown={handleKeyDown}
       aria-label={`Open tweet by ${tweet.author.username}`}
     >
-      <Avatar user={tweet.author} />
+      <Link
+        to={`/profile/${encodeURIComponent(tweet.author.username)}`}
+        className="author-link"
+        onClick={(event) => event.stopPropagation()}
+        aria-label={`View profile of ${tweet.author.username}`}
+      >
+        <Avatar user={tweet.author} />
+      </Link>
       <div className="tweet-body">
         <header>
-          <strong>@{tweet.author.username}</strong>
+          <Link
+            to={`/profile/${encodeURIComponent(tweet.author.username)}`}
+            className="author-link"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <strong>@{tweet.author.username}</strong>
+          </Link>
           <span>{displayDate}</span>
         </header>
         <p>{tweet.content}</p>
@@ -265,10 +279,23 @@ export function CommentCard({
 
   return (
     <article className={localComment.parent_comment_id ? "comment-card reply" : "comment-card"}>
-      <Avatar user={localComment.author} size="small" />
+      <Link
+        to={`/profile/${encodeURIComponent(localComment.author.username)}`}
+        className="author-link"
+        onClick={(event) => event.stopPropagation()}
+        aria-label={`View profile of ${localComment.author.username}`}
+      >
+        <Avatar user={localComment.author} size="small" />
+      </Link>
       <div className="comment-body">
         <header>
-          <strong>@{localComment.author.username}</strong>
+          <Link
+            to={`/profile/${encodeURIComponent(localComment.author.username)}`}
+            className="author-link"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <strong>@{localComment.author.username}</strong>
+          </Link>
           <span>{formatCompactDate(localComment.created_at)}</span>
           {localComment.parent_comment_id ? <span>Reply</span> : null}
         </header>

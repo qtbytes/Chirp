@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Link,
   Navigate,
   Outlet,
   Route,
@@ -291,10 +292,16 @@ function AppLayout({
         </nav>
         <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} />
         <div className="rail-user">
-          <div>
-            <strong>@{currentUser.username}</strong>
-            <span>User {currentUser.id}</span>
-          </div>
+          <Link
+            to={`/profile/${encodeURIComponent(currentUser.username)}`}
+            className="author-link"
+          >
+            <Avatar user={currentUser} size="small" />
+            <div>
+              <strong>@{currentUser.username}</strong>
+              <span>User {currentUser.id}</span>
+            </div>
+          </Link>
           <button className="icon-button" onClick={handleLogout} aria-label="Log out">
             <LogOut size={18} aria-hidden="true" />
           </button>
@@ -746,9 +753,20 @@ function TweetDetail({
 
       <article className="detail-tweet">
         <div className="detail-author">
-          <Avatar user={tweet.author} />
+          <Link
+            to={`/profile/${encodeURIComponent(tweet.author.username)}`}
+            className="author-link"
+            aria-label={`View profile of ${tweet.author.username}`}
+          >
+            <Avatar user={tweet.author} />
+          </Link>
           <div>
-            <strong>@{tweet.author.username}</strong>
+            <Link
+              to={`/profile/${encodeURIComponent(tweet.author.username)}`}
+              className="author-link"
+            >
+              <strong>@{tweet.author.username}</strong>
+            </Link>
             <span>{displayDate}</span>
           </div>
         </div>
@@ -884,11 +902,17 @@ function UserDiscoveryPanel({ onChanged }: { onChanged: () => void }) {
       <div className="user-list">
         {users.map((user) => (
           <div className="user-row" key={user.id}>
-            <Avatar user={user} size="small" />
-            <div className="user-copy">
-              <strong>@{user.username}</strong>
-              <span>{user.is_current_user ? "You" : `User ${user.id}`}</span>
-            </div>
+            <Link
+              to={`/profile/${encodeURIComponent(user.username)}`}
+              className="author-link user-row-link"
+              aria-label={`View profile of ${user.username}`}
+            >
+              <Avatar user={user} size="small" />
+              <div className="user-copy">
+                <strong>@{user.username}</strong>
+                <span>{user.is_current_user ? "You" : `User ${user.id}`}</span>
+              </div>
+            </Link>
             {!user.is_current_user ? (
               <button className="follow-button" onClick={() => void toggleFollow(user)}>
                 <UserPlus size={15} aria-hidden="true" />

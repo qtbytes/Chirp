@@ -1075,3 +1075,24 @@ a.tab {
 .edit-bio .counter {
   align-self: flex-end;
 }
+
+.author-link {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.author-link:hover strong {
+  text-decoration: underline;
+}
+
+.user-row-link {
+  flex: 1;
+  min-width: 0;
+  /* .user-row is a 3-column grid (avatar / copy / follow-button); this link
+     wraps what used to be the first two direct grid children, so it must
+     span those same two columns to keep the row's layout unchanged. */
+  grid-column: span 2;
+}
