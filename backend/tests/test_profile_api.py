@@ -120,3 +120,73 @@ def test_user_replies_include_parent_tweet() -> None:
     assert item["parent_tweet"]["content"] == "original"
     assert item["parent_tweet"]["author"]["username"] == "bob"
     assert item["parent_tweet"]["comment_count"] == 1
+
+
+def test_user_replies_error_paths() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+
+    assert client.get("/api/v1/users/ghost/replies").status_code == 404
+
+    invalid = client.get(
+        "/api/v1/users/alice/replies",
+        params={"cursor": "not-a-cursor"},
+    )
+    assert invalid.status_code == 400
+
+
+def test_user_replies_pagination() -> None:
+    alice_client = TestClient(app)
+    bob_client = TestClient(app)
+    register(alice_client, "alice")
+    register(bob_client, "bob")
+
+    tweet = bob_client.post("/api/v1/tweets", json={"content": "original"}).json()
+    for index in range(3):
+        alice_client.post(
+            f"/api/v1/tweets/{tweet['id']}/comments",
+            json={"content": f"reply {index}"},
+        )
+
+    page = alice_client.get(
+        "/api/v1/users/alice/replies", params={"limit": 2}
+    ).json()
+    assert [item["comment"]["content"] for item in page["items"]] == [
+        "reply 2",
+        "reply 1",
+    ]
+    assert page["next_cursor"]
+
+    page2 = alice_client.get(
+        "/api/v1/users/alice/replies",
+        params={"limit": 2, "cursor": page["next_cursor"]},
+    ).json()
+    assert [item["comment"]["content"] for item in page2["items"]] == ["reply 0"]
+    assert page2["next_cursor"] is None
+
+
+def test_user_replies_skips_comments_on_deleted_tweet() -> None:
+    from app.models.tweet import Tweet
+    from conftest import TestingSessionLocal
+
+    alice_client = TestClient(app)
+    bob_client = TestClient(app)
+    register(alice_client, "alice")
+    register(bob_client, "bob")
+
+    tweet = bob_client.post("/api/v1/tweets", json={"content": "will be deleted"}).json()
+    alice_client.post(
+        f"/api/v1/tweets/{tweet['id']}/comments",
+        json={"content": "orphaned reply"},
+    )
+
+    db = TestingSessionLocal()
+    try:
+        db.query(Tweet).filter(Tweet.id == tweet["id"]).delete()
+        db.commit()
+    finally:
+        db.close()
+
+    response = alice_client.get("/api/v1/users/alice/replies")
+    assert response.status_code == 200
+    assert response.json()["items"] == []
