@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.core.config import settings
 from fastapi.testclient import TestClient
 from main import app
@@ -246,3 +248,23 @@ def test_avatar_upload_rejects_bad_type_and_size(tmp_path, monkeypatch) -> None:
         files={"file": ("big.png", b"x" * (2 * 1024 * 1024 + 1), "image/png")},
     )
     assert too_big.status_code == 413
+
+
+def test_avatar_is_served_from_uploads_mount() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+
+    response = client.post(
+        "/api/v1/users/me/avatar",
+        files={"file": ("me.png", b"fake-png-bytes", "image/png")},
+    )
+    assert response.status_code == 200
+    avatar_url = response.json()["avatar_url"]
+
+    served = client.get(avatar_url)
+    assert served.status_code == 200
+    assert served.content == b"fake-png-bytes"
+
+    avatar_path = avatar_url.split("?", maxsplit=1)[0]
+    saved_file = Path(settings.uploads_dir) / avatar_path.removeprefix("/uploads/")
+    saved_file.unlink(missing_ok=True)
