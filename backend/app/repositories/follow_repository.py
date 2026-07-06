@@ -1,4 +1,4 @@
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models.follow import Follow
@@ -69,3 +69,37 @@ def list_follower_ids(db: Session, followee_id: int) -> list[int]:
         select(Follow.follower_id).where(Follow.followee_id == followee_id)
     ).all()
     return [row[0] for row in rows]
+
+
+def count_followers(db: Session, user_id: int) -> int:
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(Follow)
+            .where(Follow.followee_id == user_id)
+        )
+        or 0
+    )
+
+
+def count_following(db: Session, user_id: int) -> int:
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(Follow)
+            .where(Follow.follower_id == user_id)
+        )
+        or 0
+    )
+
+
+def is_following(db: Session, follower_id: int, followee_id: int) -> bool:
+    return (
+        db.scalar(
+            select(Follow).where(
+                Follow.follower_id == follower_id,
+                Follow.followee_id == followee_id,
+            )
+        )
+        is not None
+    )

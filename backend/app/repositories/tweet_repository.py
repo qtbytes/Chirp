@@ -330,3 +330,14 @@ def list_for_you_tweets(
     )
 
     return scored_rows[: limit + 1]
+
+
+def count_tweets_by_author(db: Session, author_id: int) -> int:
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(Tweet)
+            .where(Tweet.user_id == author_id)
+        )
+        or 0
+    )

@@ -1,8 +1,14 @@
 from app.api.deps import get_current_user_id
 from app.core.security import hash_password
 from app.db.database import get_db
-from app.repositories import user_repository
-from app.schemas.user import UserCreate, UserDiscoveryOut, UserSummary
+from app.models.user import User
+from app.repositories import follow_repository, tweet_repository, user_repository
+from app.schemas.user import (
+    UserCreate,
+    UserDiscoveryOut,
+    UserProfileOut,
+    UserSummary,
+)
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -56,3 +62,33 @@ def list_users(
         )
         for user, is_following in rows
     ]
+
+
+def _build_profile(db: Session, user: User, current_user_id: int) -> UserProfileOut:
+    return UserProfileOut(
+        id=user.id,
+        username=user.username,
+        bio=user.bio,
+        avatar_url=user.avatar_url,
+        created_at=user.created_at,
+        follower_count=follow_repository.count_followers(db, user.id),
+        following_count=follow_repository.count_following(db, user.id),
+        tweet_count=tweet_repository.count_tweets_by_author(db, user.id),
+        is_following=follow_repository.is_following(db, current_user_id, user.id),
+        is_current_user=user.id == current_user_id,
+    )
+
+
+@router.get("/{username}/profile", response_model=UserProfileOut)
+def get_user_profile(
+    username: str,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> UserProfileOut:
+    user = user_repository.get_user_by_username(db, username)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+    return _build_profile(db, user, current_user_id)
