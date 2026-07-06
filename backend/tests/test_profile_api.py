@@ -47,3 +47,20 @@ def test_profile_unknown_username_returns_404() -> None:
     client = TestClient(app)
     register(client, "alice")
     assert client.get("/api/v1/users/ghost/profile").status_code == 404
+
+
+def test_get_single_tweet_with_stats() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+    tweet = client.post("/api/v1/tweets", json={"content": "hello"}).json()
+    client.post(f"/api/v1/tweets/{tweet['id']}/likes/toggle")
+
+    response = client.get(f"/api/v1/tweets/{tweet['id']}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["content"] == "hello"
+    assert body["author"]["username"] == "alice"
+    assert body["like_count"] == 1
+    assert body["liked_by_me"] is True
+
+    assert client.get("/api/v1/tweets/999999").status_code == 404

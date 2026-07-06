@@ -6,6 +6,7 @@ from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.repositories import tweet_repository, user_repository
 from app.schemas.tweet import TweetCreate, TweetOut, TweetStatsOut
+from app.schemas.user import UserSummary
 from app.services.timeline_service import TimelineService, enqueue_feed_fanout_job
 
 router = APIRouter(prefix="/tweets", tags=["tweets"])
@@ -95,4 +96,41 @@ def create_tweet(
             "cursor_created_at": tweet.created_at,
             "cursor_id": tweet.id,
         }
+    )
+
+
+@router.get("/{tweet_id}", response_model=TweetOut)
+def get_tweet(
+    tweet_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> TweetOut:
+    tweet = tweet_repository.get_tweet(db, tweet_id)
+    if tweet is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="tweet not found",
+        )
+
+    stats_rows = tweet_repository.list_tweet_stats(
+        db,
+        tweet_ids=[tweet_id],
+        current_user_id=current_user_id,
+    )
+    stats = stats_rows[0] if stats_rows else {
+        "like_count": 0,
+        "comment_count": 0,
+        "retweet_count": 0,
+        "liked_by_me": False,
+    }
+
+    return TweetOut(
+        id=tweet.id,
+        content=tweet.content,
+        created_at=tweet.created_at,
+        author=UserSummary.model_validate(tweet.author),
+        like_count=stats["like_count"],
+        comment_count=stats["comment_count"],
+        retweet_count=stats["retweet_count"],
+        liked_by_me=stats["liked_by_me"],
     )
