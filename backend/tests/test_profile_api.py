@@ -95,3 +95,28 @@ def test_user_tweets_error_paths() -> None:
         params={"cursor": "not-a-cursor"},
     )
     assert invalid.status_code == 400
+
+
+def test_user_replies_include_parent_tweet() -> None:
+    alice_client = TestClient(app)
+    bob_client = TestClient(app)
+    register(alice_client, "alice")
+    register(bob_client, "bob")
+
+    tweet = bob_client.post("/api/v1/tweets", json={"content": "original"}).json()
+    alice_client.post(
+        f"/api/v1/tweets/{tweet['id']}/comments",
+        json={"content": "my reply"},
+    )
+
+    response = alice_client.get("/api/v1/users/alice/replies")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["next_cursor"] is None
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["comment"]["content"] == "my reply"
+    assert item["comment"]["author"]["username"] == "alice"
+    assert item["parent_tweet"]["content"] == "original"
+    assert item["parent_tweet"]["author"]["username"] == "bob"
+    assert item["parent_tweet"]["comment_count"] == 1

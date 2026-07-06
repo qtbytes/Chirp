@@ -2,8 +2,14 @@ from app.api.deps import get_current_user_id
 from app.core.security import hash_password
 from app.db.database import get_db
 from app.models.user import User
-from app.repositories import follow_repository, tweet_repository, user_repository
-from app.schemas.tweet import ProfileTweetsPage
+from app.repositories import (
+    engagement_repository,
+    follow_repository,
+    tweet_repository,
+    user_repository,
+)
+from app.schemas.comment import CommentOut, ProfileRepliesPage, ReplyWithParentOut
+from app.schemas.tweet import ProfileTweetsPage, TweetOut
 from app.schemas.user import (
     UserCreate,
     UserDiscoveryOut,
@@ -141,3 +147,97 @@ def list_user_tweets(
         )
 
     return ProfileTweetsPage(items=items, next_cursor=next_cursor)
+
+
+@router.get("/{username}/replies", response_model=ProfileRepliesPage)
+def list_user_replies(
+    username: str,
+    limit: int = Query(default=20, ge=1, le=50),
+    cursor: str | None = None,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> ProfileRepliesPage:
+    user = user_repository.get_user_by_username(db, username)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+
+    cursor_created_at, cursor_id = decode_cursor(cursor)
+    if cursor and (cursor_created_at is None or cursor_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid cursor",
+        )
+
+    rows = engagement_repository.list_replies_by_user(
+        db,
+        user_id=user.id,
+        limit=limit,
+        cursor_created_at=cursor_created_at,
+        cursor_id=cursor_id,
+    )
+
+    has_next = len(rows) > limit
+    page_rows = rows[:limit]
+
+    comment_ids = [row["comment"].id for row in page_rows]
+    tweet_ids = [row["tweet"].id for row in page_rows]
+    comment_stats = {
+        stats["id"]: stats
+        for stats in engagement_repository.list_comment_stats(
+            db, comment_ids=comment_ids, current_user_id=current_user_id
+        )
+    }
+    tweet_stats = {
+        stats["id"]: stats
+        for stats in tweet_repository.list_tweet_stats(
+            db, tweet_ids=tweet_ids, current_user_id=current_user_id
+        )
+    }
+    empty = {"like_count": 0, "comment_count": 0, "retweet_count": 0, "liked_by_me": False}
+    author_summary = UserSummary.model_validate(user)
+
+    items = []
+    for row in page_rows:
+        comment = row["comment"]
+        tweet = row["tweet"]
+        c_stats = comment_stats.get(comment.id, empty)
+        t_stats = tweet_stats.get(tweet.id, empty)
+        items.append(
+            ReplyWithParentOut(
+                comment=CommentOut(
+                    id=comment.id,
+                    tweet_id=comment.tweet_id,
+                    parent_comment_id=comment.parent_comment_id,
+                    content=comment.content,
+                    created_at=comment.created_at,
+                    author=author_summary,
+                    like_count=c_stats["like_count"],
+                    comment_count=c_stats["comment_count"],
+                    retweet_count=c_stats["retweet_count"],
+                    liked_by_me=c_stats["liked_by_me"],
+                ),
+                parent_tweet=TweetOut(
+                    id=tweet.id,
+                    content=tweet.content,
+                    created_at=tweet.created_at,
+                    author=UserSummary.model_validate(row["tweet_author"]),
+                    like_count=t_stats["like_count"],
+                    comment_count=t_stats["comment_count"],
+                    retweet_count=t_stats["retweet_count"],
+                    liked_by_me=t_stats["liked_by_me"],
+                ),
+            )
+        )
+
+    next_cursor = None
+    if has_next and page_rows:
+        last_row = page_rows[-1]
+        next_cursor = encode_cursor(
+            last_row["cursor_created_at"],
+            last_row["cursor_id"],
+        )
+
+    return ProfileRepliesPage(items=items, next_cursor=next_cursor)

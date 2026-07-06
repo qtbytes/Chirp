@@ -1,4 +1,6 @@
-from sqlalchemy import func, select
+from datetime import datetime
+
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.comment import Comment
@@ -422,3 +424,47 @@ def unretweet_comment(db: Session, user_id: int, comment_id: int) -> bool:
     db.delete(existing)
     db.commit()
     return True
+
+
+def list_replies_by_user(
+    db: Session,
+    user_id: int,
+    limit: int,
+    cursor_created_at: datetime | None = None,
+    cursor_id: int | None = None,
+) -> list[dict]:
+    """
+    Return the user's comments newest-first, each joined with its parent tweet
+    and the tweet's author. Fetches limit + 1 rows for has-next detection.
+    """
+    stmt = (
+        select(Comment, Tweet, User)
+        .join(Tweet, Tweet.id == Comment.tweet_id)
+        .join(User, User.id == Tweet.user_id)
+        .where(Comment.user_id == user_id)
+        .order_by(Comment.created_at.desc(), Comment.id.desc())
+        .limit(limit + 1)
+    )
+
+    if cursor_created_at is not None and cursor_id is not None:
+        stmt = stmt.where(
+            or_(
+                Comment.created_at < cursor_created_at,
+                and_(
+                    Comment.created_at == cursor_created_at,
+                    Comment.id < cursor_id,
+                ),
+            )
+        )
+
+    rows = db.execute(stmt).all()
+    return [
+        {
+            "comment": comment,
+            "tweet": tweet,
+            "tweet_author": tweet_author,
+            "cursor_created_at": comment.created_at,
+            "cursor_id": comment.id,
+        }
+        for comment, tweet, tweet_author in rows
+    ]
