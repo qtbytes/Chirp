@@ -190,3 +190,22 @@ def test_user_replies_skips_comments_on_deleted_tweet() -> None:
     response = alice_client.get("/api/v1/users/alice/replies")
     assert response.status_code == 200
     assert response.json()["items"] == []
+
+
+def test_update_bio() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+
+    response = client.patch("/api/v1/users/me", json={"bio": "Building things."})
+    assert response.status_code == 200
+    assert response.json()["bio"] == "Building things."
+
+    profile = client.get("/api/v1/users/alice/profile").json()
+    assert profile["bio"] == "Building things."
+
+
+def test_update_bio_rejects_too_long() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+    response = client.patch("/api/v1/users/me", json={"bio": "x" * 161})
+    assert response.status_code == 422

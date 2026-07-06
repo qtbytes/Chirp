@@ -15,6 +15,7 @@ from app.schemas.user import (
     UserDiscoveryOut,
     UserProfileOut,
     UserSummary,
+    UserUpdate,
 )
 from app.services.timeline_service import TimelineService, decode_cursor, encode_cursor
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -241,3 +242,24 @@ def list_user_replies(
         )
 
     return ProfileRepliesPage(items=items, next_cursor=next_cursor)
+
+
+@router.patch("/me", response_model=UserProfileOut)
+def update_current_user(
+    payload: UserUpdate,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> UserProfileOut:
+    try:
+        user = user_repository.update_user_bio(
+            db,
+            user_id=current_user_id,
+            bio=payload.bio,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return _build_profile(db, user, current_user_id)

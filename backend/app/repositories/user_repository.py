@@ -51,3 +51,14 @@ def list_users(
     }
 
     return [(user, user.id in followed_ids) for user in users]
+
+
+def update_user_bio(db: Session, user_id: int, bio: str | None) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise ValueError("user not found")
+
+    user.bio = bio
+    db.commit()
+    db.refresh(user)
+    return user
