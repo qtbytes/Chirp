@@ -795,6 +795,17 @@ textarea:focus {
   }
 }
 
+.avatar-image {
+  object-fit: cover;
+  background: var(--soft);
+}
+
+.avatar.large {
+  width: 128px;
+  height: 128px;
+  font-size: 42px;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     display: block;
@@ -857,4 +868,231 @@ textarea:focus {
   .auth-panel {
     padding: 26px;
   }
+}
+
+.profile-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-toolbar-copy h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.profile-toolbar-copy span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.profile-banner {
+  height: 140px;
+  background: linear-gradient(120deg, var(--accent), var(--accent-strong));
+}
+
+.profile-header {
+  padding: 0 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-header-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: -64px;
+  margin-bottom: 12px;
+}
+
+.profile-header-top .avatar.large {
+  border: 4px solid var(--panel);
+}
+
+.profile-name {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.profile-bio {
+  margin: 8px 0;
+  white-space: pre-wrap;
+}
+
+.profile-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  margin: 8px 0;
+}
+
+.profile-stats {
+  display: flex;
+  gap: 18px;
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.profile-stats strong {
+  color: var(--ink);
+}
+
+.outline-button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.outline-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.outline-button.following:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.reply-thread {
+  border-bottom: 1px solid var(--line);
+}
+
+.reply-thread .tweet-card {
+  border-bottom: none;
+}
+
+.reply-thread-item {
+  padding: 0 16px 12px 40px;
+  position: relative;
+}
+
+.reply-thread-item::before {
+  content: "";
+  position: absolute;
+  left: 34px;
+  top: -12px;
+  bottom: 12px;
+  width: 2px;
+  background: var(--line);
+}
+
+.replying-to {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.replying-to a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a.tab {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(91, 112, 131, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8vh;
+  z-index: 30;
+}
+
+.modal {
+  background: var(--panel);
+  border-radius: 16px;
+  width: min(560px, calc(100vw - 32px));
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  flex: 1;
+}
+
+.modal-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.edit-avatar {
+  position: relative;
+  width: 128px;
+}
+
+.edit-avatar-button {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(15, 20, 25, 0.6);
+  color: #ffffff;
+}
+
+.edit-bio {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edit-bio span:first-child {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.edit-bio textarea {
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--input);
+  color: var(--ink);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.edit-bio .counter {
+  align-self: flex-end;
+}
+
+.author-link {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.author-link:hover strong {
+  text-decoration: underline;
+}
+
+.user-row-link {
+  flex: 1;
+  min-width: 0;
+  /* .user-row is a 3-column grid (avatar / copy / follow-button); this link
+     wraps what used to be the first two direct grid children, so it must
+     span those same two columns to keep the row's layout unchanged. */
+  grid-column: span 2;
 }

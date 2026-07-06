@@ -3,19 +3,31 @@ import type {
   CommentLikeToggleResult,
   CommentStats,
   LikeToggleResult,
+  ProfileRepliesPage,
+  ProfileTweetsPage,
   RetweetResult,
   TimelineKind,
   TimelinePage,
   Tweet,
   TweetStats,
   UserDiscovery,
+  UserProfile,
   UserSummary,
 } from "./types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
+const BACKEND_ORIGIN = new URL(API_BASE_URL).origin;
+
+export function resolveMediaUrl(path: string | null): string | null {
+  if (!path) {
+    return null;
+  }
+  return path.startsWith("http") ? path : `${BACKEND_ORIGIN}${path}`;
+}
+
 type ApiErrorPayload = {
-  detail?: string;
+  detail?: string | Array<{ msg?: string; [key: string]: unknown }>;
 };
 
 export class ApiError extends Error {
@@ -29,11 +41,12 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const isFormData = init.body instanceof FormData;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...init.headers,
     },
   });
@@ -42,7 +55,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     let message = response.statusText;
     try {
       const payload = (await response.json()) as ApiErrorPayload;
-      message = payload.detail ?? message;
+      if (typeof payload.detail === "string") {
+        message = payload.detail;
+      } else if (Array.isArray(payload.detail)) {
+        message = payload.detail
+          .map((item) => (typeof item?.msg === "string" ? item.msg : JSON.stringify(item)))
+          .join("; ");
+      }
     } catch {
       message = response.statusText;
     }
@@ -161,4 +180,54 @@ export function followUser(userId: number): Promise<void> {
 
 export function unfollowUser(userId: number): Promise<void> {
   return request<void>(`/follows/${userId}`, { method: "DELETE" });
+}
+
+export function getTweet(tweetId: number): Promise<Tweet> {
+  return request<Tweet>(`/tweets/${tweetId}`);
+}
+
+export function getUserProfile(username: string): Promise<UserProfile> {
+  return request<UserProfile>(`/users/${encodeURIComponent(username)}/profile`);
+}
+
+export function getUserTweets(
+  username: string,
+  cursor?: string | null,
+): Promise<ProfileTweetsPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<ProfileTweetsPage>(
+    `/users/${encodeURIComponent(username)}/tweets?${params.toString()}`,
+  );
+}
+
+export function getUserReplies(
+  username: string,
+  cursor?: string | null,
+): Promise<ProfileRepliesPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<ProfileRepliesPage>(
+    `/users/${encodeURIComponent(username)}/replies?${params.toString()}`,
+  );
+}
+
+export function updateProfile(bio: string): Promise<UserProfile> {
+  return request<UserProfile>("/users/me", {
+    method: "PATCH",
+    body: JSON.stringify({ bio }),
+  });
+}
+
+export function uploadAvatar(file: File): Promise<UserProfile> {
+  const form = new FormData();
+  form.append("file", file);
+  return request<UserProfile>("/users/me/avatar", {
+    method: "POST",
+    body: form,
+  });
 }

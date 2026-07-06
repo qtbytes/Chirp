@@ -12,6 +12,7 @@ class UserSummary(BaseModel):
     id: int
     username: str
     created_at: datetime
+    avatar_url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -24,3 +25,20 @@ class UserLogin(BaseModel):
 class UserDiscoveryOut(UserSummary):
     is_following: bool = False
     is_current_user: bool = False
+
+
+class UserUpdate(BaseModel):
+    bio: str | None = Field(default=None, max_length=160)
+
+
+class UserProfileOut(BaseModel):
+    id: int
+    username: str
+    bio: str | None = None
+    avatar_url: str | None = None
+    created_at: datetime
+    follower_count: int
+    following_count: int
+    tweet_count: int
+    is_following: bool
+    is_current_user: bool

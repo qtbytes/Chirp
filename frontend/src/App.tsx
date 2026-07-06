@@ -1,4 +1,15 @@
-import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Link,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useOutletContext,
+  useParams,
+} from "react-router-dom";
 import {
   ArrowLeft,
   Bell,
@@ -16,39 +27,45 @@ import {
   Users,
 } from "lucide-react";
 import {
-  ApiError,
   createComment,
   createTweet,
   followUser,
   getCommentStats,
   getCurrentUser,
   getTimeline,
+  getTweet,
   getTweetStats,
   listComments,
   listUsers,
   login,
   logout,
   register,
-  replyToComment,
-  retweetComment,
   retweetTweet,
-  toggleCommentLike,
   toggleTweetLike,
   unfollowUser,
 } from "./api";
 import type {
   Comment,
-  CommentStats,
   TimelineKind,
   TimelinePage,
   Tweet,
-  TweetStats,
   UserDiscovery,
   UserSummary,
 } from "./types";
+import {
+  Avatar,
+  CommentCard,
+  TweetCard,
+  getErrorMessage,
+  mergeCommentStats,
+  mergeTweetStats,
+  parseBackendDate,
+} from "./components";
+import { ProfileView } from "./ProfileView";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
+type LayoutContext = { refreshToken: number };
 
 const THEME_STORAGE_KEY = "twitter-system-theme";
 
@@ -119,12 +136,31 @@ function App() {
   }
 
   return (
-    <MainApp
-      currentUser={currentUser}
-      onLogout={() => setCurrentUser(null)}
-      theme={theme}
-      onToggleTheme={toggleTheme}
-    />
+    <Routes>
+      <Route
+        element={
+          <AppLayout
+            currentUser={currentUser}
+            onLogout={() => setCurrentUser(null)}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
+        }
+      >
+        <Route path="/" element={<HomeView />} />
+        <Route path="/following" element={<HomeView />} />
+        <Route path="/tweet/:tweetId" element={<TweetDetailRoute />} />
+        <Route
+          path="/profile/:username"
+          element={<ProfileView currentUser={currentUser} onCurrentUserChange={setCurrentUser} />}
+        />
+        <Route
+          path="/profile/:username/replies"
+          element={<ProfileView currentUser={currentUser} onCurrentUserChange={setCurrentUser} />}
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
   );
 }
 
@@ -212,7 +248,7 @@ function AuthScreen({
   );
 }
 
-function MainApp({
+function AppLayout({
   currentUser,
   onLogout,
   theme,
@@ -223,24 +259,82 @@ function MainApp({
   theme: Theme;
   onToggleTheme: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<TimelineKind>("for-you");
+  const [refreshToken, setRefreshToken] = useState(0);
+
+  async function handleLogout() {
+    await logout().catch(() => undefined);
+    onLogout();
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className="rail">
+        <div className="rail-brand" aria-label="Twitter System">
+          <Feather aria-hidden="true" />
+        </div>
+        <nav className="rail-nav" aria-label="Primary">
+          <a className="rail-link active" href="#feed">
+            <Home size={22} aria-hidden="true" />
+            <span>Home</span>
+          </a>
+          <a className="rail-link" href="#discover">
+            <Search size={22} aria-hidden="true" />
+            <span>Search</span>
+          </a>
+          <a className="rail-link" href="#discover">
+            <Users size={22} aria-hidden="true" />
+            <span>People</span>
+          </a>
+          <a className="rail-link muted" href="#feed">
+            <Bell size={22} aria-hidden="true" />
+            <span>Updates</span>
+          </a>
+        </nav>
+        <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} />
+        <div className="rail-user">
+          <Link
+            to={`/profile/${encodeURIComponent(currentUser.username)}`}
+            className="author-link"
+          >
+            <Avatar user={currentUser} size="small" />
+            <div>
+              <strong>@{currentUser.username}</strong>
+              <span>User {currentUser.id}</span>
+            </div>
+          </Link>
+          <button className="icon-button" onClick={handleLogout} aria-label="Log out">
+            <LogOut size={18} aria-hidden="true" />
+          </button>
+        </div>
+      </aside>
+
+      <main id="feed" className="feed-column">
+        <Outlet context={{ refreshToken } satisfies LayoutContext} />
+      </main>
+
+      <aside id="discover" className="discovery-column">
+        <UserDiscoveryPanel onChanged={() => setRefreshToken((value) => value + 1)} />
+      </aside>
+    </div>
+  );
+}
+
+function HomeView() {
+  const { refreshToken } = useOutletContext<LayoutContext>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activeTab: TimelineKind = location.pathname === "/following" ? "following" : "for-you";
   const [page, setPage] = useState<TimelinePage | null>(null);
   const [tweetById, setTweetById] = useState<Record<number, Tweet>>({});
   const [tweetIds, setTweetIds] = useState<number[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
   const [feedError, setFeedError] = useState("");
-  const [refreshToken, setRefreshToken] = useState(0);
-  const [selectedTweetId, setSelectedTweetId] = useState<number | null>(null);
 
   const tweets = useMemo(
     () => tweetIds.map((tweetId) => tweetById[tweetId]).filter((tweet): tweet is Tweet => Boolean(tweet)),
     [tweetById, tweetIds],
   );
-  const selectedTweet = selectedTweetId === null ? null : tweetById[selectedTweetId] ?? null;
-  const visibleTweetIdsKey = useMemo(() => {
-    const visibleIds = selectedTweetId === null ? tweetIds : [...tweetIds, selectedTweetId];
-    return Array.from(new Set(visibleIds)).join(",");
-  }, [selectedTweetId, tweetIds]);
+  const visibleTweetIdsKey = useMemo(() => tweetIds.join(","), [tweetIds]);
 
   const patchTweet = useCallback((tweetId: number, patch: Partial<Tweet>) => {
     setTweetById((current) => {
@@ -330,131 +424,132 @@ function MainApp({
     setTweetIds((current) => [tweet.id, ...current.filter((tweetId) => tweetId !== tweet.id)]);
   }
 
-  async function handleLogout() {
-    await logout().catch(() => undefined);
-    onLogout();
-  }
-
   return (
-    <div className="app-shell">
-      <aside className="rail">
-        <div className="rail-brand" aria-label="Twitter System">
-          <Feather aria-hidden="true" />
+    <>
+      <header className="feed-header">
+        <div className="feed-title-row">
+          <h1>Home</h1>
         </div>
-        <nav className="rail-nav" aria-label="Primary">
-          <a className="rail-link active" href="#feed">
-            <Home size={22} aria-hidden="true" />
-            <span>Home</span>
-          </a>
-          <a className="rail-link" href="#discover">
-            <Search size={22} aria-hidden="true" />
-            <span>Search</span>
-          </a>
-          <a className="rail-link" href="#discover">
-            <Users size={22} aria-hidden="true" />
-            <span>People</span>
-          </a>
-          <a className="rail-link muted" href="#feed">
-            <Bell size={22} aria-hidden="true" />
-            <span>Updates</span>
-          </a>
-        </nav>
-        <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} />
-        <div className="rail-user">
-          <div>
-            <strong>@{currentUser.username}</strong>
-            <span>User {currentUser.id}</span>
-          </div>
-          <button className="icon-button" onClick={handleLogout} aria-label="Log out">
-            <LogOut size={18} aria-hidden="true" />
+        <div className="tab-list" role="tablist" aria-label="Timeline">
+          <button
+            className={activeTab === "for-you" ? "tab active" : "tab"}
+            onClick={() => navigate("/")}
+            role="tab"
+            aria-selected={activeTab === "for-you"}
+          >
+            For you
+          </button>
+          <button
+            className={activeTab === "following" ? "tab active" : "tab"}
+            onClick={() => navigate("/following")}
+            role="tab"
+            aria-selected={activeTab === "following"}
+          >
+            Following
           </button>
         </div>
-      </aside>
+      </header>
 
-      <main id="feed" className="feed-column">
-        <header className="feed-header">
-          <div className="feed-title-row">
-            <h1>Home</h1>
-            <ThemeToggle
-              theme={theme}
-              onToggleTheme={onToggleTheme}
-              className="feed-theme-toggle"
-            />
-          </div>
-          <div className="tab-list" role="tablist" aria-label="Timeline">
-            <button
-              className={activeTab === "for-you" ? "tab active" : "tab"}
-              onClick={() => {
-                setSelectedTweetId(null);
-                setActiveTab("for-you");
-              }}
-              role="tab"
-              aria-selected={activeTab === "for-you"}
-            >
-              For you
-            </button>
-            <button
-              className={activeTab === "following" ? "tab active" : "tab"}
-              onClick={() => {
-                setSelectedTweetId(null);
-                setActiveTab("following");
-              }}
-              role="tab"
-              aria-selected={activeTab === "following"}
-            >
-              Following
-            </button>
-          </div>
-        </header>
+      <Composer onPosted={insertPostedTweet} />
 
-        {selectedTweet ? (
-          <TweetDetail
-            tweet={selectedTweet}
-            onBack={() => setSelectedTweetId(null)}
+      {feedError ? <div className="status-panel error">{feedError}</div> : null}
+      {!loadingFeed && tweets.length === 0 && !feedError ? (
+        <div className="status-panel">No tweets yet.</div>
+      ) : null}
+      <section className="tweet-list" aria-live="polite">
+        {tweets.map((tweet) => (
+          <TweetCard
+            key={tweet.id}
+            tweet={tweet}
+            onOpen={() => navigate(`/tweet/${tweet.id}`)}
             onTweetPatch={patchTweet}
           />
-        ) : (
-          <>
-            <Composer onPosted={insertPostedTweet} />
-
-            {feedError ? <div className="status-panel error">{feedError}</div> : null}
-            {!loadingFeed && tweets.length === 0 && !feedError ? (
-              <div className="status-panel">No tweets yet.</div>
-            ) : null}
-            <section className="tweet-list" aria-live="polite">
-              {tweets.map((tweet) => (
-                <TweetCard
-                  key={tweet.id}
-                  tweet={tweet}
-                  onOpen={() => setSelectedTweetId(tweet.id)}
-                  onTweetPatch={patchTweet}
-                />
-              ))}
-            </section>
-            {loadingFeed ? (
-              <div className="loading-row">
-                <Loader2 className="spin" size={18} aria-hidden="true" />
-                <span>Loading</span>
-              </div>
-            ) : null}
-            {page?.next_cursor ? (
-              <button
-                className="load-more"
-                onClick={() => void loadFeed(page.next_cursor, true)}
-                disabled={loadingFeed}
-              >
-                Load more
-              </button>
-            ) : null}
-          </>
-        )}
-      </main>
-
-      <aside id="discover" className="discovery-column">
-        <UserDiscoveryPanel onChanged={() => setRefreshToken((value) => value + 1)} />
-      </aside>
-    </div>
+        ))}
+      </section>
+      {loadingFeed ? (
+        <div className="loading-row">
+          <Loader2 className="spin" size={18} aria-hidden="true" />
+          <span>Loading</span>
+        </div>
+      ) : null}
+      {page?.next_cursor ? (
+        <button
+          className="load-more"
+          onClick={() => void loadFeed(page.next_cursor, true)}
+          disabled={loadingFeed}
+        >
+          Load more
+        </button>
+      ) : null}
+    </>
   );
+}
+
+function TweetDetailRoute() {
+  const { tweetId } = useParams();
+  const navigate = useNavigate();
+  const numericTweetId = Number(tweetId);
+  const [tweet, setTweet] = useState<Tweet | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!Number.isInteger(numericTweetId) || numericTweetId <= 0) {
+      setError("Tweet not found.");
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    getTweet(numericTweetId)
+      .then((loaded) => {
+        if (!cancelled) setTweet(loaded);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(getErrorMessage(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericTweetId]);
+
+  const patchTweet = useCallback((_tweetId: number, patch: Partial<Tweet>) => {
+    setTweet((current) => (current ? { ...current, ...patch } : current));
+  }, []);
+
+  useEffect(() => {
+    if (!tweet) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const stats = await getTweetStats([tweet.id]);
+        if (stats[0]) {
+          setTweet((current) =>
+            current ? { ...current, ...stats[0], id: current.id } : current,
+          );
+        }
+      } catch {
+        // background sync; ignore failures
+      }
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [tweet?.id]);
+
+  if (loading) {
+    return (
+      <div className="loading-row">
+        <Loader2 className="spin" size={18} aria-hidden="true" />
+        <span>Loading</span>
+      </div>
+    );
+  }
+  if (error || !tweet) {
+    return <div className="status-panel error">{error || "Tweet not found."}</div>;
+  }
+  return <TweetDetail tweet={tweet} onBack={() => navigate(-1)} onTweetPatch={patchTweet} />;
 }
 
 function ThemeToggle({
@@ -524,164 +619,6 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
         </button>
       </div>
     </form>
-  );
-}
-
-function TweetCard({
-  tweet,
-  onOpen,
-  onTweetPatch,
-}: {
-  tweet: Tweet;
-  onOpen: () => void;
-  onTweetPatch: (tweetId: number, patch: Partial<Tweet>) => void;
-}) {
-  const [commentOpen, setCommentOpen] = useState(false);
-  const [comment, setComment] = useState("");
-  const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
-  const [error, setError] = useState("");
-  const displayDate = useMemo(() => {
-    return new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(parseBackendDate(tweet.created_at));
-  }, [tweet.created_at]);
-
-  async function runRetweetAction() {
-    setActing("retweet");
-    setError("");
-    try {
-      const result = await retweetTweet(tweet.id);
-      if (result.created) {
-        onTweetPatch(tweet.id, { retweet_count: tweet.retweet_count + 1 });
-      }
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
-  }
-
-  async function toggleLikeAction() {
-    setActing("like");
-    setError("");
-    try {
-      const result = await toggleTweetLike(tweet.id);
-      onTweetPatch(tweet.id, {
-        liked_by_me: result.liked,
-        like_count: result.like_count,
-      });
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
-  }
-
-  async function submitComment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!comment.trim()) {
-      return;
-    }
-
-    setActing("comment");
-    setError("");
-    try {
-      await createComment(tweet.id, comment.trim());
-      setComment("");
-      setCommentOpen(false);
-      onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onOpen();
-    }
-  }
-
-  return (
-    <article
-      className="tweet-card clickable"
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={handleKeyDown}
-      aria-label={`Open tweet by ${tweet.author.username}`}
-    >
-      <div className="avatar" aria-hidden="true">
-        {tweet.author.username.slice(0, 1).toUpperCase()}
-      </div>
-      <div className="tweet-body">
-        <header>
-          <strong>@{tweet.author.username}</strong>
-          <span>{displayDate}</span>
-        </header>
-        <p>{tweet.content}</p>
-        {error ? <p className="tweet-error">{error}</p> : null}
-        <footer className="tweet-actions">
-          <button
-            className="tweet-action comment"
-            onClick={(event) => {
-              event.stopPropagation();
-              setCommentOpen((open) => !open);
-            }}
-            aria-expanded={commentOpen}
-          >
-            <MessageCircle size={18} aria-hidden="true" />
-            <span>{tweet.comment_count}</span>
-          </button>
-          <button
-            className="tweet-action retweet"
-            onClick={(event) => {
-              event.stopPropagation();
-              void runRetweetAction();
-            }}
-            disabled={acting === "retweet"}
-          >
-            <Repeat2 size={18} aria-hidden="true" />
-            <span>{tweet.retweet_count}</span>
-          </button>
-          <button
-            className={tweet.liked_by_me ? "tweet-action like active" : "tweet-action like"}
-            onClick={(event) => {
-              event.stopPropagation();
-              void toggleLikeAction();
-            }}
-            disabled={acting === "like"}
-            aria-pressed={tweet.liked_by_me}
-          >
-            <Heart size={18} aria-hidden="true" fill={tweet.liked_by_me ? "currentColor" : "none"} />
-            <span>{tweet.like_count}</span>
-          </button>
-        </footer>
-        {commentOpen ? (
-          <form
-            className="comment-form"
-            onClick={(event) => event.stopPropagation()}
-            onSubmit={submitComment}
-          >
-            <input
-              value={comment}
-              onChange={(event) => setComment(event.target.value)}
-              maxLength={1000}
-              placeholder="Post your reply"
-              aria-label="Comment"
-            />
-            <button className="primary-button compact" disabled={acting === "comment" || !comment.trim()}>
-              Reply
-            </button>
-          </form>
-        ) : null}
-      </div>
-    </article>
   );
 }
 
@@ -816,11 +753,20 @@ function TweetDetail({
 
       <article className="detail-tweet">
         <div className="detail-author">
-          <div className="avatar" aria-hidden="true">
-            {tweet.author.username.slice(0, 1).toUpperCase()}
-          </div>
+          <Link
+            to={`/profile/${encodeURIComponent(tweet.author.username)}`}
+            className="author-link"
+            aria-label={`View profile of ${tweet.author.username}`}
+          >
+            <Avatar user={tweet.author} />
+          </Link>
           <div>
-            <strong>@{tweet.author.username}</strong>
+            <Link
+              to={`/profile/${encodeURIComponent(tweet.author.username)}`}
+              className="author-link"
+            >
+              <strong>@{tweet.author.username}</strong>
+            </Link>
             <span>{displayDate}</span>
           </div>
         </div>
@@ -901,148 +847,6 @@ function TweetDetail({
   );
 }
 
-function CommentCard({
-  comment,
-  onChanged,
-  onReplyCreated,
-}: {
-  comment: Comment;
-  onChanged: () => void;
-  onReplyCreated: () => void;
-}) {
-  const [replyOpen, setReplyOpen] = useState(false);
-  const [reply, setReply] = useState("");
-  const [localComment, setLocalComment] = useState(comment);
-  const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    setLocalComment(comment);
-  }, [comment]);
-
-  async function runCommentRetweetAction(task: () => Promise<void>) {
-    setActing("retweet");
-    setError("");
-    try {
-      await task();
-      onChanged();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
-  }
-
-  async function toggleCommentLikeAction() {
-    setActing("like");
-    setError("");
-    try {
-      const result = await toggleCommentLike(localComment.id);
-      setLocalComment((value) => ({
-        ...value,
-        liked_by_me: result.liked,
-        like_count: result.like_count,
-      }));
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
-  }
-
-  async function submitReply(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!reply.trim()) {
-      return;
-    }
-
-    setActing("comment");
-    setError("");
-    try {
-      await replyToComment(localComment.id, reply.trim());
-      setReply("");
-      setReplyOpen(false);
-      setLocalComment((value) => ({
-        ...value,
-        comment_count: value.comment_count + 1,
-      }));
-      onReplyCreated();
-      onChanged();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
-  }
-
-  return (
-    <article className={localComment.parent_comment_id ? "comment-card reply" : "comment-card"}>
-      <div className="avatar small" aria-hidden="true">
-        {localComment.author.username.slice(0, 1).toUpperCase()}
-      </div>
-      <div className="comment-body">
-        <header>
-          <strong>@{localComment.author.username}</strong>
-          <span>{formatCompactDate(localComment.created_at)}</span>
-          {localComment.parent_comment_id ? <span>Reply</span> : null}
-        </header>
-        <p>{localComment.content}</p>
-        {error ? <p className="tweet-error">{error}</p> : null}
-        <footer className="tweet-actions comment-actions">
-          <button
-            className="tweet-action comment"
-            onClick={() => setReplyOpen((open) => !open)}
-            aria-expanded={replyOpen}
-          >
-            <MessageCircle size={16} aria-hidden="true" />
-            <span>{localComment.comment_count}</span>
-          </button>
-          <button
-            className="tweet-action retweet"
-            onClick={() =>
-              void runCommentRetweetAction(() => retweetComment(localComment.id))
-            }
-            disabled={acting === "retweet"}
-          >
-            <Repeat2 size={16} aria-hidden="true" />
-            <span>{localComment.retweet_count}</span>
-          </button>
-          <button
-            className={localComment.liked_by_me ? "tweet-action like active" : "tweet-action like"}
-            onClick={() => void toggleCommentLikeAction()}
-            disabled={acting === "like"}
-            aria-pressed={localComment.liked_by_me}
-          >
-            <Heart
-              size={16}
-              aria-hidden="true"
-              fill={localComment.liked_by_me ? "currentColor" : "none"}
-            />
-            <span>{localComment.like_count}</span>
-          </button>
-        </footer>
-        {replyOpen ? (
-          <form className="comment-form comment-reply-form" onSubmit={submitReply}>
-            <input
-              value={reply}
-              onChange={(event) => setReply(event.target.value)}
-              maxLength={1000}
-              placeholder="Reply to this comment"
-              aria-label="Reply to comment"
-            />
-            <button
-              className="primary-button compact"
-              disabled={acting === "comment" || !reply.trim()}
-            >
-              Reply
-            </button>
-          </form>
-        ) : null}
-      </div>
-    </article>
-  );
-}
-
 function UserDiscoveryPanel({ onChanged }: { onChanged: () => void }) {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<UserDiscovery[]>([]);
@@ -1098,13 +902,17 @@ function UserDiscoveryPanel({ onChanged }: { onChanged: () => void }) {
       <div className="user-list">
         {users.map((user) => (
           <div className="user-row" key={user.id}>
-            <div className="avatar small" aria-hidden="true">
-              {user.username.slice(0, 1).toUpperCase()}
-            </div>
-            <div className="user-copy">
-              <strong>@{user.username}</strong>
-              <span>{user.is_current_user ? "You" : `User ${user.id}`}</span>
-            </div>
+            <Link
+              to={`/profile/${encodeURIComponent(user.username)}`}
+              className="author-link user-row-link"
+              aria-label={`View profile of ${user.username}`}
+            >
+              <Avatar user={user} size="small" />
+              <div className="user-copy">
+                <strong>@{user.username}</strong>
+                <span>{user.is_current_user ? "You" : `User ${user.id}`}</span>
+              </div>
+            </Link>
             {!user.is_current_user ? (
               <button className="follow-button" onClick={() => void toggleFollow(user)}>
                 <UserPlus size={15} aria-hidden="true" />
@@ -1121,95 +929,6 @@ function UserDiscoveryPanel({ onChanged }: { onChanged: () => void }) {
       ) : null}
     </section>
   );
-}
-
-function mergeTweetStats(
-  current: Record<number, Tweet>,
-  stats: TweetStats[],
-): Record<number, Tweet> {
-  let changed = false;
-  const next = { ...current };
-
-  for (const item of stats) {
-    const tweet = current[item.id];
-    if (!tweet) {
-      continue;
-    }
-
-    if (
-      tweet.like_count !== item.like_count ||
-      tweet.comment_count !== item.comment_count ||
-      tweet.retweet_count !== item.retweet_count ||
-      tweet.liked_by_me !== item.liked_by_me
-    ) {
-      next[item.id] = {
-        ...tweet,
-        like_count: item.like_count,
-        comment_count: item.comment_count,
-        retweet_count: item.retweet_count,
-        liked_by_me: item.liked_by_me,
-      };
-      changed = true;
-    }
-  }
-
-  return changed ? next : current;
-}
-
-function mergeCommentStats(current: Comment[], stats: CommentStats[]): Comment[] {
-  if (stats.length === 0) {
-    return current;
-  }
-
-  let changed = false;
-  const statsById = new Map(stats.map((item) => [item.id, item]));
-  const next = current.map((comment) => {
-    const item = statsById.get(comment.id);
-    if (!item) {
-      return comment;
-    }
-
-    if (
-      comment.like_count === item.like_count &&
-      comment.comment_count === item.comment_count &&
-      comment.retweet_count === item.retweet_count &&
-      comment.liked_by_me === item.liked_by_me
-    ) {
-      return comment;
-    }
-
-    changed = true;
-    return {
-      ...comment,
-      like_count: item.like_count,
-      comment_count: item.comment_count,
-      retweet_count: item.retweet_count,
-      liked_by_me: item.liked_by_me,
-    };
-  });
-
-  return changed ? next : current;
-}
-
-function getErrorMessage(err: unknown): string {
-  if (err instanceof ApiError || err instanceof Error) {
-    return err.message;
-  }
-  return "Something went wrong.";
-}
-
-function formatCompactDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(parseBackendDate(value));
-}
-
-function parseBackendDate(value: string): Date {
-  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value);
-  return new Date(hasTimezone ? value : `${value}Z`);
 }
 
 export default App;

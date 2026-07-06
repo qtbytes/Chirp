@@ -2,6 +2,7 @@ export type UserSummary = {
   id: number;
   username: string;
   created_at: string;
+  avatar_url: string | null;
 };
 
 export type UserDiscovery = UserSummary & {
@@ -74,3 +75,31 @@ export type TimelinePage = {
 };
 
 export type TimelineKind = "for-you" | "following";
+
+export type UserProfile = {
+  id: number;
+  username: string;
+  bio: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  follower_count: number;
+  following_count: number;
+  tweet_count: number;
+  is_following: boolean;
+  is_current_user: boolean;
+};
+
+export type ProfileTweetsPage = {
+  items: Tweet[];
+  next_cursor: string | null;
+};
+
+export type ReplyWithParent = {
+  comment: Comment;
+  parent_tweet: Tweet;
+};
+
+export type ProfileRepliesPage = {
+  items: ReplyWithParent[];
+  next_cursor: string | null;
+};

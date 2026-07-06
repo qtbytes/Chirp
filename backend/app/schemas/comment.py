@@ -29,3 +29,18 @@ class CommentStatsOut(BaseModel):
     comment_count: int = 0
     retweet_count: int = 0
     liked_by_me: bool = False
+
+
+class ReplyWithParentOut(BaseModel):
+    comment: CommentOut
+    parent_tweet: "TweetOut"
+
+
+class ProfileRepliesPage(BaseModel):
+    items: list[ReplyWithParentOut]
+    next_cursor: str | None = None
+
+
+from app.schemas.tweet import TweetOut  # noqa: E402
+
+ReplyWithParentOut.model_rebuild()
