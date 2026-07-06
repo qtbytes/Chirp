@@ -37,10 +37,11 @@ export function EditProfileModal({
     event.preventDefault();
     setSaving(true);
     setError("");
+    let updated = profile;
     try {
-      let updated = profile;
       if (file) {
         updated = await uploadAvatar(file);
+        setFile(null);
       }
       if (bio !== (profile.bio ?? "")) {
         updated = await updateProfile(bio);
@@ -48,6 +49,9 @@ export function EditProfileModal({
       onSaved(updated);
       onClose();
     } catch (err) {
+      if (updated !== profile) {
+        onSaved(updated);
+      }
       setError(getErrorMessage(err));
     } finally {
       setSaving(false);

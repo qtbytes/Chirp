@@ -27,7 +27,7 @@ export function resolveMediaUrl(path: string | null): string | null {
 }
 
 type ApiErrorPayload = {
-  detail?: string;
+  detail?: string | Array<{ msg?: string; [key: string]: unknown }>;
 };
 
 export class ApiError extends Error {
@@ -55,7 +55,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     let message = response.statusText;
     try {
       const payload = (await response.json()) as ApiErrorPayload;
-      message = payload.detail ?? message;
+      if (typeof payload.detail === "string") {
+        message = payload.detail;
+      } else if (Array.isArray(payload.detail)) {
+        message = payload.detail
+          .map((item) => (typeof item?.msg === "string" ? item.msg : JSON.stringify(item)))
+          .join("; ");
+      }
     } catch {
       message = response.statusText;
     }
