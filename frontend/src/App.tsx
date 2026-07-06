@@ -65,7 +65,7 @@ import { ProfileView } from "./ProfileView";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
-type LayoutContext = { refreshToken: number };
+type LayoutContext = { refreshToken: number; onDiscoveryChanged: () => void };
 
 const THEME_STORAGE_KEY = "twitter-system-theme";
 
@@ -149,6 +149,7 @@ function App() {
       >
         <Route path="/" element={<HomeView />} />
         <Route path="/following" element={<HomeView />} />
+        <Route path="/people" element={<PeopleRoute />} />
         <Route path="/tweet/:tweetId" element={<TweetDetailRoute />} />
         <Route
           path="/profile/:username"
@@ -260,6 +261,10 @@ function AppLayout({
   onToggleTheme: () => void;
 }) {
   const [refreshToken, setRefreshToken] = useState(0);
+  const location = useLocation();
+  const isPeopleRoute = location.pathname === "/people";
+  const isHomeRoute = !isPeopleRoute && !location.pathname.startsWith("/profile");
+  const onDiscoveryChanged = () => setRefreshToken((value) => value + 1);
 
   async function handleLogout() {
     await logout().catch(() => undefined);
@@ -267,28 +272,34 @@ function AppLayout({
   }
 
   return (
-    <div className="app-shell">
+    <div className={isPeopleRoute ? "app-shell app-shell--no-discovery" : "app-shell"}>
       <aside className="rail">
         <div className="rail-brand" aria-label="Twitter System">
           <Feather aria-hidden="true" />
         </div>
         <nav className="rail-nav" aria-label="Primary">
-          <a className="rail-link active" href="#feed">
+          <Link className={isHomeRoute ? "rail-link active" : "rail-link"} to="/">
             <Home size={22} aria-hidden="true" />
             <span>Home</span>
-          </a>
-          <a className="rail-link" href="#discover">
+          </Link>
+          <Link className={isPeopleRoute ? "rail-link active" : "rail-link"} to="/people">
             <Search size={22} aria-hidden="true" />
             <span>Search</span>
-          </a>
-          <a className="rail-link" href="#discover">
+          </Link>
+          <Link className={isPeopleRoute ? "rail-link active" : "rail-link"} to="/people">
             <Users size={22} aria-hidden="true" />
             <span>People</span>
-          </a>
-          <a className="rail-link muted" href="#feed">
+          </Link>
+          <button
+            type="button"
+            className="rail-link muted"
+            disabled
+            aria-disabled="true"
+            title="Notifications aren't available yet"
+          >
             <Bell size={22} aria-hidden="true" />
             <span>Updates</span>
-          </a>
+          </button>
         </nav>
         <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} />
         <div className="rail-user">
@@ -308,14 +319,31 @@ function AppLayout({
         </div>
       </aside>
 
-      <main id="feed" className="feed-column">
-        <Outlet context={{ refreshToken } satisfies LayoutContext} />
+      <main className="feed-column">
+        <Outlet context={{ refreshToken, onDiscoveryChanged } satisfies LayoutContext} />
       </main>
 
-      <aside id="discover" className="discovery-column">
-        <UserDiscoveryPanel onChanged={() => setRefreshToken((value) => value + 1)} />
-      </aside>
+      {isPeopleRoute ? null : (
+        <aside className="discovery-column">
+          <UserDiscoveryPanel onChanged={onDiscoveryChanged} />
+        </aside>
+      )}
     </div>
+  );
+}
+
+function PeopleRoute() {
+  const { onDiscoveryChanged } = useOutletContext<LayoutContext>();
+
+  return (
+    <>
+      <header className="feed-header">
+        <div className="feed-title-row">
+          <h1>People</h1>
+        </div>
+      </header>
+      <UserDiscoveryPanel onChanged={onDiscoveryChanged} />
+    </>
   );
 }
 

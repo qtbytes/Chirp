@@ -294,6 +294,27 @@ textarea:focus {
   color: var(--muted);
 }
 
+button.rail-link {
+  background: none;
+  border: none;
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.rail-link:disabled {
+  cursor: not-allowed;
+}
+
+button.rail-link:disabled:hover {
+  background: none;
+}
+
+.app-shell--no-discovery {
+  grid-template-columns: minmax(76px, 280px) minmax(0, 640px);
+}
+
 .rail-user {
   margin-top: auto;
   display: flex;
