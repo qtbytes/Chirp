@@ -64,3 +64,21 @@ def test_get_single_tweet_with_stats() -> None:
     assert body["liked_by_me"] is True
 
     assert client.get("/api/v1/tweets/999999").status_code == 404
+
+
+def test_user_tweets_newest_first_with_cursor() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+    for index in range(3):
+        client.post("/api/v1/tweets", json={"content": f"tweet {index}"})
+
+    page = client.get("/api/v1/users/alice/tweets", params={"limit": 2}).json()
+    assert [item["content"] for item in page["items"]] == ["tweet 2", "tweet 1"]
+    assert page["next_cursor"]
+
+    page2 = client.get(
+        "/api/v1/users/alice/tweets",
+        params={"limit": 2, "cursor": page["next_cursor"]},
+    ).json()
+    assert [item["content"] for item in page2["items"]] == ["tweet 0"]
+    assert page2["next_cursor"] is None

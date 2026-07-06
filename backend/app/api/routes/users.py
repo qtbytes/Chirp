@@ -3,12 +3,14 @@ from app.core.security import hash_password
 from app.db.database import get_db
 from app.models.user import User
 from app.repositories import follow_repository, tweet_repository, user_repository
+from app.schemas.tweet import ProfileTweetsPage
 from app.schemas.user import (
     UserCreate,
     UserDiscoveryOut,
     UserProfileOut,
     UserSummary,
 )
+from app.services.timeline_service import TimelineService, decode_cursor, encode_cursor
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -92,3 +94,50 @@ def get_user_profile(
             detail="user not found",
         )
     return _build_profile(db, user, current_user_id)
+
+
+@router.get("/{username}/tweets", response_model=ProfileTweetsPage)
+def list_user_tweets(
+    username: str,
+    limit: int = Query(default=20, ge=1, le=50),
+    cursor: str | None = None,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> ProfileTweetsPage:
+    user = user_repository.get_user_by_username(db, username)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+
+    cursor_created_at, cursor_id = decode_cursor(cursor)
+    if cursor and (cursor_created_at is None or cursor_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid cursor",
+        )
+
+    rows = tweet_repository.list_tweets_by_authors(
+        db,
+        author_ids=[user.id],
+        limit=limit,
+        current_user_id=current_user_id,
+        cursor_created_at=cursor_created_at,
+        cursor_id=cursor_id,
+    )
+
+    has_next = len(rows) > limit
+    page_rows = rows[:limit]
+    service = TimelineService(db)
+    items = [service.serialize_tweet(row) for row in page_rows]
+
+    next_cursor = None
+    if has_next and page_rows:
+        last_row = page_rows[-1]
+        next_cursor = encode_cursor(
+            last_row["cursor_created_at"],
+            last_row["cursor_id"],
+        )
+
+    return ProfileTweetsPage(items=items, next_cursor=next_cursor)
