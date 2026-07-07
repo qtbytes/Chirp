@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   Navigate,
@@ -61,6 +61,7 @@ import {
   parseBackendDate,
 } from "./components";
 import { ProfileView } from "./ProfileView";
+import { EmojiPicker } from "./EmojiPicker";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
@@ -609,7 +610,26 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const remaining = 280 - content.length;
+
+  function insertEmoji(emoji: string) {
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? content.length;
+    const end = el?.selectionEnd ?? content.length;
+    const next = content.slice(0, start) + emoji + content.slice(end);
+    if (next.length > 280) {
+      return;
+    }
+    setContent(next);
+    requestAnimationFrame(() => {
+      if (el) {
+        el.focus();
+        const caret = start + emoji.length;
+        el.setSelectionRange(caret, caret);
+      }
+    });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -633,6 +653,7 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
   return (
     <form className="composer" onSubmit={handleSubmit}>
       <textarea
+        ref={textareaRef}
         value={content}
         onChange={(event) => setContent(event.target.value)}
         maxLength={280}
@@ -641,6 +662,7 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
       />
       {error ? <p className="form-error">{error}</p> : null}
       <div className="composer-actions">
+        <EmojiPicker onSelect={insertEmoji} />
         <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
         <button className="primary-button compact" disabled={posting || !content.trim()}>
           {posting ? "Posting..." : "Post"}

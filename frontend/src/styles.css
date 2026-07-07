@@ -470,6 +470,135 @@ button.rail-link:disabled:hover {
   gap: 16px;
 }
 
+.emoji-picker {
+  position: relative;
+  display: inline-flex;
+  margin-right: auto;
+}
+
+.emoji-trigger {
+  color: var(--accent);
+}
+
+.emoji-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 20;
+  width: min(340px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+.emoji-search {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--muted);
+  padding: 0 12px;
+}
+
+.emoji-search input {
+  border: 0;
+  background: transparent;
+  height: 36px;
+  padding: 0;
+}
+
+.emoji-search input:focus {
+  box-shadow: none;
+}
+
+.emoji-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.emoji-tab {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.emoji-tab:hover {
+  background: var(--soft);
+}
+
+.emoji-tab.active {
+  color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+  border-radius: 8px 8px 0 0;
+}
+
+.emoji-scroll {
+  height: 260px;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.emoji-section h3 {
+  position: sticky;
+  top: 0;
+  margin: 0 0 6px;
+  padding: 4px 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--panel);
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.emoji-cell {
+  aspect-ratio: 1;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.emoji-cell:hover {
+  background: var(--soft);
+}
+
+.emoji-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 24px 0;
+}
+
 .counter.warn {
   color: var(--danger);
   font-weight: 800;
