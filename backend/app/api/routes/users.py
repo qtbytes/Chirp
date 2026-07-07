@@ -202,12 +202,12 @@ def list_user_replies(
         )
     }
     empty = {"like_count": 0, "comment_count": 0, "retweet_count": 0, "liked_by_me": False}
-    author_summary = UserSummary.model_validate(user)
 
     items = []
     for row in page_rows:
         comment = row["comment"]
         tweet = row["tweet"]
+        retweeter = row.get("retweeted_by")
         c_stats = comment_stats.get(comment.id, empty)
         t_stats = tweet_stats.get(tweet.id, empty)
         items.append(
@@ -219,11 +219,16 @@ def list_user_replies(
                     content=comment.content,
                     media_urls=comment.media_urls or [],
                     created_at=comment.created_at,
-                    author=author_summary,
+                    author=UserSummary.model_validate(row["comment_author"]),
                     like_count=c_stats["like_count"],
                     comment_count=c_stats["comment_count"],
                     retweet_count=c_stats["retweet_count"],
                     liked_by_me=c_stats["liked_by_me"],
+                    retweeted_by=(
+                        UserSummary.model_validate(retweeter)
+                        if retweeter is not None
+                        else None
+                    ),
                 ),
                 parent_tweet=TweetOut(
                     id=tweet.id,

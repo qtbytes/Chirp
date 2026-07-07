@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, literal, or_, select, union_all
+from sqlalchemy.orm import Session, aliased
 
 from app.models.comment import Comment
 from app.models.comment_like import CommentLike
@@ -483,6 +483,37 @@ def unretweet_comment(db: Session, user_id: int, comment_id: int) -> bool:
     return True
 
 
+def _load_reply_rows_by_ids(db: Session, comment_ids: list[int]) -> dict[int, dict]:
+    """
+    Load comments (with their author + parent tweet + tweet author) by id.
+
+    Comments whose parent tweet no longer exists are dropped by the inner
+    join, so deleted-tweet replies never surface.
+    """
+    if not comment_ids:
+        return {}
+
+    CommentAuthor = aliased(User)
+    TweetAuthor = aliased(User)
+    rows = db.execute(
+        select(Comment, Tweet, CommentAuthor, TweetAuthor)
+        .join(Tweet, Tweet.id == Comment.tweet_id)
+        .join(CommentAuthor, CommentAuthor.id == Comment.user_id)
+        .join(TweetAuthor, TweetAuthor.id == Tweet.user_id)
+        .where(Comment.id.in_(comment_ids))
+    ).all()
+
+    return {
+        comment.id: {
+            "comment": comment,
+            "comment_author": comment_author,
+            "tweet": tweet,
+            "tweet_author": tweet_author,
+        }
+        for comment, tweet, comment_author, tweet_author in rows
+    }
+
+
 def list_replies_by_user(
     db: Session,
     user_id: int,
@@ -491,37 +522,91 @@ def list_replies_by_user(
     cursor_id: int | None = None,
 ) -> list[dict]:
     """
-    Return the user's comments newest-first, each joined with its parent tweet
-    and the tweet's author. Fetches limit + 1 rows for has-next detection.
+    Return the user's reply feed newest-first: comments they authored plus
+    comments they retweeted, each joined with its parent tweet and authors.
+
+    Ordered by "activity time" — the comment's creation time for an authored
+    reply, or the retweet time for a retweeted comment — so a retweet surfaces
+    when it was retweeted (Twitter behaviour). A comment that appears both ways
+    is deduped to its most recent activity. Retweeted rows carry
+    ``"retweeted_by"`` (the retweeting :class:`User`). Fetches limit + 1 rows
+    for has-next detection.
     """
+    own = select(
+        Comment.id.label("comment_id"),
+        Comment.created_at.label("activity_at"),
+        literal(None).label("retweeter_id"),
+    ).where(Comment.user_id == user_id)
+
+    retweeted = select(
+        CommentRetweet.comment_id.label("comment_id"),
+        CommentRetweet.created_at.label("activity_at"),
+        CommentRetweet.user_id.label("retweeter_id"),
+    ).where(CommentRetweet.user_id == user_id)
+
+    combined = union_all(own, retweeted).subquery()
+
+    ranked = select(
+        combined.c.comment_id,
+        combined.c.activity_at,
+        combined.c.retweeter_id,
+        func.row_number()
+        .over(
+            partition_by=combined.c.comment_id,
+            order_by=(
+                combined.c.activity_at.desc(),
+                combined.c.retweeter_id.desc(),
+            ),
+        )
+        .label("rn"),
+    ).subquery()
+
     stmt = (
-        select(Comment, Tweet, User)
-        .join(Tweet, Tweet.id == Comment.tweet_id)
-        .join(User, User.id == Tweet.user_id)
-        .where(Comment.user_id == user_id)
-        .order_by(Comment.created_at.desc(), Comment.id.desc())
+        select(ranked)
+        .where(ranked.c.rn == 1)
+        .order_by(ranked.c.activity_at.desc(), ranked.c.comment_id.desc())
         .limit(limit + 1)
     )
 
     if cursor_created_at is not None and cursor_id is not None:
         stmt = stmt.where(
             or_(
-                Comment.created_at < cursor_created_at,
+                ranked.c.activity_at < cursor_created_at,
                 and_(
-                    Comment.created_at == cursor_created_at,
-                    Comment.id < cursor_id,
+                    ranked.c.activity_at == cursor_created_at,
+                    ranked.c.comment_id < cursor_id,
                 ),
             )
         )
 
-    rows = db.execute(stmt).all()
-    return [
-        {
-            "comment": comment,
-            "tweet": tweet,
-            "tweet_author": tweet_author,
-            "cursor_created_at": comment.created_at,
-            "cursor_id": comment.id,
+    ident_rows = db.execute(stmt).all()
+    reply_rows = _load_reply_rows_by_ids(
+        db, [row.comment_id for row in ident_rows]
+    )
+
+    retweeter_ids = {row.retweeter_id for row in ident_rows if row.retweeter_id is not None}
+    retweeters_by_id: dict[int, User] = {}
+    if retweeter_ids:
+        retweeters_by_id = {
+            user.id: user
+            for user in db.scalars(
+                select(User).where(User.id.in_(retweeter_ids))
+            ).all()
         }
-        for comment, tweet, tweet_author in rows
-    ]
+
+    feed: list[dict] = []
+    for row in ident_rows:
+        base = reply_rows.get(row.comment_id)
+        if base is None:
+            continue
+        feed.append(
+            {
+                **base,
+                "retweeted_by": retweeters_by_id.get(row.retweeter_id)
+                if row.retweeter_id is not None
+                else None,
+                "cursor_created_at": row.activity_at,
+                "cursor_id": row.comment_id,
+            }
+        )
+    return feed

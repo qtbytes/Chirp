@@ -174,6 +174,35 @@ def test_user_replies_include_parent_tweet() -> None:
     assert item["parent_tweet"]["comment_count"] == 1
 
 
+def test_replies_feed_includes_retweeted_comments() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    # bob posts a tweet and comments on it
+    tweet = bob.post("/api/v1/tweets", json={"content": "root"}).json()
+    comment = bob.post(
+        f"/api/v1/tweets/{tweet['id']}/comments", json={"content": "bob's reply"}
+    ).json()
+
+    # alice retweets bob's comment
+    assert alice.post(f"/api/v1/comments/{comment['id']}/retweets").status_code in (
+        200,
+        201,
+        204,
+    )
+
+    items = alice.get("/api/v1/users/alice/replies").json()["items"]
+    # the retweeted comment shows on alice's replies, authored by bob,
+    # marked as retweeted by alice
+    assert len(items) == 1
+    entry = items[0]["comment"]
+    assert entry["content"] == "bob's reply"
+    assert entry["author"]["username"] == "bob"
+    assert entry["retweeted_by"]["username"] == "alice"
+
+
 def test_user_replies_error_paths() -> None:
     client = TestClient(app)
     register(client, "alice")

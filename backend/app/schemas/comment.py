@@ -33,6 +33,7 @@ class CommentOut(BaseModel):
     comment_count: int = 0
     retweet_count: int = 0
     liked_by_me: bool = False
+    retweeted_by: UserSummary | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

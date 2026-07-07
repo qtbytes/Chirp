@@ -557,6 +557,12 @@ export function CommentCard({
         <Avatar user={localComment.author} size="small" />
       </Link>
       <div className="comment-body">
+        {localComment.retweeted_by ? (
+          <p className="retweet-banner">
+            <Repeat2 size={14} aria-hidden="true" />
+            <span>{localComment.retweeted_by.username} retweeted</span>
+          </p>
+        ) : null}
         <header>
           <Link
             to={`/profile/${encodeURIComponent(localComment.author.username)}`}
