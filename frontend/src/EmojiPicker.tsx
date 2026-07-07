@@ -26,7 +26,23 @@ function saveRecents(recents: string[]) {
   }
 }
 
-const ALL_EMOJIS: EmojiItem[] = EMOJI_CATEGORIES.flatMap((category) => category.emojis);
+// Some emojis intentionally live in more than one category (e.g. ⭐ 🔥 🌈).
+// Deduplicate by char for the flat search index so every result has a unique
+// React key, merging keywords so a term from either category still matches.
+const ALL_EMOJIS: EmojiItem[] = (() => {
+  const byChar = new Map<string, EmojiItem>();
+  for (const category of EMOJI_CATEGORIES) {
+    for (const emoji of category.emojis) {
+      const existing = byChar.get(emoji.char);
+      if (existing) {
+        existing.name = `${existing.name} ${emoji.name}`;
+      } else {
+        byChar.set(emoji.char, { char: emoji.char, name: emoji.name });
+      }
+    }
+  }
+  return [...byChar.values()];
+})();
 
 export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   const [open, setOpen] = useState(false);
