@@ -213,15 +213,17 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
     return null;
   }
 
+  const multi = attachment.mediaUrls.length > 1;
+
   return (
     <div className="composer-media">
       {attachment.mediaUrls.length > 0 ? (
-        <div className="composer-media-grid">
+        <div className={multi ? "composer-media-grid multi" : "composer-media-grid"}>
           {attachment.mediaUrls.map((url) => {
             const src = resolveMediaUrl(url);
             return (
               <div className="composer-media-item" key={url}>
-                {src ? <img src={src} alt="Attached preview" /> : null}
+                {src ? <img className="composer-media-image" src={src} alt="Attached preview" /> : null}
                 <button
                   type="button"
                   className="composer-media-remove"
