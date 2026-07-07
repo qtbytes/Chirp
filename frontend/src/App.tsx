@@ -296,7 +296,6 @@ function AppLayout({
             <span>Updates</span>
           </button>
         </nav>
-        <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} />
         <div className="rail-user">
           <Link
             to={`/profile/${encodeURIComponent(currentUser.username)}`}
@@ -308,9 +307,12 @@ function AppLayout({
               <span>User {currentUser.id}</span>
             </div>
           </Link>
-          <button className="icon-button" onClick={handleLogout} aria-label="Log out">
-            <LogOut size={18} aria-hidden="true" />
-          </button>
+          <div className="rail-user-actions">
+            <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} iconOnly />
+            <button className="icon-button" onClick={handleLogout} aria-label="Log out">
+              <LogOut size={18} aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -579,23 +581,26 @@ function ThemeToggle({
   theme,
   onToggleTheme,
   className = "",
+  iconOnly = false,
 }: {
   theme: Theme;
   onToggleTheme: () => void;
   className?: string;
+  iconOnly?: boolean;
 }) {
   const Icon = theme === "dark" ? Sun : Moon;
   const nextTheme = theme === "dark" ? "light" : "dark";
+  const baseClass = iconOnly ? "icon-button" : "theme-toggle";
 
   return (
     <button
-      className={`theme-toggle ${className}`.trim()}
+      className={`${baseClass} ${className}`.trim()}
       onClick={onToggleTheme}
       aria-label={`Use ${nextTheme} mode`}
       title={`Use ${nextTheme} mode`}
     >
-      <Icon size={19} aria-hidden="true" />
-      <span>{theme === "dark" ? "Light" : "Dark"}</span>
+      <Icon size={iconOnly ? 18 : 19} aria-hidden="true" />
+      {iconOnly ? null : <span>{theme === "dark" ? "Light" : "Dark"}</span>}
     </button>
   );
 }

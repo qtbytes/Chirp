@@ -337,6 +337,12 @@ button.rail-link:disabled:hover {
   border-radius: 8px;
 }
 
+.rail-user-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .theme-toggle {
   min-height: 44px;
   display: inline-flex;
@@ -823,6 +829,17 @@ button.rail-link:disabled:hover {
     display: none;
   }
 
+  .rail-user {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 0;
+  }
+
+  .rail-user-actions {
+    flex-direction: column;
+    gap: 6px;
+  }
+
   .discovery-column {
     display: none;
   }
@@ -859,7 +876,6 @@ button.rail-link:disabled:hover {
 
   .rail-brand,
   .rail-user,
-  .rail .theme-toggle,
   .rail-link.muted {
     display: none;
   }
