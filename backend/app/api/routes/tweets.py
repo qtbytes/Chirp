@@ -78,7 +78,7 @@ def create_tweet(
         db,
         author_id=current_user_id,
         content=payload.content,
-        media_url=payload.media_url,
+        media_urls=payload.media_urls,
     )
 
     enqueue_feed_fanout_job(
@@ -128,7 +128,7 @@ def get_tweet(
     return TweetOut(
         id=tweet.id,
         content=tweet.content,
-        media_url=tweet.media_url,
+        media_urls=tweet.media_urls or [],
         created_at=tweet.created_at,
         author=UserSummary.model_validate(tweet.author),
         like_count=stats["like_count"],

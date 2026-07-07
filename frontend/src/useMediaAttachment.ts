@@ -2,6 +2,7 @@ import { ChangeEvent, useRef, useState } from "react";
 import { ApiError, uploadMedia } from "./api";
 
 const MAX_MEDIA_BYTES = 5 * 1024 * 1024;
+export const MAX_MEDIA_ITEMS = 4;
 export const ACCEPTED_MEDIA = "image/jpeg,image/png,image/webp,image/gif";
 
 function messageFrom(err: unknown): string {
@@ -11,49 +12,76 @@ function messageFrom(err: unknown): string {
   return "Upload failed.";
 }
 
-// Manages a single optional image attachment for a composer: file selection,
-// upload, the resulting media_url, and remove/reset. Returned object is passed
-// to <MediaButton> and <MediaPreview>.
+// Manages up to MAX_MEDIA_ITEMS image attachments for a composer: multi-file
+// selection, concurrent uploads, per-item removal, and reset. The returned
+// object is passed to <MediaButton> and <MediaPreview>.
 export function useMediaAttachment() {
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function onFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     // Reset so selecting the same file again still fires onChange.
     event.target.value = "";
-    if (!file) {
-      return;
-    }
-    if (file.size > MAX_MEDIA_BYTES) {
-      setError("Image must be 5 MB or smaller.");
+    if (files.length === 0) {
       return;
     }
 
     setError("");
-    setUploading(true);
-    try {
-      const { url } = await uploadMedia(file);
-      setMediaUrl(url);
-    } catch (err) {
-      setError(messageFrom(err));
-    } finally {
-      setUploading(false);
+    // Reserve slots against what's already attached plus in-flight uploads.
+    let remaining = MAX_MEDIA_ITEMS - mediaUrls.length - uploadingCount;
+    const toUpload: File[] = [];
+    for (const file of files) {
+      if (remaining <= 0) {
+        setError(`You can attach up to ${MAX_MEDIA_ITEMS} images.`);
+        break;
+      }
+      if (file.size > MAX_MEDIA_BYTES) {
+        setError("Each image must be 5 MB or smaller.");
+        continue;
+      }
+      toUpload.push(file);
+      remaining -= 1;
     }
+    if (toUpload.length === 0) {
+      return;
+    }
+
+    setUploadingCount((count) => count + toUpload.length);
+    await Promise.all(
+      toUpload.map(async (file) => {
+        try {
+          const { url } = await uploadMedia(file);
+          // Functional update guards the cap across concurrent resolves.
+          setMediaUrls((prev) => (prev.length < MAX_MEDIA_ITEMS ? [...prev, url] : prev));
+        } catch (err) {
+          setError(messageFrom(err));
+        } finally {
+          setUploadingCount((count) => count - 1);
+        }
+      }),
+    );
   }
 
   function openPicker() {
     inputRef.current?.click();
   }
 
+  function remove(url: string) {
+    setMediaUrls((prev) => prev.filter((item) => item !== url));
+  }
+
   function clear() {
-    setMediaUrl(null);
+    setMediaUrls([]);
     setError("");
   }
 
-  return { mediaUrl, uploading, error, inputRef, onFileChange, openPicker, clear };
+  const uploading = uploadingCount > 0;
+  const atLimit = mediaUrls.length + uploadingCount >= MAX_MEDIA_ITEMS;
+
+  return { mediaUrls, uploading, atLimit, error, inputRef, onFileChange, openPicker, remove, clear };
 }
 
 export type MediaAttachment = ReturnType<typeof useMediaAttachment>;

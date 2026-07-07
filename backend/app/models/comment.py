@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -22,7 +22,7 @@ class Comment(Base):
         nullable=True,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    media_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_urls: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

@@ -144,27 +144,36 @@ export function RichContent({ text }: { text: string }) {
   );
 }
 
-// Renders a tweet/comment's uploaded image (media_url), resolved to an
-// absolute URL, clickable through to the full image.
-export function MediaAttachmentView({ url }: { url: string }) {
-  const src = resolveMediaUrl(url);
-  if (!src) {
+// Renders a tweet/comment's uploaded images (media_urls), resolved to absolute
+// URLs, each clickable through to the full image. Lays out as a 2-column grid
+// when there is more than one image.
+export function MediaGallery({ urls }: { urls: string[] }) {
+  const items = urls
+    .map((url) => resolveMediaUrl(url))
+    .filter((src): src is string => Boolean(src));
+  if (items.length === 0) {
     return null;
   }
+
   return (
-    <a
-      className="tweet-media-link"
-      href={src}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <img className="tweet-media-image" src={src} alt="" loading="lazy" />
-    </a>
+    <div className={items.length > 1 ? "tweet-media-gallery multi" : "tweet-media-gallery"}>
+      {items.map((src) => (
+        <a
+          key={src}
+          className="tweet-media-link"
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <img className="tweet-media-image" src={src} alt="" loading="lazy" />
+        </a>
+      ))}
+    </div>
   );
 }
 
-// Composer control: the "add image" button plus its hidden file input.
+// Composer control: the "add image" button plus its hidden multi-file input.
 export function MediaButton({ attachment }: { attachment: MediaAttachment }) {
   return (
     <>
@@ -172,6 +181,7 @@ export function MediaButton({ attachment }: { attachment: MediaAttachment }) {
         ref={attachment.inputRef}
         type="file"
         accept={ACCEPTED_MEDIA}
+        multiple
         onChange={attachment.onFileChange}
         hidden
       />
@@ -182,9 +192,9 @@ export function MediaButton({ attachment }: { attachment: MediaAttachment }) {
           event.stopPropagation();
           attachment.openPicker();
         }}
-        disabled={attachment.uploading}
+        disabled={attachment.atLimit}
         aria-label="Add image"
-        title="Add image"
+        title={attachment.atLimit ? "Image limit reached" : "Add image"}
       >
         <ImageIcon size={20} aria-hidden="true" />
       </button>
@@ -192,36 +202,46 @@ export function MediaButton({ attachment }: { attachment: MediaAttachment }) {
   );
 }
 
-// Composer preview: shows the pending upload / attached image with a remove
-// control, plus any upload error.
+// Composer preview: a thumbnail grid of the attached images (each removable),
+// a spinner while uploads are in flight, plus any upload error.
 export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
-  const src = attachment.mediaUrl ? resolveMediaUrl(attachment.mediaUrl) : null;
-
-  if (!attachment.uploading && !src && !attachment.error) {
+  if (
+    attachment.mediaUrls.length === 0 &&
+    !attachment.uploading &&
+    !attachment.error
+  ) {
     return null;
   }
 
   return (
     <div className="composer-media">
+      {attachment.mediaUrls.length > 0 ? (
+        <div className="composer-media-grid">
+          {attachment.mediaUrls.map((url) => {
+            const src = resolveMediaUrl(url);
+            return (
+              <div className="composer-media-item" key={url}>
+                {src ? <img src={src} alt="Attached preview" /> : null}
+                <button
+                  type="button"
+                  className="composer-media-remove"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    attachment.remove(url);
+                  }}
+                  aria-label="Remove image"
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       {attachment.uploading ? (
         <div className="composer-media-loading">
           <Loader2 className="spin" size={18} aria-hidden="true" />
           <span>Uploading…</span>
-        </div>
-      ) : src ? (
-        <div className="composer-media-item">
-          <img src={src} alt="Attached preview" />
-          <button
-            type="button"
-            className="composer-media-remove"
-            onClick={(event) => {
-              event.stopPropagation();
-              attachment.clear();
-            }}
-            aria-label="Remove image"
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
         </div>
       ) : null}
       {attachment.error ? <p className="form-error">{attachment.error}</p> : null}
@@ -286,14 +306,14 @@ export function TweetCard({
 
   async function submitComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if ((!comment.trim() && !media.mediaUrl) || media.uploading) {
+    if ((!comment.trim() && media.mediaUrls.length === 0) || media.uploading) {
       return;
     }
 
     setActing("comment");
     setError("");
     try {
-      await createComment(tweet.id, comment.trim(), media.mediaUrl);
+      await createComment(tweet.id, comment.trim(), media.mediaUrls);
       setComment("");
       media.clear();
       setCommentOpen(false);
@@ -341,7 +361,7 @@ export function TweetCard({
           <span>{displayDate}</span>
         </header>
         <p><RichContent text={tweet.content} /></p>
-        {tweet.media_url ? <MediaAttachmentView url={tweet.media_url} /> : null}
+        {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions">
           <button
@@ -398,7 +418,7 @@ export function TweetCard({
             />
             <button
               className="primary-button compact"
-              disabled={acting === "comment" || (!comment.trim() && !media.mediaUrl) || media.uploading}
+              disabled={acting === "comment" || (!comment.trim() && media.mediaUrls.length === 0) || media.uploading}
             >
               Reply
             </button>
@@ -463,14 +483,14 @@ export function CommentCard({
 
   async function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if ((!reply.trim() && !media.mediaUrl) || media.uploading) {
+    if ((!reply.trim() && media.mediaUrls.length === 0) || media.uploading) {
       return;
     }
 
     setActing("comment");
     setError("");
     try {
-      await replyToComment(localComment.id, reply.trim(), media.mediaUrl);
+      await replyToComment(localComment.id, reply.trim(), media.mediaUrls);
       setReply("");
       media.clear();
       setReplyOpen(false);
@@ -510,7 +530,7 @@ export function CommentCard({
           {localComment.parent_comment_id ? <span>Reply</span> : null}
         </header>
         <p><RichContent text={localComment.content} /></p>
-        {localComment.media_url ? <MediaAttachmentView url={localComment.media_url} /> : null}
+        {localComment.media_urls.length > 0 ? <MediaGallery urls={localComment.media_urls} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions comment-actions">
           <button
@@ -560,7 +580,7 @@ export function CommentCard({
             />
             <button
               className="primary-button compact"
-              disabled={acting === "comment" || (!reply.trim() && !media.mediaUrl) || media.uploading}
+              disabled={acting === "comment" || (!reply.trim() && media.mediaUrls.length === 0) || media.uploading}
             >
               Reply
             </button>

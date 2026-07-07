@@ -137,7 +137,7 @@ def create_comment(
     tweet_id: int,
     content: str,
     parent_comment_id: int | None = None,
-    media_url: str | None = None,
+    media_urls: list[str] | None = None,
 ) -> tuple[Comment, User]:
     """
     Create a comment on a tweet and return the comment with its author.
@@ -164,7 +164,7 @@ def create_comment(
         tweet_id=tweet_id,
         parent_comment_id=parent_comment_id,
         content=content,
-        media_url=media_url,
+        media_urls=media_urls or None,
     )
     db.add(comment)
     db.commit()

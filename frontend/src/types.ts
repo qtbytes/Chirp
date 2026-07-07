@@ -13,7 +13,7 @@ export type UserDiscovery = UserSummary & {
 export type Tweet = {
   id: number;
   content: string;
-  media_url: string | null;
+  media_urls: string[];
   created_at: string;
   author: UserSummary;
   like_count: number;
@@ -61,7 +61,7 @@ export type Comment = {
   tweet_id: number;
   parent_comment_id: number | null;
   content: string;
-  media_url: string | null;
+  media_urls: string[];
   created_at: string;
   author: UserSummary;
   like_count: number;

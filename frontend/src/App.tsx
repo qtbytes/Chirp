@@ -54,8 +54,8 @@ import type {
 import {
   Avatar,
   CommentCard,
-  MediaAttachmentView,
   MediaButton,
+  MediaGallery,
   MediaPreview,
   RichContent,
   TweetCard,
@@ -619,7 +619,7 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(content, setContent, 280);
   const media = useMediaAttachment();
   const remaining = 280 - content.length;
-  const canPost = (content.trim().length > 0 || media.mediaUrl !== null) && remaining >= 0;
+  const canPost = (content.trim().length > 0 || media.mediaUrls.length > 0) && remaining >= 0;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -630,7 +630,7 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
     setPosting(true);
     setError("");
     try {
-      const tweet = await createTweet(content.trim(), media.mediaUrl);
+      const tweet = await createTweet(content.trim(), media.mediaUrls);
       setContent("");
       media.clear();
       onPosted(tweet);
@@ -770,14 +770,14 @@ function TweetDetail({
 
   async function submitDetailComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if ((!comment.trim() && !media.mediaUrl) || media.uploading) {
+    if ((!comment.trim() && media.mediaUrls.length === 0) || media.uploading) {
       return;
     }
 
     setActing("comment");
     setError("");
     try {
-      await createComment(tweet.id, comment.trim(), media.mediaUrl);
+      await createComment(tweet.id, comment.trim(), media.mediaUrls);
       setComment("");
       media.clear();
       onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
@@ -818,7 +818,7 @@ function TweetDetail({
           </div>
         </div>
         <p><RichContent text={tweet.content} /></p>
-        {tweet.media_url ? <MediaAttachmentView url={tweet.media_url} /> : null}
+        {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="tweet-actions detail-actions">
           <button
@@ -865,7 +865,7 @@ function TweetDetail({
           />
           <button
             className="primary-button compact"
-            disabled={acting === "comment" || (!comment.trim() && !media.mediaUrl) || media.uploading}
+            disabled={acting === "comment" || (!comment.trim() && media.mediaUrls.length === 0) || media.uploading}
           >
             Reply
           </button>

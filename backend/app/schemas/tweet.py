@@ -1,25 +1,23 @@
 from datetime import datetime
 from typing import Literal
 
-from app.schemas.media import MEDIA_URL_PATTERN
+from app.schemas.media import MAX_MEDIA_ITEMS, validate_media_urls
 from app.schemas.user import UserSummary
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TweetCreate(BaseModel):
     content: str = Field(default="", max_length=280)
-    media_url: str | None = Field(default=None, max_length=200)
+    media_urls: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
 
-    @field_validator("media_url")
+    @field_validator("media_urls")
     @classmethod
-    def _validate_media_url(cls, value: str | None) -> str | None:
-        if value is not None and not MEDIA_URL_PATTERN.fullmatch(value):
-            raise ValueError("invalid media_url")
-        return value
+    def _validate_media_urls(cls, value: list[str]) -> list[str]:
+        return validate_media_urls(value)
 
     @model_validator(mode="after")
     def _require_content_or_media(self) -> "TweetCreate":
-        if not self.content.strip() and not self.media_url:
+        if not self.content.strip() and not self.media_urls:
             raise ValueError("tweet must have content or media")
         return self
 
@@ -27,7 +25,7 @@ class TweetCreate(BaseModel):
 class TweetOut(BaseModel):
     id: int
     content: str
-    media_url: str | None = None
+    media_urls: list[str] = Field(default_factory=list)
     created_at: datetime
     author: UserSummary
     like_count: int = 0

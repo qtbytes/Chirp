@@ -171,7 +171,7 @@ def create_comment(
             user_id=current_user_id,
             tweet_id=tweet_id,
             content=payload.content,
-            media_url=payload.media_url,
+            media_urls=payload.media_urls,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -184,7 +184,7 @@ def create_comment(
         tweet_id=comment.tweet_id,
         parent_comment_id=comment.parent_comment_id,
         content=comment.content,
-        media_url=comment.media_url,
+        media_urls=comment.media_urls or [],
         created_at=comment.created_at,
         author=UserSummary.model_validate(author),
         like_count=0,
@@ -231,7 +231,7 @@ def list_comments(
             tweet_id=comment.tweet_id,
             parent_comment_id=comment.parent_comment_id,
             content=comment.content,
-            media_url=comment.media_url,
+            media_urls=comment.media_urls or [],
             created_at=comment.created_at,
             author=UserSummary.model_validate(author),
             like_count=like_count,

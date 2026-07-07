@@ -106,10 +106,10 @@ export function uploadMedia(file: File): Promise<{ url: string }> {
   });
 }
 
-export function createTweet(content: string, mediaUrl?: string | null): Promise<Tweet> {
+export function createTweet(content: string, mediaUrls: string[] = []): Promise<Tweet> {
   return request<Tweet>("/tweets", {
     method: "POST",
-    body: JSON.stringify({ content, media_url: mediaUrl ?? null }),
+    body: JSON.stringify({ content, media_urls: mediaUrls }),
   });
 }
 
@@ -127,11 +127,11 @@ export function getTweetStats(tweetIds: number[]): Promise<TweetStats[]> {
 export function createComment(
   tweetId: number,
   content: string,
-  mediaUrl?: string | null,
+  mediaUrls: string[] = [],
 ): Promise<Comment> {
   return request<Comment>(`/tweets/${tweetId}/comments`, {
     method: "POST",
-    body: JSON.stringify({ content, media_url: mediaUrl ?? null }),
+    body: JSON.stringify({ content, media_urls: mediaUrls }),
   });
 }
 
@@ -154,11 +154,11 @@ export function getCommentStats(commentIds: number[]): Promise<CommentStats[]> {
 export function replyToComment(
   commentId: number,
   content: string,
-  mediaUrl?: string | null,
+  mediaUrls: string[] = [],
 ): Promise<Comment> {
   return request<Comment>(`/comments/${commentId}/comments`, {
     method: "POST",
-    body: JSON.stringify({ content, media_url: mediaUrl ?? null }),
+    body: JSON.stringify({ content, media_urls: mediaUrls }),
   });
 }
 

@@ -13,7 +13,7 @@ def create_tweet(
     db: Session,
     author_id: int,
     content: str,
-    media_url: str | None = None,
+    media_urls: list[str] | None = None,
 ) -> Tweet | None:
     """
     Create a tweet and reload it with author information.
@@ -22,7 +22,7 @@ def create_tweet(
     - API response usually needs author data.
     - This avoids a later lazy-load when serializing the tweet.
     """
-    tweet = Tweet(user_id=author_id, content=content, media_url=media_url)
+    tweet = Tweet(user_id=author_id, content=content, media_urls=media_urls or None)
     db.add(tweet)
     db.commit()
     db.refresh(tweet)
