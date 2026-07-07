@@ -141,6 +141,18 @@ button {
   display: grid;
   place-items: center;
   color: var(--accent);
+  text-decoration: none;
+}
+
+.rail-brand {
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background-color 0.15s ease;
+}
+
+.rail-brand:hover,
+.rail-brand:focus-visible {
+  background-color: var(--hover);
 }
 
 .auth-panel h1 {

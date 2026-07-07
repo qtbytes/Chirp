@@ -205,7 +205,7 @@ function AuthScreen({
         <div className="brand-mark">
           <Feather size={30} aria-hidden="true" />
         </div>
-        <h1 id="auth-title">Twitter System</h1>
+        <h1 id="auth-title">Chirp</h1>
         <form onSubmit={handleSubmit} className="auth-form">
           <label>
             <span>Username</span>
@@ -274,9 +274,9 @@ function AppLayout({
   return (
     <div className={isPeopleRoute ? "app-shell app-shell--no-discovery" : "app-shell"}>
       <aside className="rail">
-        <div className="rail-brand" aria-label="Twitter System">
+        <Link className="rail-brand" to="/" aria-label="Chirp home">
           <Feather aria-hidden="true" />
-        </div>
+        </Link>
         <nav className="rail-nav" aria-label="Primary">
           <Link className={isHomeRoute ? "rail-link active" : "rail-link"} to="/">
             <Home size={22} aria-hidden="true" />
