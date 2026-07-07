@@ -383,6 +383,12 @@ export function TweetCard({
         <Avatar user={tweet.author} />
       </Link>
       <div className="tweet-body">
+        {tweet.retweeted_by ? (
+          <p className="retweet-banner">
+            <Repeat2 size={14} aria-hidden="true" />
+            <span>{tweet.retweeted_by.username} retweeted</span>
+          </p>
+        ) : null}
         <header>
           <Link
             to={`/profile/${encodeURIComponent(tweet.author.username)}`}

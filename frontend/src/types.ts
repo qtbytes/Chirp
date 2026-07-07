@@ -20,6 +20,7 @@ export type Tweet = {
   comment_count: number;
   retweet_count: number;
   liked_by_me: boolean;
+  retweeted_by: UserSummary | null;
 };
 
 export type LikeToggleResult = {

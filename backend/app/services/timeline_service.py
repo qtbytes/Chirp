@@ -103,7 +103,7 @@ class TimelineService:
             )
             author_ids = [user_id, *followee_ids]
 
-            rows = tweet_repository.list_tweets_by_authors(
+            rows = tweet_repository.list_feed_with_retweets(
                 self.db,
                 author_ids=author_ids,
                 limit=limit,
@@ -157,6 +157,7 @@ class TimelineService:
         }
         """
         tweet = row["tweet"]
+        retweeter = row.get("retweeted_by")
 
         return TweetOut(
             id=tweet.id,
@@ -168,6 +169,9 @@ class TimelineService:
             comment_count=row["comment_count"],
             retweet_count=row["retweet_count"],
             liked_by_me=row.get("liked_by_me", False),
+            retweeted_by=(
+                UserSummary.model_validate(retweeter) if retweeter is not None else None
+            ),
         )
 
     def _build_page(

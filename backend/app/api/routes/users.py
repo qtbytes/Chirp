@@ -129,7 +129,7 @@ def list_user_tweets(
             detail="invalid cursor",
         )
 
-    rows = tweet_repository.list_tweets_by_authors(
+    rows = tweet_repository.list_feed_with_retweets(
         db,
         author_ids=[user.id],
         limit=limit,

@@ -87,6 +87,55 @@ def test_user_tweets_newest_first_with_cursor() -> None:
     assert page2["next_cursor"] is None
 
 
+def test_profile_feed_includes_retweets() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    # bob posts a tweet, alice posts her own, then alice retweets bob's
+    bob_tweet = bob.post("/api/v1/tweets", json={"content": "bob original"}).json()
+    alice.post("/api/v1/tweets", json={"content": "alice own"})
+    assert alice.post(f"/api/v1/tweets/{bob_tweet['id']}/retweets").status_code == 201
+
+    items = alice.get("/api/v1/users/alice/tweets").json()["items"]
+    # the retweet is newest, so it surfaces first, marked as retweeted by alice
+    assert len(items) == 2
+    retweet_item = items[0]
+    assert retweet_item["content"] == "bob original"
+    assert retweet_item["author"]["username"] == "bob"
+    assert retweet_item["retweeted_by"]["username"] == "alice"
+    # alice's own tweet has no retweet marker
+    own_item = items[1]
+    assert own_item["content"] == "alice own"
+    assert own_item["retweeted_by"] is None
+
+
+def test_home_timeline_shows_followee_retweets_once() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    bob_id = register(bob, "bob")["id"]
+    carol = TestClient(app)
+    carol_id = register(carol, "carol")["id"]
+
+    # alice follows both bob and carol
+    alice.post(f"/api/v1/follows/{bob_id}")
+    alice.post(f"/api/v1/follows/{carol_id}")
+
+    # carol posts, then bob retweets it
+    carol_tweet = carol.post("/api/v1/tweets", json={"content": "carol says hi"}).json()
+    assert bob.post(f"/api/v1/tweets/{carol_tweet['id']}/retweets").status_code == 201
+
+    items = alice.get("/api/v1/timeline/home").json()["items"]
+    # even though alice follows both the author and the retweeter, the tweet
+    # appears once — surfaced as bob's retweet (the most recent activity)
+    matching = [item for item in items if item["id"] == carol_tweet["id"]]
+    assert len(matching) == 1
+    assert matching[0]["retweeted_by"]["username"] == "bob"
+    assert matching[0]["author"]["username"] == "carol"
+
+
 def test_user_tweets_error_paths() -> None:
     client = TestClient(app)
     register(client, "alice")

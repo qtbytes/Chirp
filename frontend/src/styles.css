@@ -808,6 +808,20 @@ button.rail-link:disabled:hover {
   min-width: 0;
 }
 
+.retweet-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.retweet-banner svg {
+  flex-shrink: 0;
+}
+
 .tweet-body header {
   display: flex;
   flex-wrap: wrap;
