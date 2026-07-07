@@ -309,7 +309,7 @@ def run_feed_fanout_job(tweet_id: int, author_id: int) -> None:
         feed_repository.bulk_insert_feed_items(
             db,
             owner_ids=owner_ids,
-            tweet_id=tweet.id,
+            post_id=tweet.id,
             actor_id=author_id,
             created_at=tweet.created_at,
         )

@@ -3,17 +3,16 @@ from datetime import datetime
 from sqlalchemy import and_, func, insert, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.comment import Comment
 from app.models.feed import FeedItem
 from app.models.like import Like
+from app.models.post import Post
 from app.models.retweet import Retweet
-from app.models.tweet import Tweet
 
 
 def bulk_insert_feed_items(
     db: Session,
     owner_ids: list[int],
-    tweet_id: int,
+    post_id: int,
     actor_id: int,
     created_at: datetime,
 ) -> int:
@@ -43,7 +42,7 @@ def bulk_insert_feed_items(
             owner_id
             for (owner_id,) in db.execute(
                 select(FeedItem.owner_id).where(
-                    FeedItem.tweet_id == tweet_id,
+                    FeedItem.post_id == post_id,
                     FeedItem.owner_id.in_(owner_id_chunk),
                 )
             ).all()
@@ -52,7 +51,7 @@ def bulk_insert_feed_items(
         payload = [
             {
                 "owner_id": owner_id,
-                "tweet_id": tweet_id,
+                "post_id": post_id,
                 "actor_id": actor_id,
                 "created_at": created_at,
             }
@@ -86,45 +85,35 @@ def list_feed_tweets(
     - It aggregates likes/comments in SQL instead of per-row queries.
     """
     like_counts = (
-        select(
-            Like.tweet_id,
-            func.count().label("like_count"),
-        )
-        .group_by(Like.tweet_id)
+        select(Like.post_id, func.count().label("like_count"))
+        .group_by(Like.post_id)
         .subquery()
     )
-
     comment_counts = (
-        select(
-            Comment.tweet_id,
-            func.count().label("comment_count"),
-        )
-        .group_by(Comment.tweet_id)
+        select(Post.root_id.label("post_id"), func.count().label("comment_count"))
+        .where(Post.id != Post.root_id)
+        .group_by(Post.root_id)
         .subquery()
     )
-
     retweet_counts = (
-        select(
-            Retweet.tweet_id,
-            func.count().label("retweet_count"),
-        )
-        .group_by(Retweet.tweet_id)
+        select(Retweet.post_id, func.count().label("retweet_count"))
+        .group_by(Retweet.post_id)
         .subquery()
     )
 
     stmt = (
         select(
             FeedItem,
-            Tweet,
+            Post,
             func.coalesce(like_counts.c.like_count, 0),
             func.coalesce(comment_counts.c.comment_count, 0),
             func.coalesce(retweet_counts.c.retweet_count, 0),
         )
-        .join(Tweet, Tweet.id == FeedItem.tweet_id)
-        .options(joinedload(Tweet.author))
-        .outerjoin(like_counts, like_counts.c.tweet_id == Tweet.id)
-        .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
-        .outerjoin(retweet_counts, retweet_counts.c.tweet_id == Tweet.id)
+        .join(Post, Post.id == FeedItem.post_id)
+        .options(joinedload(Post.author))
+        .outerjoin(like_counts, like_counts.c.post_id == Post.id)
+        .outerjoin(comment_counts, comment_counts.c.post_id == Post.id)
+        .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
         .where(FeedItem.owner_id == owner_id)
         .order_by(FeedItem.created_at.desc(), FeedItem.id.desc())
         .limit(limit + 1)
@@ -142,28 +131,28 @@ def list_feed_tweets(
         )
 
     rows = db.execute(stmt).all()
-    tweet_ids = [tweet.id for _, tweet, *_ in rows]
-    liked_tweet_ids = set()
-    if tweet_ids:
-        liked_tweet_ids = {
-            tweet_id
-            for (tweet_id,) in db.execute(
-                select(Like.tweet_id).where(
+    post_ids = [post.id for _, post, *_ in rows]
+    liked_ids = set()
+    if post_ids:
+        liked_ids = {
+            post_id
+            for (post_id,) in db.execute(
+                select(Like.post_id).where(
                     Like.user_id == owner_id,
-                    Like.tweet_id.in_(tweet_ids),
+                    Like.post_id.in_(post_ids),
                 )
             ).all()
         }
 
     return [
         {
-            "tweet": tweet,
+            "tweet": post,
             "like_count": int(like_count),
             "comment_count": int(comment_count),
             "retweet_count": int(retweet_count),
-            "liked_by_me": tweet.id in liked_tweet_ids,
+            "liked_by_me": post.id in liked_ids,
             "cursor_created_at": feed_item.created_at,
             "cursor_id": feed_item.id,
         }
-        for feed_item, tweet, like_count, comment_count, retweet_count in rows
+        for feed_item, post, like_count, comment_count, retweet_count in rows
     ]

@@ -126,10 +126,10 @@ def test_for_you_uses_score_when_created_at_ties() -> None:
     carol.post(f"/api/v1/tweets/{high_score['id']}/likes")
 
     with TestingSessionLocal() as db:
-        from app.models.tweet import Tweet
+        from app.models.post import Post
 
-        same_created_at = db.get(Tweet, low_score["id"]).created_at
-        db.get(Tweet, high_score["id"]).created_at = same_created_at
+        same_created_at = db.get(Post, low_score["id"]).created_at
+        db.get(Post, high_score["id"]).created_at = same_created_at
         db.commit()
 
     response = alice.get("/api/v1/timeline/for-you")

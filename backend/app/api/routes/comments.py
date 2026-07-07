@@ -1,6 +1,6 @@
 from app.api.deps import get_current_user_id
 from app.db.database import get_db
-from app.models.comment import Comment
+from app.models.post import Post
 from app.repositories import engagement_repository
 from app.schemas.comment import CommentCreate, CommentOut, CommentStatsOut
 from app.schemas.user import UserSummary
@@ -180,8 +180,8 @@ def reply_to_comment(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> CommentOut:
-    parent = db.get(Comment, comment_id)
-    if parent is None:
+    parent = db.get(Post, comment_id)
+    if parent is None or parent.reply_to_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="comment not found",
@@ -191,7 +191,7 @@ def reply_to_comment(
         comment, author = engagement_repository.create_comment(
             db,
             user_id=current_user_id,
-            tweet_id=parent.tweet_id,
+            tweet_id=parent.root_id,
             parent_comment_id=comment_id,
             content=payload.content,
             media_urls=payload.media_urls,

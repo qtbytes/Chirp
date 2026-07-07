@@ -12,14 +12,14 @@ def utcnow() -> datetime:
 
 class Like(Base):
     __tablename__ = "likes"
-    __table_args__ = (PrimaryKeyConstraint("user_id", "tweet_id", name="pk_likes"),)
+    __table_args__ = (PrimaryKeyConstraint("user_id", "post_id", name="pk_likes"),)
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"),
         nullable=False,
     )
-    tweet_id: Mapped[int] = mapped_column(
-        ForeignKey("tweets.id"),
+    post_id: Mapped[int] = mapped_column(
+        ForeignKey("posts.id"),
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(

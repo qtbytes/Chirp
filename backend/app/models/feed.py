@@ -16,14 +16,14 @@ class FeedItem(Base):
 
     Interview notes:
     - owner_id: the user who sees this feed item in their home timeline
-    - tweet_id: the actual tweet shown in the timeline
-    - actor_id: the author who created the tweet
+    - post_id: the actual post shown in the timeline
+    - actor_id: the author who created the post
     - created_at: ordering key for cursor pagination
     """
 
     __tablename__ = "feed_items"
     __table_args__ = (
-        UniqueConstraint("owner_id", "tweet_id", name="uq_feed_owner_tweet"),
+        UniqueConstraint("owner_id", "post_id", name="uq_feed_owner_post"),
         Index("ix_feed_owner_created_id", "owner_id", "created_at", "id"),
     )
 
@@ -33,8 +33,8 @@ class FeedItem(Base):
         index=True,
         nullable=False,
     )
-    tweet_id: Mapped[int] = mapped_column(
-        ForeignKey("tweets.id"),
+    post_id: Mapped[int] = mapped_column(
+        ForeignKey("posts.id"),
         nullable=False,
     )
     actor_id: Mapped[int] = mapped_column(

@@ -247,7 +247,7 @@ def test_user_replies_pagination() -> None:
 
 
 def test_user_replies_skips_comments_on_deleted_tweet() -> None:
-    from app.models.tweet import Tweet
+    from app.models.post import Post
     from conftest import TestingSessionLocal
 
     alice_client = TestClient(app)
@@ -263,7 +263,7 @@ def test_user_replies_skips_comments_on_deleted_tweet() -> None:
 
     db = TestingSessionLocal()
     try:
-        db.query(Tweet).filter(Tweet.id == tweet["id"]).delete()
+        db.query(Post).filter(Post.id == tweet["id"]).delete()
         db.commit()
     finally:
         db.close()

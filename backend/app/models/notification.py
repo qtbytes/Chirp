@@ -29,10 +29,7 @@ class Notification(Base):
     # Actor (who performed the action).
     actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
-    tweet_id: Mapped[int | None] = mapped_column(ForeignKey("tweets.id"), nullable=True)
-    comment_id: Mapped[int | None] = mapped_column(
-        ForeignKey("comments.id"), nullable=True
-    )
+    post_id: Mapped[int | None] = mapped_column(ForeignKey("posts.id"), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

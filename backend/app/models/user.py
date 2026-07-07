@@ -29,6 +29,6 @@ class User(Base):
         nullable=False,
     )
 
-    tweets = relationship(
-        "Tweet", back_populates="author", cascade="all, delete-orphan"
+    posts = relationship(
+        "Post", back_populates="author", cascade="all, delete-orphan"
     )

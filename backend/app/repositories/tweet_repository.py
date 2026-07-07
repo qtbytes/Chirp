@@ -3,10 +3,9 @@ from datetime import datetime
 from sqlalchemy import and_, func, literal, or_, select, union_all
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.comment import Comment
 from app.models.like import Like
+from app.models.post import Post
 from app.models.retweet import Retweet
-from app.models.tweet import Tweet
 from app.models.user import User
 
 
@@ -15,30 +14,41 @@ def create_tweet(
     author_id: int,
     content: str,
     media_urls: list[str] | None = None,
-) -> Tweet | None:
+) -> Post | None:
     """
-    Create a tweet and reload it with author information.
+    Create a top-level post (tweet) and reload it with author information.
 
-    Why reload?
-    - API response usually needs author data.
-    - This avoids a later lazy-load when serializing the tweet.
+    A top-level post is its own thread root, so ``root_id`` is set to the post's
+    own id after it is assigned.
     """
-    tweet = Tweet(user_id=author_id, content=content, media_urls=media_urls or None)
-    db.add(tweet)
+    post = Post(user_id=author_id, content=content, media_urls=media_urls or None)
+    db.add(post)
+    db.flush()  # assign post.id
+    post.root_id = post.id
     db.commit()
-    db.refresh(tweet)
 
     return db.scalar(
-        select(Tweet).options(joinedload(Tweet.author)).where(Tweet.id == tweet.id)
+        select(Post).options(joinedload(Post.author)).where(Post.id == post.id)
     )
 
 
-def get_tweet(db: Session, tweet_id: int) -> Tweet | None:
-    """
-    Load one tweet with author information.
-    """
+def get_tweet(db: Session, tweet_id: int) -> Post | None:
+    """Load one post with author information."""
     return db.scalar(
-        select(Tweet).options(joinedload(Tweet.author)).where(Tweet.id == tweet_id)
+        select(Post).options(joinedload(Post.author)).where(Post.id == tweet_id)
+    )
+
+
+def _thread_reply_counts(post_ids: list[int]):
+    """Subquery: number of replies in each post's whole thread (root_id match)."""
+    return (
+        select(
+            Post.root_id.label("post_id"),
+            func.count().label("comment_count"),
+        )
+        .where(Post.root_id.in_(post_ids), Post.id != Post.root_id)
+        .group_by(Post.root_id)
+        .subquery()
     )
 
 
@@ -48,294 +58,63 @@ def list_tweet_stats(
     current_user_id: int,
 ) -> list[dict]:
     """
-    Return engagement stats for existing tweets in the same order as requested.
+    Return engagement stats for existing posts in the same order as requested.
+
+    ``comment_count`` is the whole-thread reply count (Twitter's reply number on
+    a tweet), matching the pre-unification behaviour.
     """
     ordered_ids = list(dict.fromkeys(tweet_ids))
     if not ordered_ids:
         return []
 
     like_counts = (
-        select(
-            Like.tweet_id,
-            func.count().label("like_count"),
-        )
-        .where(Like.tweet_id.in_(ordered_ids))
-        .group_by(Like.tweet_id)
+        select(Like.post_id, func.count().label("like_count"))
+        .where(Like.post_id.in_(ordered_ids))
+        .group_by(Like.post_id)
         .subquery()
     )
-
-    comment_counts = (
-        select(
-            Comment.tweet_id,
-            func.count().label("comment_count"),
-        )
-        .where(Comment.tweet_id.in_(ordered_ids))
-        .group_by(Comment.tweet_id)
-        .subquery()
-    )
-
+    comment_counts = _thread_reply_counts(ordered_ids)
     retweet_counts = (
-        select(
-            Retweet.tweet_id,
-            func.count().label("retweet_count"),
-        )
-        .where(Retweet.tweet_id.in_(ordered_ids))
-        .group_by(Retweet.tweet_id)
+        select(Retweet.post_id, func.count().label("retweet_count"))
+        .where(Retweet.post_id.in_(ordered_ids))
+        .group_by(Retweet.post_id)
         .subquery()
     )
 
     rows = db.execute(
         select(
-            Tweet.id,
+            Post.id,
             func.coalesce(like_counts.c.like_count, 0).label("like_count"),
             func.coalesce(comment_counts.c.comment_count, 0).label("comment_count"),
             func.coalesce(retweet_counts.c.retweet_count, 0).label("retweet_count"),
         )
-        .outerjoin(like_counts, like_counts.c.tweet_id == Tweet.id)
-        .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
-        .outerjoin(retweet_counts, retweet_counts.c.tweet_id == Tweet.id)
-        .where(Tweet.id.in_(ordered_ids))
+        .outerjoin(like_counts, like_counts.c.post_id == Post.id)
+        .outerjoin(comment_counts, comment_counts.c.post_id == Post.id)
+        .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
+        .where(Post.id.in_(ordered_ids))
     ).all()
 
-    liked_tweet_ids = {
-        tweet_id
-        for (tweet_id,) in db.execute(
-            select(Like.tweet_id).where(
+    liked_ids = {
+        post_id
+        for (post_id,) in db.execute(
+            select(Like.post_id).where(
                 Like.user_id == current_user_id,
-                Like.tweet_id.in_(ordered_ids),
+                Like.post_id.in_(ordered_ids),
             )
         ).all()
     }
 
     stats_by_id = {
-        tweet_id: {
-            "id": tweet_id,
+        post_id: {
+            "id": post_id,
             "like_count": int(like_count),
             "comment_count": int(comment_count),
             "retweet_count": int(retweet_count),
-            "liked_by_me": tweet_id in liked_tweet_ids,
+            "liked_by_me": post_id in liked_ids,
         }
-        for tweet_id, like_count, comment_count, retweet_count in rows
+        for post_id, like_count, comment_count, retweet_count in rows
     }
-    return [stats_by_id[tweet_id] for tweet_id in ordered_ids if tweet_id in stats_by_id]
-
-
-def list_tweets_by_authors(
-    db: Session,
-    author_ids: list[int],
-    limit: int,
-    current_user_id: int | None = None,
-    cursor_created_at: datetime | None = None,
-    cursor_id: int | None = None,
-) -> list[dict]:
-    """
-    Read tweets for fan-out on read timeline.
-
-    Interview focus:
-    - Uses cursor pagination instead of offset pagination.
-    - Avoids N+1 by eager-loading author and aggregating like/comment counts
-      in the same query.
-    - Orders by (created_at DESC, id DESC) so pagination stays stable even
-      when multiple tweets have the same timestamp.
-
-    Returns:
-        A list of dictionaries shaped for the timeline service:
-        {
-            "tweet": Tweet,
-            "like_count": int,
-            "comment_count": int,
-            "cursor_created_at": datetime,
-            "cursor_id": int,
-        }
-    """
-    if not author_ids:
-        return []
-
-    like_counts = (
-        select(
-            Like.tweet_id,
-            func.count().label("like_count"),
-        )
-        .group_by(Like.tweet_id)
-        .subquery()
-    )
-
-    comment_counts = (
-        select(
-            Comment.tweet_id,
-            func.count().label("comment_count"),
-        )
-        .group_by(Comment.tweet_id)
-        .subquery()
-    )
-
-    retweet_counts = (
-        select(
-            Retweet.tweet_id,
-            func.count().label("retweet_count"),
-        )
-        .group_by(Retweet.tweet_id)
-        .subquery()
-    )
-    liked_tweet_ids: set[int] = set()
-
-    stmt = (
-        select(
-            Tweet,
-            func.coalesce(like_counts.c.like_count, 0).label("like_count"),
-            func.coalesce(comment_counts.c.comment_count, 0).label("comment_count"),
-            func.coalesce(retweet_counts.c.retweet_count, 0).label("retweet_count"),
-        )
-        .options(joinedload(Tweet.author))
-        .outerjoin(like_counts, like_counts.c.tweet_id == Tweet.id)
-        .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
-        .outerjoin(retweet_counts, retweet_counts.c.tweet_id == Tweet.id)
-        .where(Tweet.user_id.in_(author_ids))
-        .order_by(Tweet.created_at.desc(), Tweet.id.desc())
-        .limit(limit + 1)
-    )
-
-    if cursor_created_at is not None and cursor_id is not None:
-        stmt = stmt.where(
-            or_(
-                Tweet.created_at < cursor_created_at,
-                and_(
-                    Tweet.created_at == cursor_created_at,
-                    Tweet.id < cursor_id,
-                ),
-            )
-        )
-
-    rows = db.execute(stmt).all()
-    if current_user_id is not None:
-        tweet_ids = [tweet.id for tweet, *_ in rows]
-        if tweet_ids:
-            liked_tweet_ids = {
-                tweet_id
-                for (tweet_id,) in db.execute(
-                    select(Like.tweet_id).where(
-                        Like.user_id == current_user_id,
-                        Like.tweet_id.in_(tweet_ids),
-                    )
-                ).all()
-            }
-
-    return [
-        {
-            "tweet": tweet,
-            "like_count": int(like_count),
-            "comment_count": int(comment_count),
-            "retweet_count": int(retweet_count),
-            "liked_by_me": tweet.id in liked_tweet_ids,
-            "cursor_created_at": tweet.created_at,
-            "cursor_id": tweet.id,
-        }
-        for tweet, like_count, comment_count, retweet_count in rows
-    ]
-
-
-def list_for_you_tweets(
-    db: Session,
-    limit: int,
-    current_user_id: int | None = None,
-    cursor_created_at: datetime | None = None,
-    cursor_id: int | None = None,
-) -> list[dict]:
-    """
-    Return a global feed ordered by latest first, then engagement score.
-    """
-    like_counts = (
-        select(
-            Like.tweet_id,
-            func.count().label("like_count"),
-        )
-        .group_by(Like.tweet_id)
-        .subquery()
-    )
-
-    comment_counts = (
-        select(
-            Comment.tweet_id,
-            func.count().label("comment_count"),
-        )
-        .group_by(Comment.tweet_id)
-        .subquery()
-    )
-
-    retweet_counts = (
-        select(
-            Retweet.tweet_id,
-            func.count().label("retweet_count"),
-        )
-        .group_by(Retweet.tweet_id)
-        .subquery()
-    )
-
-    stmt = (
-        select(
-            Tweet,
-            func.coalesce(like_counts.c.like_count, 0).label("like_count"),
-            func.coalesce(comment_counts.c.comment_count, 0).label("comment_count"),
-            func.coalesce(retweet_counts.c.retweet_count, 0).label("retweet_count"),
-        )
-        .options(joinedload(Tweet.author))
-        .outerjoin(like_counts, like_counts.c.tweet_id == Tweet.id)
-        .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
-        .outerjoin(retweet_counts, retweet_counts.c.tweet_id == Tweet.id)
-    )
-
-    if cursor_created_at is not None and cursor_id is not None:
-        stmt = stmt.where(
-            or_(
-                Tweet.created_at < cursor_created_at,
-                and_(
-                    Tweet.created_at == cursor_created_at,
-                    Tweet.id < cursor_id,
-                ),
-            )
-        )
-
-    rows = db.execute(stmt).all()
-    liked_tweet_ids: set[int] = set()
-    if current_user_id is not None:
-        tweet_ids = [tweet.id for tweet, *_ in rows]
-        if tweet_ids:
-            liked_tweet_ids = {
-                tweet_id
-                for (tweet_id,) in db.execute(
-                    select(Like.tweet_id).where(
-                        Like.user_id == current_user_id,
-                        Like.tweet_id.in_(tweet_ids),
-                    )
-                ).all()
-            }
-
-    scored_rows = [
-            {
-                "tweet": tweet,
-                "like_count": int(like_count),
-                "comment_count": int(comment_count),
-                "retweet_count": int(retweet_count),
-                "liked_by_me": tweet.id in liked_tweet_ids,
-                "score": int(like_count) * 3
-                + int(retweet_count) * 4
-                + int(comment_count) * 5,
-                "cursor_created_at": tweet.created_at,
-                "cursor_id": tweet.id,
-            }
-        for tweet, like_count, comment_count, retweet_count in rows
-    ]
-
-    scored_rows.sort(
-        key=lambda row: (
-            row["cursor_created_at"],
-            row["score"],
-            row["cursor_id"],
-        ),
-        reverse=True,
-    )
-
-    return scored_rows[: limit + 1]
+    return [stats_by_id[pid] for pid in ordered_ids if pid in stats_by_id]
 
 
 def _load_tweet_rows_by_ids(
@@ -343,71 +122,61 @@ def _load_tweet_rows_by_ids(
     tweet_ids: list[int],
     current_user_id: int | None,
 ) -> dict[int, dict]:
-    """
-    Load tweets (with author + engagement counts) for the given ids.
-
-    Returns a mapping of tweet id -> row dict, so callers can assemble
-    results in whatever order they need.
-    """
+    """Load posts (author + engagement counts) for the given ids, keyed by id."""
     if not tweet_ids:
         return {}
 
     unique_ids = list(dict.fromkeys(tweet_ids))
 
     like_counts = (
-        select(Like.tweet_id, func.count().label("like_count"))
-        .where(Like.tweet_id.in_(unique_ids))
-        .group_by(Like.tweet_id)
+        select(Like.post_id, func.count().label("like_count"))
+        .where(Like.post_id.in_(unique_ids))
+        .group_by(Like.post_id)
         .subquery()
     )
-    comment_counts = (
-        select(Comment.tweet_id, func.count().label("comment_count"))
-        .where(Comment.tweet_id.in_(unique_ids))
-        .group_by(Comment.tweet_id)
-        .subquery()
-    )
+    comment_counts = _thread_reply_counts(unique_ids)
     retweet_counts = (
-        select(Retweet.tweet_id, func.count().label("retweet_count"))
-        .where(Retweet.tweet_id.in_(unique_ids))
-        .group_by(Retweet.tweet_id)
+        select(Retweet.post_id, func.count().label("retweet_count"))
+        .where(Retweet.post_id.in_(unique_ids))
+        .group_by(Retweet.post_id)
         .subquery()
     )
 
     rows = db.execute(
         select(
-            Tweet,
+            Post,
             func.coalesce(like_counts.c.like_count, 0).label("like_count"),
             func.coalesce(comment_counts.c.comment_count, 0).label("comment_count"),
             func.coalesce(retweet_counts.c.retweet_count, 0).label("retweet_count"),
         )
-        .options(joinedload(Tweet.author))
-        .outerjoin(like_counts, like_counts.c.tweet_id == Tweet.id)
-        .outerjoin(comment_counts, comment_counts.c.tweet_id == Tweet.id)
-        .outerjoin(retweet_counts, retweet_counts.c.tweet_id == Tweet.id)
-        .where(Tweet.id.in_(unique_ids))
+        .options(joinedload(Post.author))
+        .outerjoin(like_counts, like_counts.c.post_id == Post.id)
+        .outerjoin(comment_counts, comment_counts.c.post_id == Post.id)
+        .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
+        .where(Post.id.in_(unique_ids))
     ).all()
 
-    liked_tweet_ids: set[int] = set()
+    liked_ids: set[int] = set()
     if current_user_id is not None:
-        liked_tweet_ids = {
-            tweet_id
-            for (tweet_id,) in db.execute(
-                select(Like.tweet_id).where(
+        liked_ids = {
+            post_id
+            for (post_id,) in db.execute(
+                select(Like.post_id).where(
                     Like.user_id == current_user_id,
-                    Like.tweet_id.in_(unique_ids),
+                    Like.post_id.in_(unique_ids),
                 )
             ).all()
         }
 
     return {
-        tweet.id: {
-            "tweet": tweet,
+        post.id: {
+            "tweet": post,
             "like_count": int(like_count),
             "comment_count": int(comment_count),
             "retweet_count": int(retweet_count),
-            "liked_by_me": tweet.id in liked_tweet_ids,
+            "liked_by_me": post.id in liked_ids,
         }
-        for tweet, like_count, comment_count, retweet_count in rows
+        for post, like_count, comment_count, retweet_count in rows
     }
 
 
@@ -420,38 +189,47 @@ def list_feed_with_retweets(
     cursor_id: int | None = None,
 ) -> list[dict]:
     """
-    Merge original tweets and retweets from a set of authors into one feed.
-
-    Each entry is ordered by "activity time" — the tweet's creation time for
-    an original tweet, or the retweet time for a retweeted tweet — so a
-    retweet surfaces at the moment it was retweeted (Twitter behaviour).
-
-    Used for both a single user's profile feed and the home timeline (where
-    the authors are the viewer plus everyone they follow). Retweet rows carry
-    ``"retweeted_by"`` set to the retweeting :class:`User` so the caller can
-    render a "retweeted by" marker.
+    Merge top-level tweets and retweeted tweets from a set of authors into one
+    feed, ordered by activity time. Retweeted *comments* are intentionally
+    excluded here — they belong to the replies feed — so only top-level posts
+    participate. Retweet rows carry ``"retweeted_by"`` (the retweeting User).
     """
     if not author_ids:
         return []
 
     own = select(
-        Tweet.id.label("tweet_id"),
-        Tweet.created_at.label("activity_at"),
+        Post.id.label("tweet_id"),
+        Post.created_at.label("activity_at"),
         literal(None).label("retweeter_id"),
-    ).where(Tweet.user_id.in_(author_ids))
+    ).where(Post.user_id.in_(author_ids), Post.reply_to_id.is_(None))
 
-    retweeted = select(
-        Retweet.tweet_id.label("tweet_id"),
-        Retweet.created_at.label("activity_at"),
-        Retweet.user_id.label("retweeter_id"),
-    ).where(Retweet.user_id.in_(author_ids))
+    retweeted = (
+        select(
+            Retweet.post_id.label("tweet_id"),
+            Retweet.created_at.label("activity_at"),
+            Retweet.user_id.label("retweeter_id"),
+        )
+        .join(Post, Post.id == Retweet.post_id)
+        .where(Retweet.user_id.in_(author_ids), Post.reply_to_id.is_(None))
+    )
 
-    combined = union_all(own, retweeted).subquery()
+    return _assemble_activity_feed(
+        db, own, retweeted, limit, current_user_id, cursor_created_at, cursor_id
+    )
 
-    # A tweet may appear multiple times (original post plus retweets by
-    # different followed users). Keep only its most recent activity so it
-    # shows once — as a retweet if that was the latest action, else as the
-    # original. Deduping in SQL keeps cursor pagination correct.
+
+def _assemble_activity_feed(
+    db: Session,
+    own_select,
+    retweet_select,
+    limit: int,
+    current_user_id: int | None,
+    cursor_created_at: datetime | None,
+    cursor_id: int | None,
+) -> list[dict]:
+    """Shared dedup + ordering + hydration for activity feeds (see callers)."""
+    combined = union_all(own_select, retweet_select).subquery()
+
     ranked = select(
         combined.c.tweet_id,
         combined.c.activity_at,
@@ -473,7 +251,6 @@ def list_feed_with_retweets(
         .order_by(ranked.c.activity_at.desc(), ranked.c.tweet_id.desc())
         .limit(limit + 1)
     )
-
     if cursor_created_at is not None and cursor_id is not None:
         stmt = stmt.where(
             or_(
@@ -487,12 +264,10 @@ def list_feed_with_retweets(
 
     ident_rows = db.execute(stmt).all()
     tweet_rows = _load_tweet_rows_by_ids(
-        db,
-        [row.tweet_id for row in ident_rows],
-        current_user_id,
+        db, [row.tweet_id for row in ident_rows], current_user_id
     )
 
-    retweeter_ids = {row.retweeter_id for row in ident_rows if row.retweeter_id is not None}
+    retweeter_ids = {r.retweeter_id for r in ident_rows if r.retweeter_id is not None}
     retweeters_by_id: dict[int, User] = {}
     if retweeter_ids:
         retweeters_by_id = {
@@ -520,12 +295,105 @@ def list_feed_with_retweets(
     return feed
 
 
+def list_for_you_tweets(
+    db: Session,
+    limit: int,
+    current_user_id: int | None = None,
+    cursor_created_at: datetime | None = None,
+    cursor_id: int | None = None,
+) -> list[dict]:
+    """Global feed of top-level tweets ordered by latest first, then engagement."""
+    like_counts = (
+        select(Like.post_id, func.count().label("like_count"))
+        .group_by(Like.post_id)
+        .subquery()
+    )
+    comment_counts = (
+        select(Post.root_id.label("post_id"), func.count().label("comment_count"))
+        .where(Post.id != Post.root_id)
+        .group_by(Post.root_id)
+        .subquery()
+    )
+    retweet_counts = (
+        select(Retweet.post_id, func.count().label("retweet_count"))
+        .group_by(Retweet.post_id)
+        .subquery()
+    )
+
+    stmt = (
+        select(
+            Post,
+            func.coalesce(like_counts.c.like_count, 0).label("like_count"),
+            func.coalesce(comment_counts.c.comment_count, 0).label("comment_count"),
+            func.coalesce(retweet_counts.c.retweet_count, 0).label("retweet_count"),
+        )
+        .options(joinedload(Post.author))
+        .outerjoin(like_counts, like_counts.c.post_id == Post.id)
+        .outerjoin(comment_counts, comment_counts.c.post_id == Post.id)
+        .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
+        .where(Post.reply_to_id.is_(None))
+    )
+
+    if cursor_created_at is not None and cursor_id is not None:
+        stmt = stmt.where(
+            or_(
+                Post.created_at < cursor_created_at,
+                and_(
+                    Post.created_at == cursor_created_at,
+                    Post.id < cursor_id,
+                ),
+            )
+        )
+
+    rows = db.execute(stmt).all()
+    liked_ids: set[int] = set()
+    if current_user_id is not None:
+        tweet_ids = [post.id for post, *_ in rows]
+        if tweet_ids:
+            liked_ids = {
+                post_id
+                for (post_id,) in db.execute(
+                    select(Like.post_id).where(
+                        Like.user_id == current_user_id,
+                        Like.post_id.in_(tweet_ids),
+                    )
+                ).all()
+            }
+
+    scored_rows = [
+        {
+            "tweet": post,
+            "like_count": int(like_count),
+            "comment_count": int(comment_count),
+            "retweet_count": int(retweet_count),
+            "liked_by_me": post.id in liked_ids,
+            "score": int(like_count) * 3
+            + int(retweet_count) * 4
+            + int(comment_count) * 5,
+            "cursor_created_at": post.created_at,
+            "cursor_id": post.id,
+        }
+        for post, like_count, comment_count, retweet_count in rows
+    ]
+
+    scored_rows.sort(
+        key=lambda row: (
+            row["cursor_created_at"],
+            row["score"],
+            row["cursor_id"],
+        ),
+        reverse=True,
+    )
+
+    return scored_rows[: limit + 1]
+
+
 def count_tweets_by_author(db: Session, author_id: int) -> int:
     return int(
         db.scalar(
             select(func.count())
-            .select_from(Tweet)
-            .where(Tweet.user_id == author_id)
+            .select_from(Post)
+            .where(Post.user_id == author_id, Post.reply_to_id.is_(None))
         )
         or 0
     )

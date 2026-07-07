@@ -13,11 +13,11 @@ def utcnow() -> datetime:
 class Retweet(Base):
     __tablename__ = "retweets"
     __table_args__ = (
-        PrimaryKeyConstraint("user_id", "tweet_id", name="pk_retweets"),
+        PrimaryKeyConstraint("user_id", "post_id", name="pk_retweets"),
     )
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    tweet_id: Mapped[int] = mapped_column(ForeignKey("tweets.id"), nullable=False)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

@@ -5,15 +5,12 @@ from app.core.config import settings
 from app.db.database import Base, engine
 from app.db.dev_schema import sync_sqlite_dev_schema
 from app.models import (  # noqa: F401
-    Comment,
-    CommentLike,
-    CommentRetweet,
     FeedItem,
     Follow,
     Like,
     Notification,
+    Post,
     Retweet,
-    Tweet,
     User,
 )
 from fastapi import FastAPI
