@@ -155,18 +155,34 @@ export function MediaGallery({ urls }: { urls: string[] }) {
     return null;
   }
 
+  if (items.length === 1) {
+    return (
+      <div className="tweet-media-gallery">
+        <a
+          className="tweet-media-link"
+          href={items[0]}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <img className="tweet-media-image" src={items[0]} alt="" loading="lazy" />
+        </a>
+      </div>
+    );
+  }
+
   return (
-    <div className={items.length > 1 ? "tweet-media-gallery multi" : "tweet-media-gallery"}>
+    <div className="media-grid" data-count={items.length}>
       {items.map((src) => (
         <a
           key={src}
-          className="tweet-media-link"
+          className="media-grid__cell"
           href={src}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(event) => event.stopPropagation()}
         >
-          <img className="tweet-media-image" src={src} alt="" loading="lazy" />
+          <img src={src} alt="" loading="lazy" />
         </a>
       ))}
     </div>
@@ -213,28 +229,43 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
     return null;
   }
 
-  const multi = attachment.mediaUrls.length > 1;
+  const count = attachment.mediaUrls.length;
+
+  const removeButton = (url: string) => (
+    <button
+      type="button"
+      className="composer-media-remove"
+      onClick={(event) => {
+        event.stopPropagation();
+        attachment.remove(url);
+      }}
+      aria-label="Remove image"
+    >
+      <X size={16} aria-hidden="true" />
+    </button>
+  );
 
   return (
     <div className="composer-media">
-      {attachment.mediaUrls.length > 0 ? (
-        <div className={multi ? "composer-media-grid multi" : "composer-media-grid"}>
+      {count === 1 ? (
+        <div className="composer-media-item">
+          {resolveMediaUrl(attachment.mediaUrls[0]) ? (
+            <img
+              className="composer-media-image"
+              src={resolveMediaUrl(attachment.mediaUrls[0])!}
+              alt="Attached preview"
+            />
+          ) : null}
+          {removeButton(attachment.mediaUrls[0])}
+        </div>
+      ) : count > 1 ? (
+        <div className="media-grid" data-count={count}>
           {attachment.mediaUrls.map((url) => {
             const src = resolveMediaUrl(url);
             return (
-              <div className="composer-media-item" key={url}>
-                {src ? <img className="composer-media-image" src={src} alt="Attached preview" /> : null}
-                <button
-                  type="button"
-                  className="composer-media-remove"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    attachment.remove(url);
-                  }}
-                  aria-label="Remove image"
-                >
-                  <X size={16} aria-hidden="true" />
-                </button>
+              <div className="media-grid__cell" key={url}>
+                {src ? <img src={src} alt="Attached preview" /> : null}
+                {removeButton(url)}
               </div>
             );
           })}
