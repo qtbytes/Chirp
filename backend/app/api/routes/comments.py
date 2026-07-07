@@ -194,6 +194,7 @@ def reply_to_comment(
             tweet_id=parent.tweet_id,
             parent_comment_id=comment_id,
             content=payload.content,
+            media_url=payload.media_url,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -206,6 +207,7 @@ def reply_to_comment(
         tweet_id=comment.tweet_id,
         parent_comment_id=comment.parent_comment_id,
         content=comment.content,
+        media_url=comment.media_url,
         created_at=comment.created_at,
         author=UserSummary.model_validate(author),
         like_count=0,

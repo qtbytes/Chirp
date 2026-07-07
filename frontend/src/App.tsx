@@ -54,6 +54,9 @@ import type {
 import {
   Avatar,
   CommentCard,
+  MediaAttachmentView,
+  MediaButton,
+  MediaPreview,
   RichContent,
   TweetCard,
   getErrorMessage,
@@ -64,6 +67,7 @@ import {
 import { ProfileView } from "./ProfileView";
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
+import { useMediaAttachment } from "./useMediaAttachment";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
@@ -613,19 +617,22 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(content, setContent, 280);
+  const media = useMediaAttachment();
   const remaining = 280 - content.length;
+  const canPost = (content.trim().length > 0 || media.mediaUrl !== null) && remaining >= 0;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!content.trim() || remaining < 0) {
+    if (!canPost || media.uploading) {
       return;
     }
 
     setPosting(true);
     setError("");
     try {
-      const tweet = await createTweet(content.trim());
+      const tweet = await createTweet(content.trim(), media.mediaUrl);
       setContent("");
+      media.clear();
       onPosted(tweet);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -643,11 +650,15 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
         placeholder="What is happening?"
         aria-label="Tweet content"
       />
+      <MediaPreview attachment={media} />
       {error ? <p className="form-error">{error}</p> : null}
       <div className="composer-actions">
-        <EmojiPicker onSelect={insertEmoji} />
+        <div className="composer-tools">
+          <EmojiPicker onSelect={insertEmoji} />
+          <MediaButton attachment={media} />
+        </div>
         <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
-        <button className="primary-button compact" disabled={posting || !content.trim()}>
+        <button className="primary-button compact" disabled={posting || media.uploading || !canPost}>
           {posting ? "Posting..." : "Post"}
         </button>
       </div>
@@ -667,6 +678,7 @@ function TweetDetail({
   const [comments, setComments] = useState<Comment[]>([]);
   const [comment, setComment] = useState("");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(comment, setComment, 1000);
+  const media = useMediaAttachment();
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
   const [error, setError] = useState("");
@@ -758,15 +770,16 @@ function TweetDetail({
 
   async function submitDetailComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!comment.trim()) {
+    if ((!comment.trim() && !media.mediaUrl) || media.uploading) {
       return;
     }
 
     setActing("comment");
     setError("");
     try {
-      await createComment(tweet.id, comment.trim());
+      await createComment(tweet.id, comment.trim(), media.mediaUrl);
       setComment("");
+      media.clear();
       onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
       await loadTweetComments();
     } catch (err) {
@@ -805,6 +818,7 @@ function TweetDetail({
           </div>
         </div>
         <p><RichContent text={tweet.content} /></p>
+        {tweet.media_url ? <MediaAttachmentView url={tweet.media_url} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="tweet-actions detail-actions">
           <button
@@ -837,7 +851,10 @@ function TweetDetail({
           </button>
         </div>
         <form className="comment-form detail-comment-form" onSubmit={submitDetailComment}>
-          <EmojiPicker onSelect={insertEmoji} />
+          <div className="composer-tools">
+            <EmojiPicker onSelect={insertEmoji} />
+            <MediaButton attachment={media} />
+          </div>
           <input
             {...fieldProps}
             id="detail-comment-input"
@@ -848,10 +865,11 @@ function TweetDetail({
           />
           <button
             className="primary-button compact"
-            disabled={acting === "comment" || !comment.trim()}
+            disabled={acting === "comment" || (!comment.trim() && !media.mediaUrl) || media.uploading}
           >
             Reply
           </button>
+          <MediaPreview attachment={media} />
         </form>
       </article>
 

@@ -161,6 +161,7 @@ class TimelineService:
         return TweetOut(
             id=tweet.id,
             content=tweet.content,
+            media_url=tweet.media_url,
             created_at=tweet.created_at,
             author=UserSummary.model_validate(tweet.author),
             like_count=row["like_count"],

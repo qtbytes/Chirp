@@ -470,10 +470,70 @@ button.rail-link:disabled:hover {
   gap: 16px;
 }
 
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: auto;
+}
+
 .emoji-picker {
   position: relative;
   display: inline-flex;
-  margin-right: auto;
+}
+
+.media-trigger {
+  color: var(--accent);
+}
+
+.composer-media {
+  margin: 10px 0 4px;
+}
+
+.composer-media-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.composer-media-item {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.composer-media-item img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+}
+
+.composer-media-remove {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(15, 20, 25, 0.75);
+}
+
+.composer-media-remove:hover {
+  background: rgba(15, 20, 25, 0.9);
+}
+
+.comment-form .composer-media {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
 }
 
 .emoji-trigger {

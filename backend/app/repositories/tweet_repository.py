@@ -9,7 +9,12 @@ from app.models.retweet import Retweet
 from app.models.tweet import Tweet
 
 
-def create_tweet(db: Session, author_id: int, content: str) -> Tweet | None:
+def create_tweet(
+    db: Session,
+    author_id: int,
+    content: str,
+    media_url: str | None = None,
+) -> Tweet | None:
     """
     Create a tweet and reload it with author information.
 
@@ -17,7 +22,7 @@ def create_tweet(db: Session, author_id: int, content: str) -> Tweet | None:
     - API response usually needs author data.
     - This avoids a later lazy-load when serializing the tweet.
     """
-    tweet = Tweet(user_id=author_id, content=content)
+    tweet = Tweet(user_id=author_id, content=content, media_url=media_url)
     db.add(tweet)
     db.commit()
     db.refresh(tweet)

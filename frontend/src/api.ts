@@ -97,10 +97,19 @@ export function getCurrentUser(): Promise<UserSummary> {
   return request<UserSummary>("/auth/me");
 }
 
-export function createTweet(content: string): Promise<Tweet> {
+export function uploadMedia(file: File): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  return request<{ url: string }>("/media", {
+    method: "POST",
+    body: form,
+  });
+}
+
+export function createTweet(content: string, mediaUrl?: string | null): Promise<Tweet> {
   return request<Tweet>("/tweets", {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, media_url: mediaUrl ?? null }),
   });
 }
 
@@ -115,10 +124,14 @@ export function getTweetStats(tweetIds: number[]): Promise<TweetStats[]> {
   return request<TweetStats[]>(`/tweets/stats?${params.toString()}`);
 }
 
-export function createComment(tweetId: number, content: string): Promise<Comment> {
+export function createComment(
+  tweetId: number,
+  content: string,
+  mediaUrl?: string | null,
+): Promise<Comment> {
   return request<Comment>(`/tweets/${tweetId}/comments`, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, media_url: mediaUrl ?? null }),
   });
 }
 
@@ -138,10 +151,14 @@ export function getCommentStats(commentIds: number[]): Promise<CommentStats[]> {
   return request<CommentStats[]>(`/comments/stats?${params.toString()}`);
 }
 
-export function replyToComment(commentId: number, content: string): Promise<Comment> {
+export function replyToComment(
+  commentId: number,
+  content: string,
+  mediaUrl?: string | null,
+): Promise<Comment> {
   return request<Comment>(`/comments/${commentId}/comments`, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, media_url: mediaUrl ?? null }),
   });
 }
 

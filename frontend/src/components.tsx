@@ -1,6 +1,6 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Heart, MessageCircle, Repeat2 } from "lucide-react";
+import { Heart, Image as ImageIcon, Loader2, MessageCircle, Repeat2, X } from "lucide-react";
 import {
   ApiError,
   createComment,
@@ -14,6 +14,7 @@ import {
 import type { Comment, CommentStats, Tweet, TweetStats, UserSummary } from "./types";
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
+import { ACCEPTED_MEDIA, useMediaAttachment, type MediaAttachment } from "./useMediaAttachment";
 
 export function Avatar({
   user,
@@ -143,6 +144,91 @@ export function RichContent({ text }: { text: string }) {
   );
 }
 
+// Renders a tweet/comment's uploaded image (media_url), resolved to an
+// absolute URL, clickable through to the full image.
+export function MediaAttachmentView({ url }: { url: string }) {
+  const src = resolveMediaUrl(url);
+  if (!src) {
+    return null;
+  }
+  return (
+    <a
+      className="tweet-media-link"
+      href={src}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <img className="tweet-media-image" src={src} alt="" loading="lazy" />
+    </a>
+  );
+}
+
+// Composer control: the "add image" button plus its hidden file input.
+export function MediaButton({ attachment }: { attachment: MediaAttachment }) {
+  return (
+    <>
+      <input
+        ref={attachment.inputRef}
+        type="file"
+        accept={ACCEPTED_MEDIA}
+        onChange={attachment.onFileChange}
+        hidden
+      />
+      <button
+        type="button"
+        className="icon-button media-trigger"
+        onClick={(event) => {
+          event.stopPropagation();
+          attachment.openPicker();
+        }}
+        disabled={attachment.uploading}
+        aria-label="Add image"
+        title="Add image"
+      >
+        <ImageIcon size={20} aria-hidden="true" />
+      </button>
+    </>
+  );
+}
+
+// Composer preview: shows the pending upload / attached image with a remove
+// control, plus any upload error.
+export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
+  const src = attachment.mediaUrl ? resolveMediaUrl(attachment.mediaUrl) : null;
+
+  if (!attachment.uploading && !src && !attachment.error) {
+    return null;
+  }
+
+  return (
+    <div className="composer-media">
+      {attachment.uploading ? (
+        <div className="composer-media-loading">
+          <Loader2 className="spin" size={18} aria-hidden="true" />
+          <span>Uploading…</span>
+        </div>
+      ) : src ? (
+        <div className="composer-media-item">
+          <img src={src} alt="Attached preview" />
+          <button
+            type="button"
+            className="composer-media-remove"
+            onClick={(event) => {
+              event.stopPropagation();
+              attachment.clear();
+            }}
+            aria-label="Remove image"
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+      {attachment.error ? <p className="form-error">{attachment.error}</p> : null}
+    </div>
+  );
+}
+
 export function TweetCard({
   tweet,
   onOpen,
@@ -155,6 +241,7 @@ export function TweetCard({
   const [commentOpen, setCommentOpen] = useState(false);
   const [comment, setComment] = useState("");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(comment, setComment, 1000);
+  const media = useMediaAttachment();
   const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
   const [error, setError] = useState("");
   const displayDate = useMemo(() => {
@@ -199,15 +286,16 @@ export function TweetCard({
 
   async function submitComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!comment.trim()) {
+    if ((!comment.trim() && !media.mediaUrl) || media.uploading) {
       return;
     }
 
     setActing("comment");
     setError("");
     try {
-      await createComment(tweet.id, comment.trim());
+      await createComment(tweet.id, comment.trim(), media.mediaUrl);
       setComment("");
+      media.clear();
       setCommentOpen(false);
       onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
     } catch (err) {
@@ -253,6 +341,7 @@ export function TweetCard({
           <span>{displayDate}</span>
         </header>
         <p><RichContent text={tweet.content} /></p>
+        {tweet.media_url ? <MediaAttachmentView url={tweet.media_url} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions">
           <button
@@ -296,7 +385,10 @@ export function TweetCard({
             onClick={(event) => event.stopPropagation()}
             onSubmit={submitComment}
           >
-            <EmojiPicker onSelect={insertEmoji} />
+            <div className="composer-tools">
+              <EmojiPicker onSelect={insertEmoji} />
+              <MediaButton attachment={media} />
+            </div>
             <input
               {...fieldProps}
               value={comment}
@@ -304,9 +396,13 @@ export function TweetCard({
               placeholder="Post your reply"
               aria-label="Comment"
             />
-            <button className="primary-button compact" disabled={acting === "comment" || !comment.trim()}>
+            <button
+              className="primary-button compact"
+              disabled={acting === "comment" || (!comment.trim() && !media.mediaUrl) || media.uploading}
+            >
               Reply
             </button>
+            <MediaPreview attachment={media} />
           </form>
         ) : null}
       </div>
@@ -326,6 +422,7 @@ export function CommentCard({
   const [replyOpen, setReplyOpen] = useState(false);
   const [reply, setReply] = useState("");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(reply, setReply, 1000);
+  const media = useMediaAttachment();
   const [localComment, setLocalComment] = useState(comment);
   const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
   const [error, setError] = useState("");
@@ -366,15 +463,16 @@ export function CommentCard({
 
   async function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!reply.trim()) {
+    if ((!reply.trim() && !media.mediaUrl) || media.uploading) {
       return;
     }
 
     setActing("comment");
     setError("");
     try {
-      await replyToComment(localComment.id, reply.trim());
+      await replyToComment(localComment.id, reply.trim(), media.mediaUrl);
       setReply("");
+      media.clear();
       setReplyOpen(false);
       setLocalComment((value) => ({
         ...value,
@@ -412,6 +510,7 @@ export function CommentCard({
           {localComment.parent_comment_id ? <span>Reply</span> : null}
         </header>
         <p><RichContent text={localComment.content} /></p>
+        {localComment.media_url ? <MediaAttachmentView url={localComment.media_url} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions comment-actions">
           <button
@@ -448,7 +547,10 @@ export function CommentCard({
         </footer>
         {replyOpen ? (
           <form className="comment-form comment-reply-form" onSubmit={submitReply}>
-            <EmojiPicker onSelect={insertEmoji} />
+            <div className="composer-tools">
+              <EmojiPicker onSelect={insertEmoji} />
+              <MediaButton attachment={media} />
+            </div>
             <input
               {...fieldProps}
               value={reply}
@@ -458,10 +560,11 @@ export function CommentCard({
             />
             <button
               className="primary-button compact"
-              disabled={acting === "comment" || !reply.trim()}
+              disabled={acting === "comment" || (!reply.trim() && !media.mediaUrl) || media.uploading}
             >
               Reply
             </button>
+            <MediaPreview attachment={media} />
           </form>
         ) : null}
       </div>

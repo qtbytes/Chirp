@@ -217,6 +217,7 @@ def list_user_replies(
                     tweet_id=comment.tweet_id,
                     parent_comment_id=comment.parent_comment_id,
                     content=comment.content,
+                    media_url=comment.media_url,
                     created_at=comment.created_at,
                     author=author_summary,
                     like_count=c_stats["like_count"],
@@ -227,6 +228,7 @@ def list_user_replies(
                 parent_tweet=TweetOut(
                     id=tweet.id,
                     content=tweet.content,
+                    media_url=tweet.media_url,
                     created_at=tweet.created_at,
                     author=UserSummary.model_validate(row["tweet_author"]),
                     like_count=t_stats["like_count"],
