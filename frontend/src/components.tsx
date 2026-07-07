@@ -12,6 +12,8 @@ import {
   toggleTweetLike,
 } from "./api";
 import type { Comment, CommentStats, Tweet, TweetStats, UserSummary } from "./types";
+import { EmojiPicker } from "./EmojiPicker";
+import { useEmojiField } from "./useEmojiField";
 
 export function Avatar({
   user,
@@ -45,6 +47,7 @@ export function TweetCard({
 }) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [comment, setComment] = useState("");
+  const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(comment, setComment, 1000);
   const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
   const [error, setError] = useState("");
   const displayDate = useMemo(() => {
@@ -186,9 +189,10 @@ export function TweetCard({
             onClick={(event) => event.stopPropagation()}
             onSubmit={submitComment}
           >
+            <EmojiPicker onSelect={insertEmoji} />
             <input
+              {...fieldProps}
               value={comment}
-              onChange={(event) => setComment(event.target.value)}
               maxLength={1000}
               placeholder="Post your reply"
               aria-label="Comment"
@@ -214,6 +218,7 @@ export function CommentCard({
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [reply, setReply] = useState("");
+  const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(reply, setReply, 1000);
   const [localComment, setLocalComment] = useState(comment);
   const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
   const [error, setError] = useState("");
@@ -336,9 +341,10 @@ export function CommentCard({
         </footer>
         {replyOpen ? (
           <form className="comment-form comment-reply-form" onSubmit={submitReply}>
+            <EmojiPicker onSelect={insertEmoji} />
             <input
+              {...fieldProps}
               value={reply}
-              onChange={(event) => setReply(event.target.value)}
               maxLength={1000}
               placeholder="Reply to this comment"
               aria-label="Reply to comment"

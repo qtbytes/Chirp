@@ -720,7 +720,7 @@ button.rail-link:disabled:hover {
 
 .comment-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   margin-top: 12px;
