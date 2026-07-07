@@ -26,22 +26,29 @@ function saveRecents(recents: string[]) {
   }
 }
 
-// Some emojis intentionally live in more than one category (e.g. ⭐ 🔥 🌈).
-// Deduplicate by char for the flat search index so every result has a unique
-// React key, merging keywords so a term from either category still matches.
-const ALL_EMOJIS: EmojiItem[] = (() => {
+interface SearchEmoji extends EmojiItem {
+  tokens: string[];
+}
+
+// Flat search index. Deduplicate by char (in case an emoji ever appears in two
+// categories) so every result has a unique React key, and precompute the
+// keyword tokens (name + keywords) once so search stays cheap on every keystroke.
+const ALL_EMOJIS: SearchEmoji[] = (() => {
   const byChar = new Map<string, EmojiItem>();
   for (const category of EMOJI_CATEGORIES) {
     for (const emoji of category.emojis) {
       const existing = byChar.get(emoji.char);
       if (existing) {
-        existing.name = `${existing.name} ${emoji.name}`;
+        existing.keywords = `${existing.keywords} ${emoji.name} ${emoji.keywords}`;
       } else {
-        byChar.set(emoji.char, { char: emoji.char, name: emoji.name });
+        byChar.set(emoji.char, { ...emoji });
       }
     }
   }
-  return [...byChar.values()];
+  return [...byChar.values()].map((emoji) => ({
+    ...emoji,
+    tokens: `${emoji.name} ${emoji.keywords}`.split(/[\s\-_:,.()&/]+/).filter(Boolean),
+  }));
 })();
 
 export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
@@ -89,7 +96,11 @@ export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void })
     if (!trimmed) {
       return null;
     }
-    return ALL_EMOJIS.filter((emoji) => emoji.name.includes(trimmed));
+    // Match on token prefixes so "rain" finds ☔/🌧️ but not brain/train.
+    const queryWords = trimmed.split(/\s+/).filter(Boolean);
+    return ALL_EMOJIS.filter((emoji) =>
+      queryWords.every((word) => emoji.tokens.some((token) => token.startsWith(word))),
+    );
   }, [query]);
 
   function handlePick(emoji: string) {
