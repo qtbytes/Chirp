@@ -24,7 +24,6 @@ import {
   Search,
   Sun,
   UserPlus,
-  Users,
 } from "lucide-react";
 import {
   createComment,
@@ -286,10 +285,6 @@ function AppLayout({
             <Search size={22} aria-hidden="true" />
             <span>Search</span>
           </Link>
-          <Link className={isPeopleRoute ? "rail-link active" : "rail-link"} to="/people">
-            <Users size={22} aria-hidden="true" />
-            <span>People</span>
-          </Link>
           <button
             type="button"
             className="rail-link muted"
@@ -339,10 +334,10 @@ function PeopleRoute() {
     <>
       <header className="feed-header">
         <div className="feed-title-row">
-          <h1>People</h1>
+          <h1>Search</h1>
         </div>
       </header>
-      <UserDiscoveryPanel onChanged={onDiscoveryChanged} />
+      <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideHeading />
     </>
   );
 }
@@ -875,7 +870,13 @@ function TweetDetail({
   );
 }
 
-function UserDiscoveryPanel({ onChanged }: { onChanged: () => void }) {
+function UserDiscoveryPanel({
+  onChanged,
+  hideHeading = false,
+}: {
+  onChanged: () => void;
+  hideHeading?: boolean;
+}) {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<UserDiscovery[]>([]);
   const [loading, setLoading] = useState(false);
@@ -915,8 +916,12 @@ function UserDiscoveryPanel({ onChanged }: { onChanged: () => void }) {
   }
 
   return (
-    <section className="discovery-panel" aria-labelledby="discover-title">
-      <h2 id="discover-title">People</h2>
+    <section
+      className="discovery-panel"
+      aria-labelledby={hideHeading ? undefined : "discover-title"}
+      aria-label={hideHeading ? "People" : undefined}
+    >
+      {hideHeading ? null : <h2 id="discover-title">People</h2>}
       <label className="search-box">
         <Search size={18} aria-hidden="true" />
         <input
