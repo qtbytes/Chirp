@@ -54,6 +54,7 @@ import type {
 import {
   Avatar,
   CommentCard,
+  RichContent,
   TweetCard,
   getErrorMessage,
   mergeCommentStats,
@@ -803,7 +804,7 @@ function TweetDetail({
             <span>{displayDate}</span>
           </div>
         </div>
-        <p>{tweet.content}</p>
+        <p><RichContent text={tweet.content} /></p>
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="tweet-actions detail-actions">
           <button

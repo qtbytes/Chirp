@@ -36,6 +36,113 @@ export function Avatar({
   );
 }
 
+const URL_REGEX = /https?:\/\/[^\s]+/g;
+const IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i;
+// Trailing punctuation that is almost always sentence punctuation, not URL.
+const TRAILING_PUNCTUATION = /[.,!?;:)\]}'"]+$/;
+
+function isImageUrl(url: string): boolean {
+  try {
+    return IMAGE_EXTENSION.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+type ContentToken = { type: "text" | "url"; value: string };
+
+function tokenizeContent(text: string): ContentToken[] {
+  const tokens: ContentToken[] = [];
+  let lastIndex = 0;
+  for (const match of text.matchAll(URL_REGEX)) {
+    const start = match.index ?? 0;
+    let url = match[0];
+    // Keep trailing punctuation as plain text so "see http://x.com." works.
+    const trailing = url.match(TRAILING_PUNCTUATION)?.[0] ?? "";
+    if (trailing) {
+      url = url.slice(0, url.length - trailing.length);
+    }
+    if (start > lastIndex) {
+      tokens.push({ type: "text", value: text.slice(lastIndex, start) });
+    }
+    tokens.push({ type: "url", value: url });
+    if (trailing) {
+      tokens.push({ type: "text", value: trailing });
+    }
+    lastIndex = start + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    tokens.push({ type: "text", value: text.slice(lastIndex) });
+  }
+  return tokens;
+}
+
+function InlineImage({ url }: { url: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <a
+        className="tweet-link"
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {url}
+      </a>
+    );
+  }
+  return (
+    <a
+      className="tweet-media-link"
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <img
+        className="tweet-media-image"
+        src={url}
+        alt=""
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    </a>
+  );
+}
+
+// Renders user content as text, turning URLs into links and image URLs into
+// inline images. Only http(s) URLs are matched, so no javascript: injection.
+export function RichContent({ text }: { text: string }) {
+  const tokens = useMemo(() => tokenizeContent(text), [text]);
+
+  return (
+    <>
+      {tokens.map((token, index) => {
+        if (token.type === "text") {
+          return token.value;
+        }
+        if (isImageUrl(token.value)) {
+          return <InlineImage key={index} url={token.value} />;
+        }
+        return (
+          <a
+            key={index}
+            className="tweet-link"
+            href={token.value}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {token.value}
+          </a>
+        );
+      })}
+    </>
+  );
+}
+
 export function TweetCard({
   tweet,
   onOpen,
@@ -145,7 +252,7 @@ export function TweetCard({
           </Link>
           <span>{displayDate}</span>
         </header>
-        <p>{tweet.content}</p>
+        <p><RichContent text={tweet.content} /></p>
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions">
           <button
@@ -304,7 +411,7 @@ export function CommentCard({
           <span>{formatCompactDate(localComment.created_at)}</span>
           {localComment.parent_comment_id ? <span>Reply</span> : null}
         </header>
-        <p>{localComment.content}</p>
+        <p><RichContent text={localComment.content} /></p>
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions comment-actions">
           <button
