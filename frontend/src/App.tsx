@@ -611,21 +611,32 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const caretRef = useRef<{ start: number; end: number } | null>(null);
   const remaining = 280 - content.length;
+
+  function rememberCaret() {
+    const el = textareaRef.current;
+    if (el) {
+      caretRef.current = { start: el.selectionStart, end: el.selectionEnd };
+    }
+  }
 
   function insertEmoji(emoji: string) {
     const el = textareaRef.current;
-    const start = el?.selectionStart ?? content.length;
-    const end = el?.selectionEnd ?? content.length;
+    // Use the caret we tracked while the textarea had focus. Reading
+    // el.selectionStart/End here is unreliable because focus has moved to the
+    // picker, and a blurred textarea can report a full-content selection.
+    const { start, end } = caretRef.current ?? { start: content.length, end: content.length };
     const next = content.slice(0, start) + emoji + content.slice(end);
     if (next.length > 280) {
       return;
     }
+    const caret = start + emoji.length;
+    caretRef.current = { start: caret, end: caret };
     setContent(next);
     requestAnimationFrame(() => {
       if (el) {
         el.focus();
-        const caret = start + emoji.length;
         el.setSelectionRange(caret, caret);
       }
     });
@@ -655,7 +666,13 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
       <textarea
         ref={textareaRef}
         value={content}
-        onChange={(event) => setContent(event.target.value)}
+        onChange={(event) => {
+          setContent(event.target.value);
+          rememberCaret();
+        }}
+        onSelect={rememberCaret}
+        onClick={rememberCaret}
+        onKeyUp={rememberCaret}
         maxLength={280}
         placeholder="What is happening?"
         aria-label="Tweet content"
