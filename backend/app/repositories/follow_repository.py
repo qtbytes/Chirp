@@ -2,6 +2,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models.follow import Follow
+from app.repositories.notification_repository import add_notification
 
 
 def follow_user(db: Session, follower_id: int, followee_id: int) -> Follow:
@@ -27,6 +28,12 @@ def follow_user(db: Session, follower_id: int, followee_id: int) -> Follow:
 
     relation = Follow(follower_id=follower_id, followee_id=followee_id)
     db.add(relation)
+    add_notification(
+        db,
+        recipient_id=followee_id,
+        actor_id=follower_id,
+        type="follow",
+    )
     db.commit()
     return relation
 

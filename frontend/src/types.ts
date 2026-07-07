@@ -96,6 +96,26 @@ export type ProfileTweetsPage = {
   next_cursor: string | null;
 };
 
+export type NotificationType =
+  | "like"
+  | "retweet"
+  | "comment"
+  | "reply"
+  | "comment_like"
+  | "comment_retweet"
+  | "follow";
+
+export type Notification = {
+  id: number;
+  type: NotificationType;
+  actor: UserSummary;
+  tweet_id: number | null;
+  comment_id: number | null;
+  preview: string | null;
+  is_read: boolean;
+  created_at: string;
+};
+
 export type ReplyWithParent = {
   comment: Comment;
   parent_tweet: Tweet;

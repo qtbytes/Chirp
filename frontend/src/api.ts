@@ -3,6 +3,7 @@ import type {
   CommentLikeToggleResult,
   CommentStats,
   LikeToggleResult,
+  Notification,
   ProfileRepliesPage,
   ProfileTweetsPage,
   RetweetResult,
@@ -238,6 +239,18 @@ export function updateProfile(bio: string): Promise<UserProfile> {
     method: "PATCH",
     body: JSON.stringify({ bio }),
   });
+}
+
+export function listNotifications(): Promise<Notification[]> {
+  return request<Notification[]>("/notifications");
+}
+
+export function getUnreadNotificationCount(): Promise<{ count: number }> {
+  return request<{ count: number }>("/notifications/unread-count");
+}
+
+export function markNotificationsRead(): Promise<{ updated: number }> {
+  return request<{ updated: number }>("/notifications/mark-read", { method: "POST" });
 }
 
 export function uploadAvatar(file: File): Promise<UserProfile> {

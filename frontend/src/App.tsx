@@ -34,10 +34,13 @@ import {
   getTimeline,
   getTweet,
   getTweetStats,
+  getUnreadNotificationCount,
   listComments,
+  listNotifications,
   listUsers,
   login,
   logout,
+  markNotificationsRead,
   register,
   retweetTweet,
   toggleTweetLike,
@@ -45,6 +48,7 @@ import {
 } from "./api";
 import type {
   Comment,
+  Notification,
   TimelineKind,
   TimelinePage,
   Tweet,
@@ -59,6 +63,7 @@ import {
   MediaPreview,
   RichContent,
   TweetCard,
+  formatCompactDate,
   getErrorMessage,
   mergeCommentStats,
   mergeTweetStats,
@@ -71,7 +76,11 @@ import { useMediaAttachment } from "./useMediaAttachment";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
-type LayoutContext = { refreshToken: number; onDiscoveryChanged: () => void };
+type LayoutContext = {
+  refreshToken: number;
+  onDiscoveryChanged: () => void;
+  refreshUnread: () => void;
+};
 
 const THEME_STORAGE_KEY = "twitter-system-theme";
 
@@ -156,6 +165,7 @@ function App() {
         <Route path="/" element={<HomeView />} />
         <Route path="/following" element={<HomeView />} />
         <Route path="/people" element={<PeopleRoute />} />
+        <Route path="/notifications" element={<NotificationsView />} />
         <Route path="/tweet/:tweetId" element={<TweetDetailRoute />} />
         <Route
           path="/profile/:username"
@@ -267,10 +277,29 @@ function AppLayout({
   onToggleTheme: () => void;
 }) {
   const [refreshToken, setRefreshToken] = useState(0);
+  const [unread, setUnread] = useState(0);
   const location = useLocation();
   const isPeopleRoute = location.pathname === "/people";
-  const isHomeRoute = !isPeopleRoute && !location.pathname.startsWith("/profile");
+  const isNotificationsRoute = location.pathname === "/notifications";
+  const isHomeRoute =
+    !isPeopleRoute && !isNotificationsRoute && !location.pathname.startsWith("/profile");
+  const hideDiscovery = isPeopleRoute || isNotificationsRoute;
   const onDiscoveryChanged = () => setRefreshToken((value) => value + 1);
+
+  const refreshUnread = useCallback(async () => {
+    try {
+      const { count } = await getUnreadNotificationCount();
+      setUnread(count);
+    } catch {
+      // Ignore polling failures; the badge just keeps its last value.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshUnread();
+    const timer = window.setInterval(() => void refreshUnread(), 20000);
+    return () => window.clearInterval(timer);
+  }, [refreshUnread]);
 
   async function handleLogout() {
     await logout().catch(() => undefined);
@@ -278,7 +307,7 @@ function AppLayout({
   }
 
   return (
-    <div className={isPeopleRoute ? "app-shell app-shell--no-discovery" : "app-shell"}>
+    <div className={hideDiscovery ? "app-shell app-shell--no-discovery" : "app-shell"}>
       <aside className="rail">
         <Link className="rail-brand" to="/" aria-label="Chirp home">
           <Feather aria-hidden="true" />
@@ -292,16 +321,21 @@ function AppLayout({
             <Search size={22} aria-hidden="true" />
             <span>Search</span>
           </Link>
-          <button
-            type="button"
-            className="rail-link muted"
-            disabled
-            aria-disabled="true"
-            title="Notifications aren't available yet"
+          <Link
+            className={isNotificationsRoute ? "rail-link active" : "rail-link"}
+            to="/notifications"
+            aria-label={unread > 0 ? `Alerts, ${unread} unread` : "Alerts"}
           >
-            <Bell size={22} aria-hidden="true" />
-            <span>Updates</span>
-          </button>
+            <span className="rail-icon">
+              <Bell size={22} aria-hidden="true" />
+              {unread > 0 ? (
+                <span className="rail-badge" aria-hidden="true">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              ) : null}
+            </span>
+            <span>Alerts</span>
+          </Link>
         </nav>
         <div className="rail-user">
           <Link
@@ -324,10 +358,12 @@ function AppLayout({
       </aside>
 
       <main className="feed-column">
-        <Outlet context={{ refreshToken, onDiscoveryChanged } satisfies LayoutContext} />
+        <Outlet
+          context={{ refreshToken, onDiscoveryChanged, refreshUnread } satisfies LayoutContext}
+        />
       </main>
 
-      {isPeopleRoute ? null : (
+      {hideDiscovery ? null : (
         <aside className="discovery-column">
           <UserDiscoveryPanel onChanged={onDiscoveryChanged} />
         </aside>
@@ -347,6 +383,120 @@ function PeopleRoute() {
         </div>
       </header>
       <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideHeading />
+    </>
+  );
+}
+
+const NOTIFICATION_TEXT: Record<Notification["type"], string> = {
+  like: "liked your tweet",
+  retweet: "retweeted your tweet",
+  comment: "commented on your tweet",
+  reply: "replied to your comment",
+  comment_like: "liked your comment",
+  comment_retweet: "retweeted your comment",
+  follow: "followed you",
+};
+
+function NotificationIcon({ type }: { type: Notification["type"] }) {
+  if (type === "follow") {
+    return <UserPlus size={16} className="notif-icon follow" aria-hidden="true" />;
+  }
+  if (type === "retweet" || type === "comment_retweet") {
+    return <Repeat2 size={16} className="notif-icon retweet" aria-hidden="true" />;
+  }
+  if (type === "comment" || type === "reply") {
+    return <MessageCircle size={16} className="notif-icon comment" aria-hidden="true" />;
+  }
+  return <Heart size={16} className="notif-icon like" aria-hidden="true" />;
+}
+
+function NotificationsView() {
+  const { refreshUnread } = useOutletContext<LayoutContext>();
+  const [items, setItems] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await listNotifications();
+        if (cancelled) {
+          return;
+        }
+        setItems(data);
+        // Opening the page marks everything read and clears the rail badge.
+        await markNotificationsRead().catch(() => undefined);
+        refreshUnread();
+      } catch (err) {
+        if (!cancelled) {
+          setError(getErrorMessage(err));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshUnread]);
+
+  return (
+    <>
+      <header className="feed-header">
+        <div className="feed-title-row">
+          <h1>Notifications</h1>
+        </div>
+      </header>
+      {loading ? (
+        <div className="loading-row">
+          <Loader2 className="spin" size={18} aria-hidden="true" />
+          <span>Loading notifications</span>
+        </div>
+      ) : error ? (
+        <div className="status-panel error">{error}</div>
+      ) : items.length === 0 ? (
+        <div className="status-panel">No notifications yet.</div>
+      ) : (
+        <ul className="notif-list">
+          {items.map((notification) => {
+            const to =
+              notification.type === "follow"
+                ? `/profile/${encodeURIComponent(notification.actor.username)}`
+                : notification.tweet_id !== null
+                  ? `/tweet/${notification.tweet_id}`
+                  : "#";
+            return (
+              <li
+                key={notification.id}
+                className={notification.is_read ? "notif-item" : "notif-item unread"}
+              >
+                <Link to={to} className="notif-link">
+                  <NotificationIcon type={notification.type} />
+                  <Avatar user={notification.actor} size="small" />
+                  <div className="notif-body">
+                    <p>
+                      <strong>@{notification.actor.username}</strong>{" "}
+                      {NOTIFICATION_TEXT[notification.type]}
+                    </p>
+                    {notification.preview ? (
+                      <p className="notif-preview">{notification.preview}</p>
+                    ) : null}
+                    <span className="notif-time">
+                      {formatCompactDate(notification.created_at)}
+                    </span>
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </>
   );
 }

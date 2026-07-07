@@ -10,6 +10,7 @@ from app.models.like import Like
 from app.models.retweet import Retweet
 from app.models.tweet import Tweet
 from app.models.user import User
+from app.repositories.notification_repository import add_notification
 
 
 def like_tweet(db: Session, user_id: int, tweet_id: int) -> bool:
@@ -40,6 +41,13 @@ def like_tweet(db: Session, user_id: int, tweet_id: int) -> bool:
 
     like = Like(user_id=user_id, tweet_id=tweet_id)
     db.add(like)
+    add_notification(
+        db,
+        recipient_id=tweet.user_id,
+        actor_id=user_id,
+        type="like",
+        tweet_id=tweet_id,
+    )
     db.commit()
     return True
 
@@ -107,6 +115,13 @@ def retweet_tweet(db: Session, user_id: int, tweet_id: int) -> bool:
 
     retweet = Retweet(user_id=user_id, tweet_id=tweet_id)
     db.add(retweet)
+    add_notification(
+        db,
+        recipient_id=tweet.user_id,
+        actor_id=user_id,
+        type="retweet",
+        tweet_id=tweet_id,
+    )
     db.commit()
     return True
 
@@ -154,6 +169,7 @@ def create_comment(
     if author is None:
         raise ValueError("user not found")
 
+    parent_comment = None
     if parent_comment_id is not None:
         parent_comment = db.get(Comment, parent_comment_id)
         if parent_comment is None or parent_comment.tweet_id != tweet_id:
@@ -167,6 +183,29 @@ def create_comment(
         media_urls=media_urls or None,
     )
     db.add(comment)
+    db.flush()  # assign comment.id before staging the notification
+
+    # A reply notifies the parent comment's author; a top-level comment notifies
+    # the tweet's author.
+    if parent_comment is not None:
+        add_notification(
+            db,
+            recipient_id=parent_comment.user_id,
+            actor_id=user_id,
+            type="reply",
+            tweet_id=tweet_id,
+            comment_id=comment.id,
+        )
+    else:
+        add_notification(
+            db,
+            recipient_id=tweet.user_id,
+            actor_id=user_id,
+            type="comment",
+            tweet_id=tweet_id,
+            comment_id=comment.id,
+        )
+
     db.commit()
     db.refresh(comment)
 
@@ -352,6 +391,14 @@ def like_comment(db: Session, user_id: int, comment_id: int) -> bool:
         return False
 
     db.add(CommentLike(user_id=user_id, comment_id=comment_id))
+    add_notification(
+        db,
+        recipient_id=comment.user_id,
+        actor_id=user_id,
+        type="comment_like",
+        tweet_id=comment.tweet_id,
+        comment_id=comment_id,
+    )
     db.commit()
     return True
 
@@ -409,6 +456,14 @@ def retweet_comment(db: Session, user_id: int, comment_id: int) -> bool:
         return False
 
     db.add(CommentRetweet(user_id=user_id, comment_id=comment_id))
+    add_notification(
+        db,
+        recipient_id=comment.user_id,
+        actor_id=user_id,
+        type="comment_retweet",
+        tweet_id=comment.tweet_id,
+        comment_id=comment_id,
+    )
     db.commit()
     return True
 

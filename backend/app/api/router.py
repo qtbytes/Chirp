@@ -4,6 +4,7 @@ from app.api.routes import (
     follows,
     interactions,
     media,
+    notifications,
     timeline,
     tweets,
     users,
@@ -19,3 +20,4 @@ api_router.include_router(tweets.router)
 api_router.include_router(interactions.router)
 api_router.include_router(timeline.router)
 api_router.include_router(media.router)
+api_router.include_router(notifications.router)
