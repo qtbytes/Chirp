@@ -40,6 +40,19 @@ _MAX_BYTES = 1024 * 1024
 _HEAD_CLOSE = b"</head>"
 _HEAD_CLOSE_LEN = len(_HEAD_CLOSE)
 
+# oEmbed providers, keyed by host. This is a small registry consulted before
+# generic scraping — not a per-site adapter: it's one oEmbed client plus a
+# lookup table for providers whose HTML is impractical to scrape (YouTube
+# buries its OG tags ~640 KB deep and serves video-less pages intermittently).
+# oEmbed returns a tiny, stable JSON with title/thumbnail, so it's both faster
+# and more reliable. Extend by adding hosts + their documented endpoint.
+_OEMBED_PROVIDERS: dict[str, str] = {
+    "youtube.com": "https://www.youtube.com/oembed",
+    "www.youtube.com": "https://www.youtube.com/oembed",
+    "m.youtube.com": "https://www.youtube.com/oembed",
+    "youtu.be": "https://www.youtube.com/oembed",
+}
+
 _CACHE_PREFIX = "linkpreview:"
 _POSITIVE_TTL = 24 * 60 * 60  # a good card rarely changes; cache it a day
 _NEGATIVE_TTL = 60 * 60  # remember "no card here" briefly to avoid re-fetch storms
@@ -215,6 +228,53 @@ def _build_preview(
 # --- fetching --------------------------------------------------------------
 
 
+def _client_kwargs(follow_redirects: bool) -> dict:
+    kwargs: dict = {
+        "follow_redirects": follow_redirects,
+        "timeout": _REQUEST_TIMEOUT,
+        "headers": {"User-Agent": _USER_AGENT, "Accept": "text/html,*/*"},
+    }
+    if settings.link_preview_http_proxy:
+        kwargs["proxy"] = settings.link_preview_http_proxy
+    return kwargs
+
+
+def _oembed_endpoint(url: str) -> str | None:
+    host = (urlparse(url).hostname or "").lower().strip(".")
+    return _OEMBED_PROVIDERS.get(host)
+
+
+def _fetch_via_oembed(url: str, endpoint: str) -> LinkPreviewOut | None:
+    """
+    Build a card from a provider's oEmbed JSON. The endpoint is a fixed, trusted
+    host (not user input), and the provider fetches its own content, so this is
+    both simpler and safer than scraping the target page directly.
+    """
+    try:
+        with httpx.Client(**_client_kwargs(follow_redirects=True)) as client:
+            response = client.get(endpoint, params={"url": url, "format": "json"})
+        if response.status_code != 200:
+            return None
+        data = response.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+
+    title = data.get("title")
+    if not title:
+        return None
+    image = _absolute_http_url(data.get("thumbnail_url"), endpoint)
+    site_name = data.get("provider_name") or urlparse(url).hostname
+    return LinkPreviewOut(
+        url=url,
+        title=str(title)[:300],
+        description=None,
+        image=image,
+        site_name=site_name,
+    )
+
+
 def _fetch_html(url: str) -> tuple[str, str] | None:
     """
     Fetch an HTML document, validating SSRF safety on the initial URL and every
@@ -222,16 +282,8 @@ def _fetch_html(url: str) -> tuple[str, str] | None:
     not HTML, or unreachable.
     """
     current = url
-    headers = {"User-Agent": _USER_AGENT, "Accept": "text/html,*/*"}
-    client_kwargs: dict = {
-        "follow_redirects": False,
-        "timeout": _REQUEST_TIMEOUT,
-        "headers": headers,
-    }
-    if settings.link_preview_http_proxy:
-        client_kwargs["proxy"] = settings.link_preview_http_proxy
     try:
-        with httpx.Client(**client_kwargs) as client:
+        with httpx.Client(**_client_kwargs(follow_redirects=False)) as client:
             for _ in range(_MAX_REDIRECTS + 1):
                 if not _url_is_fetchable(current):
                     return None
@@ -319,10 +371,18 @@ def fetch_link_preview(url: str) -> LinkPreviewOut | None:
         return cached
 
     preview: LinkPreviewOut | None = None
-    fetched = _fetch_html(url)
-    if fetched is not None:
-        final_url, html = fetched
-        preview = _build_preview(url, final_url, html)
+
+    # Prefer oEmbed for known providers (reliable JSON), then fall back to
+    # scraping the page's Open Graph / Twitter Card metadata.
+    endpoint = _oembed_endpoint(url)
+    if endpoint is not None:
+        preview = _fetch_via_oembed(url, endpoint)
+
+    if preview is None:
+        fetched = _fetch_html(url)
+        if fetched is not None:
+            final_url, html = fetched
+            preview = _build_preview(url, final_url, html)
 
     _cache_set(url, preview)
     return preview

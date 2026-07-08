@@ -53,6 +53,41 @@ def test_link_preview_parses_open_graph(monkeypatch) -> None:
     assert body["url"] == "https://github.com/KhronosGroup/glslang"
 
 
+def test_link_preview_prefers_oembed_for_known_providers(monkeypatch) -> None:
+    # A provider in the oEmbed registry (YouTube) is served from oEmbed JSON,
+    # not by scraping its huge HTML page.
+    assert (
+        link_preview_service._oembed_endpoint("https://youtu.be/abc123")
+        == "https://www.youtube.com/oembed"
+    )
+
+    def _fake_oembed(url: str, endpoint: str):
+        from app.schemas.link_preview import LinkPreviewOut
+
+        return LinkPreviewOut(
+            url=url,
+            title="Let's Talk about AppImage",
+            image="https://i.ytimg.com/vi/x/hqdefault.jpg",
+            site_name="YouTube",
+        )
+
+    def _no_scrape(url: str):  # pragma: no cover - must not be called
+        raise AssertionError("known oEmbed providers must not be scraped")
+
+    monkeypatch.setattr(link_preview_service, "_fetch_via_oembed", _fake_oembed)
+    monkeypatch.setattr(link_preview_service, "_fetch_html", _no_scrape)
+    client = _register()
+
+    response = client.get(
+        "/api/v1/link-preview",
+        params={"url": "https://www.youtube.com/watch?v=x"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "Let's Talk about AppImage"
+    assert body["site_name"] == "YouTube"
+
+
 def test_link_preview_without_metadata_returns_404(monkeypatch) -> None:
     monkeypatch.setattr(
         link_preview_service,
