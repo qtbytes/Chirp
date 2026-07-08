@@ -28,7 +28,9 @@ import {
 import {
   createComment,
   createTweet,
+  deleteTweet,
   displayName,
+  editTweet,
   followUser,
   getCommentStats,
   getCurrentUser,
@@ -59,9 +61,12 @@ import type {
 import {
   Avatar,
   CommentCard,
+  ConfirmDialog,
   MediaButton,
   MediaGallery,
   MediaPreview,
+  PostEditor,
+  PostMenu,
   RichContent,
   TweetCard,
   formatCompactDate,
@@ -536,6 +541,15 @@ function HomeView() {
     });
   }, []);
 
+  const removeTweet = useCallback((tweetId: number) => {
+    setTweetIds((ids) => ids.filter((id) => id !== tweetId));
+    setTweetById((current) => {
+      const next = { ...current };
+      delete next[tweetId];
+      return next;
+    });
+  }, []);
+
   const loadFeed = useCallback(
     async (cursor?: string | null, append = false) => {
       setLoadingFeed(true);
@@ -647,6 +661,8 @@ function HomeView() {
             tweet={tweet}
             onOpen={() => navigate(`/tweet/${tweet.id}`)}
             onTweetPatch={patchTweet}
+            currentUserId={currentUser.id}
+            onDeleted={removeTweet}
           />
         ))}
       </section>
@@ -673,6 +689,7 @@ function TweetDetailRoute() {
   const { tweetId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentUser } = useOutletContext<LayoutContext>();
   const scrollToPostId = (location.state as { scrollToPostId?: number } | null)
     ?.scrollToPostId;
   const numericTweetId = Number(tweetId);
@@ -742,6 +759,8 @@ function TweetDetailRoute() {
       onBack={() => navigate(-1)}
       onTweetPatch={patchTweet}
       scrollToPostId={scrollToPostId}
+      currentUserId={currentUser.id}
+      onDeleted={() => navigate("/")}
     />
   );
 }
@@ -842,12 +861,50 @@ function TweetDetail({
   onBack,
   onTweetPatch,
   scrollToPostId,
+  currentUserId,
+  onDeleted,
 }: {
   tweet: Tweet;
   onBack: () => void;
   onTweetPatch: (tweetId: number, patch: Partial<Tweet>) => void;
   scrollToPostId?: number;
+  currentUserId: number;
+  onDeleted: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const isOwn = tweet.author.id === currentUserId;
+
+  async function saveEdit(content: string) {
+    setSavingEdit(true);
+    try {
+      const updated = await editTweet(tweet.id, content, tweet.media_urls);
+      onTweetPatch(tweet.id, {
+        content: updated.content,
+        media_urls: updated.media_urls,
+        edited_at: updated.edited_at,
+      });
+      setEditing(false);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function confirmDelete() {
+    setDeleting(true);
+    try {
+      await deleteTweet(tweet.id);
+      onDeleted();
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+  }
   const [comments, setComments] = useState<Comment[]>([]);
   const [comment, setComment] = useState("");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(comment, setComment, 1000);
@@ -991,6 +1048,12 @@ function TweetDetail({
       </div>
 
       <article id={`post-${tweet.id}`} className="detail-tweet">
+        {isOwn ? (
+          <PostMenu
+            onEdit={() => setEditing(true)}
+            onDelete={() => setConfirmingDelete(true)}
+          />
+        ) : null}
         <div className="detail-author">
           <Link
             to={`/${encodeURIComponent(tweet.author.username)}`}
@@ -1007,9 +1070,21 @@ function TweetDetail({
               <strong>@{tweet.author.username}</strong>
             </Link>
             <span>{displayDate}</span>
+            {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
           </div>
         </div>
-        <p><RichContent text={tweet.content} /></p>
+        {editing ? (
+          <PostEditor
+            initialContent={tweet.content}
+            maxLength={280}
+            canSaveEmpty={tweet.media_urls.length > 0}
+            saving={savingEdit}
+            onSave={saveEdit}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <p><RichContent text={tweet.content} /></p>
+        )}
         {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="tweet-actions detail-actions">
@@ -1079,6 +1154,7 @@ function TweetDetail({
           <CommentCard
             key={item.id}
             comment={item}
+            currentUserId={currentUserId}
             onChanged={() => {
               void loadTweetComments();
             }}
@@ -1088,6 +1164,16 @@ function TweetDetail({
           />
         ))}
       </section>
+      {confirmingDelete ? (
+        <ConfirmDialog
+          title="Delete Tweet?"
+          message="This can't be undone and it will be removed from your profile, the timeline, and any threads it started."
+          confirmLabel="Delete"
+          busy={deleting}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      ) : null}
     </section>
   );
 }

@@ -1550,3 +1550,132 @@ a.tab {
      span those same two columns to keep the row's layout unchanged. */
   grid-column: span 2;
 }
+
+/* --- edit / delete: post "⋯" menu, inline editor, delete confirm ---------- */
+
+/* Positioning context for the absolutely-placed "⋯" menu. */
+.tweet-card,
+.comment-card,
+.detail-tweet {
+  position: relative;
+}
+
+.post-menu {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+}
+
+.post-menu-trigger {
+  color: var(--muted);
+}
+
+.post-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 148px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.post-menu-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+
+.post-menu-dropdown button:hover {
+  background: var(--hover);
+}
+
+.post-menu-dropdown button.danger {
+  color: var(--danger);
+}
+
+.edited-tag {
+  color: var(--muted);
+}
+
+/* Inline "edit content in place" editor used by tweets and comments. */
+.post-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 12px;
+}
+
+.post-editor textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--input);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.4;
+}
+
+.post-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.post-editor-spacer {
+  flex: 1;
+}
+
+/* Delete confirmation modal. */
+.confirm-modal {
+  max-width: 340px;
+  padding: 22px;
+}
+
+.confirm-modal h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.confirm-modal p {
+  margin: 0 0 18px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.danger-button {
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.danger-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

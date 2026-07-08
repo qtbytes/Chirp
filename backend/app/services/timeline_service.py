@@ -164,6 +164,7 @@ class TimelineService:
             content=tweet.content,
             media_urls=tweet.media_urls or [],
             created_at=tweet.created_at,
+            edited_at=tweet.edited_at,
             author=UserSummary.model_validate(tweet.author),
             like_count=row["like_count"],
             comment_count=row["comment_count"],

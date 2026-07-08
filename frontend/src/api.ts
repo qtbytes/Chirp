@@ -130,6 +130,21 @@ export function createTweet(content: string, mediaUrls: string[] = []): Promise<
   });
 }
 
+export function editTweet(
+  tweetId: number,
+  content: string,
+  mediaUrls: string[] = [],
+): Promise<Tweet> {
+  return request<Tweet>(`/tweets/${tweetId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ content, media_urls: mediaUrls }),
+  });
+}
+
+export function deleteTweet(tweetId: number): Promise<void> {
+  return request<void>(`/tweets/${tweetId}`, { method: "DELETE" });
+}
+
 export function toggleTweetLike(tweetId: number): Promise<LikeToggleResult> {
   return request<LikeToggleResult>(`/tweets/${tweetId}/likes/toggle`, {
     method: "POST",
@@ -155,6 +170,21 @@ export function createComment(
 export function listComments(tweetId: number, limit = 100): Promise<Comment[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   return request<Comment[]>(`/tweets/${tweetId}/comments?${params.toString()}`);
+}
+
+export function editComment(
+  commentId: number,
+  content: string,
+  mediaUrls: string[] = [],
+): Promise<Comment> {
+  return request<Comment>(`/comments/${commentId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ content, media_urls: mediaUrls }),
+  });
+}
+
+export function deleteComment(commentId: number): Promise<void> {
+  return request<void>(`/comments/${commentId}`, { method: "DELETE" });
 }
 
 export function toggleCommentLike(commentId: number): Promise<CommentLikeToggleResult> {

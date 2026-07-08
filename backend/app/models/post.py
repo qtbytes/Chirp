@@ -41,6 +41,9 @@ class Post(Base):
         index=True,
         nullable=False,
     )
+    edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     reply_to_id: Mapped[int | None] = mapped_column(
         ForeignKey("posts.id"), nullable=True
     )

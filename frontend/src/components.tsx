@@ -1,10 +1,24 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Heart, Image as ImageIcon, Loader2, MessageCircle, Repeat2, X } from "lucide-react";
+import {
+  Heart,
+  Image as ImageIcon,
+  Loader2,
+  MessageCircle,
+  MoreHorizontal,
+  Pencil,
+  Repeat2,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   ApiError,
   createComment,
+  deleteComment,
+  deleteTweet,
   displayName,
+  editComment,
+  editTweet,
   isVideoUrl,
   replyToComment,
   resolveMediaUrl,
@@ -327,15 +341,234 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
   );
 }
 
+// A "⋯" dropdown with Edit/Delete, shown only on the author's own posts.
+export function PostMenu({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function onDocMouseDown(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [open]);
+
+  return (
+    <div className="post-menu" ref={ref}>
+      <button
+        type="button"
+        className="icon-button post-menu-trigger"
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((value) => !value);
+        }}
+        aria-label="More options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <MoreHorizontal size={18} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="post-menu-dropdown" role="menu" onClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onEdit();
+            }}
+          >
+            <Pencil size={16} aria-hidden="true" />
+            <span>Edit</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="danger"
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            <span>Delete</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Modal confirmation used before a destructive delete.
+export function ConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        event.stopPropagation();
+        onCancel();
+      }}
+    >
+      <section
+        className="modal confirm-modal"
+        role="dialog"
+        aria-modal="true"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2>{title}</h2>
+        <p>{message}</p>
+        <div className="confirm-actions">
+          <button className="outline-button" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+          <button className="danger-button" onClick={onConfirm} disabled={busy}>
+            {busy ? "Deleting…" : confirmLabel}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// Inline editor that replaces a post's content while editing. Media is
+// preserved as-is (the caller re-sends the existing media on save).
+export function PostEditor({
+  initialContent,
+  maxLength,
+  canSaveEmpty,
+  saving,
+  onSave,
+  onCancel,
+}: {
+  initialContent: string;
+  maxLength: number;
+  canSaveEmpty: boolean;
+  saving: boolean;
+  onSave: (content: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initialContent);
+  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
+    value,
+    setValue,
+    maxLength,
+  );
+  const canSave = (value.trim().length > 0 || canSaveEmpty) && !saving;
+
+  return (
+    <form
+      className="post-editor"
+      onClick={(event) => event.stopPropagation()}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave) {
+          onSave(value.trim());
+        }
+      }}
+    >
+      <textarea
+        {...fieldProps}
+        value={value}
+        maxLength={maxLength}
+        aria-label="Edit content"
+        autoFocus
+      />
+      <div className="post-editor-actions">
+        <EmojiPicker onSelect={insertEmoji} />
+        <span className="post-editor-spacer" />
+        <button
+          type="button"
+          className="outline-button compact"
+          onClick={onCancel}
+          disabled={saving}
+        >
+          Cancel
+        </button>
+        <button className="primary-button compact" disabled={!canSave}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export function TweetCard({
   tweet,
   onOpen,
   onTweetPatch,
+  currentUserId,
+  onDeleted,
 }: {
   tweet: Tweet;
   onOpen: () => void;
   onTweetPatch: (tweetId: number, patch: Partial<Tweet>) => void;
+  currentUserId: number;
+  onDeleted: (tweetId: number) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const isOwn = tweet.author.id === currentUserId;
+
+  async function saveEdit(content: string) {
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await editTweet(tweet.id, content, tweet.media_urls);
+      onTweetPatch(tweet.id, {
+        content: updated.content,
+        media_urls: updated.media_urls,
+        edited_at: updated.edited_at,
+      });
+      setEditing(false);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteTweet(tweet.id);
+      onDeleted(tweet.id);
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+  }
+
   const [commentOpen, setCommentOpen] = useState(false);
   const [comment, setComment] = useState("");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(comment, setComment, 1000);
@@ -404,6 +637,11 @@ export function TweetCard({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    // Only activate when the card itself is focused, not when typing in a
+    // nested field (edit editor, inline comment box) or pressing a button.
+    if (event.target !== event.currentTarget) {
+      return;
+    }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onOpen();
@@ -427,6 +665,12 @@ export function TweetCard({
       >
         <Avatar user={tweet.author} />
       </Link>
+      {isOwn ? (
+        <PostMenu
+          onEdit={() => setEditing(true)}
+          onDelete={() => setConfirmingDelete(true)}
+        />
+      ) : null}
       <div className="tweet-body">
         {tweet.retweeted_by ? (
           <p className="retweet-banner">
@@ -444,8 +688,20 @@ export function TweetCard({
           </Link>
           <span>@{tweet.author.username}</span>
           <span>{displayDate}</span>
+          {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
         </header>
-        <p><RichContent text={tweet.content} /></p>
+        {editing ? (
+          <PostEditor
+            initialContent={tweet.content}
+            maxLength={280}
+            canSaveEmpty={tweet.media_urls.length > 0}
+            saving={saving}
+            onSave={saveEdit}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <p><RichContent text={tweet.content} /></p>
+        )}
         {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions">
@@ -511,6 +767,16 @@ export function TweetCard({
           </form>
         ) : null}
       </div>
+      {confirmingDelete ? (
+        <ConfirmDialog
+          title="Delete Tweet?"
+          message="This can't be undone and it will be removed from your profile, the timeline, and any threads it started."
+          confirmLabel="Delete"
+          busy={deleting}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      ) : null}
     </article>
   );
 }
@@ -519,10 +785,12 @@ export function CommentCard({
   comment,
   onChanged,
   onReplyCreated,
+  currentUserId,
 }: {
   comment: Comment;
   onChanged: () => void;
   onReplyCreated: () => void;
+  currentUserId: number;
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [reply, setReply] = useState("");
@@ -531,10 +799,51 @@ export function CommentCard({
   const [localComment, setLocalComment] = useState(comment);
   const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const isOwn = localComment.author.id === currentUserId;
 
   useEffect(() => {
     setLocalComment(comment);
   }, [comment]);
+
+  async function saveEdit(content: string) {
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await editComment(
+        localComment.id,
+        content,
+        localComment.media_urls,
+      );
+      setLocalComment((value) => ({
+        ...value,
+        content: updated.content,
+        media_urls: updated.media_urls,
+        edited_at: updated.edited_at,
+      }));
+      setEditing(false);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteComment(localComment.id);
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+  }
 
   async function runCommentRetweetAction(task: () => Promise<void>) {
     setActing("retweet");
@@ -605,6 +914,12 @@ export function CommentCard({
       >
         <Avatar user={localComment.author} size="small" />
       </Link>
+      {isOwn ? (
+        <PostMenu
+          onEdit={() => setEditing(true)}
+          onDelete={() => setConfirmingDelete(true)}
+        />
+      ) : null}
       <div className="comment-body">
         {localComment.retweeted_by ? (
           <p className="retweet-banner">
@@ -623,8 +938,20 @@ export function CommentCard({
           <span>@{localComment.author.username}</span>
           <span>{formatCompactDate(localComment.created_at)}</span>
           {localComment.parent_comment_id ? <span>Reply</span> : null}
+          {localComment.edited_at ? <span className="edited-tag">· edited</span> : null}
         </header>
-        <p><RichContent text={localComment.content} /></p>
+        {editing ? (
+          <PostEditor
+            initialContent={localComment.content}
+            maxLength={1000}
+            canSaveEmpty={localComment.media_urls.length > 0}
+            saving={saving}
+            onSave={saveEdit}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <p><RichContent text={localComment.content} /></p>
+        )}
         {localComment.media_urls.length > 0 ? <MediaGallery urls={localComment.media_urls} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions comment-actions">
@@ -683,6 +1010,16 @@ export function CommentCard({
           </form>
         ) : null}
       </div>
+      {confirmingDelete ? (
+        <ConfirmDialog
+          title="Delete comment?"
+          message="This can't be undone and it will remove this comment and any replies to it."
+          confirmLabel="Delete"
+          busy={deleting}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      ) : null}
     </article>
   );
 }

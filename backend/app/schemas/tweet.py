@@ -27,6 +27,7 @@ class TweetOut(BaseModel):
     content: str
     media_urls: list[str] = Field(default_factory=list)
     created_at: datetime
+    edited_at: datetime | None = None
     author: UserSummary
     like_count: int = 0
     comment_count: int = 0

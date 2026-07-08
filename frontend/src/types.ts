@@ -16,6 +16,7 @@ export type Tweet = {
   content: string;
   media_urls: string[];
   created_at: string;
+  edited_at: string | null;
   author: UserSummary;
   like_count: number;
   comment_count: number;
@@ -65,6 +66,7 @@ export type Comment = {
   content: string;
   media_urls: string[];
   created_at: string;
+  edited_at: string | null;
   author: UserSummary;
   like_count: number;
   comment_count: number;

@@ -1,7 +1,7 @@
 from app.api.deps import get_current_user_id
 from app.db.database import get_db
 from app.models.post import Post
-from app.repositories import engagement_repository
+from app.repositories import engagement_repository, post_repository
 from app.schemas.comment import CommentCreate, CommentOut, CommentStatsOut
 from app.schemas.user import UserSummary
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -209,9 +209,94 @@ def reply_to_comment(
         content=comment.content,
         media_urls=comment.media_urls or [],
         created_at=comment.created_at,
+        edited_at=comment.edited_at,
         author=UserSummary.model_validate(author),
         like_count=0,
         comment_count=0,
         retweet_count=0,
         liked_by_me=False,
     )
+
+
+@router.patch("/{comment_id}", response_model=CommentOut)
+def edit_comment(
+    comment_id: int,
+    payload: CommentCreate,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> CommentOut:
+    """Edit a comment's content/media. Only the author may edit."""
+    parent = db.get(Post, comment_id)
+    if parent is not None and parent.reply_to_id is None:
+        # A top-level tweet is not a comment; edit it via /tweets.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="comment not found"
+        )
+    try:
+        comment = post_repository.update_post(
+            db,
+            post_id=comment_id,
+            user_id=current_user_id,
+            content=payload.content,
+            media_urls=payload.media_urls,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="comment not found"
+        )
+    except PermissionError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="you can only edit your own comments",
+        )
+
+    stats_rows = engagement_repository.list_comment_stats(
+        db, comment_ids=[comment_id], current_user_id=current_user_id
+    )
+    stats = stats_rows[0] if stats_rows else {
+        "like_count": 0,
+        "comment_count": 0,
+        "retweet_count": 0,
+        "liked_by_me": False,
+    }
+    return CommentOut(
+        id=comment.id,
+        tweet_id=comment.tweet_id,
+        parent_comment_id=comment.parent_comment_id,
+        content=comment.content,
+        media_urls=comment.media_urls or [],
+        created_at=comment.created_at,
+        edited_at=comment.edited_at,
+        author=UserSummary.model_validate(comment.author),
+        like_count=stats["like_count"],
+        comment_count=stats["comment_count"],
+        retweet_count=stats["retweet_count"],
+        liked_by_me=stats["liked_by_me"],
+    )
+
+
+@router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_comment(
+    comment_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """Delete a comment and its sub-thread. Only the author may delete."""
+    parent = db.get(Post, comment_id)
+    if parent is not None and parent.reply_to_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="comment not found"
+        )
+    try:
+        post_repository.delete_post(
+            db, post_id=comment_id, user_id=current_user_id
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="comment not found"
+        )
+    except PermissionError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="you can only delete your own comments",
+        )

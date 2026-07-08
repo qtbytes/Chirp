@@ -277,6 +277,10 @@ export function ProfileView({
                 tweet={tweet}
                 onOpen={() => navigate(`/tweet/${tweet.id}`)}
                 onTweetPatch={patchTweet}
+                currentUserId={currentUser.id}
+                onDeleted={(id) =>
+                  setTweets((current) => current.filter((item) => item.id !== id))
+                }
               />
             ))}
           </section>
@@ -306,9 +310,12 @@ export function ProfileView({
                     })
                   }
                   onTweetPatch={patchReplyParent}
+                  currentUserId={currentUser.id}
+                  onDeleted={() => void loadReplies()}
                 />
                 <CommentCard
                   comment={item.comment}
+                  currentUserId={currentUser.id}
                   onChanged={() => void loadReplies()}
                   onReplyCreated={() => void loadReplies()}
                 />
