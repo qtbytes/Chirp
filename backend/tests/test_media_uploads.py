@@ -106,6 +106,25 @@ def test_media_upload_rejects_non_image() -> None:
     assert response.status_code == 415
 
 
+def test_upload_video_and_attach_to_tweet(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+    client = TestClient(app)
+    _register(client, "alice")
+
+    response = client.post(
+        "/api/v1/media",
+        files={"file": ("clip.mp4", io.BytesIO(b"\x00\x00\x00\x18ftypmp42"), "video/mp4")},
+    )
+    assert response.status_code == 201
+    url = response.json()["url"]
+    assert url.endswith(".mp4")
+    assert (tmp_path / "media" / Path(url).name).exists()
+
+    created = client.post("/api/v1/tweets", json={"content": "watch", "media_urls": [url]})
+    assert created.status_code == 201
+    assert created.json()["media_urls"] == [url]
+
+
 def test_comment_with_media_round_trips(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
     client = TestClient(app)

@@ -27,6 +27,14 @@ export function resolveMediaUrl(path: string | null): string | null {
   return path.startsWith("http") ? path : `${BACKEND_ORIGIN}${path}`;
 }
 
+const VIDEO_EXTENSIONS = [".mp4", ".webm", ".mov"];
+
+/** Whether an uploaded media URL points at a video (vs. an image). */
+export function isVideoUrl(url: string): boolean {
+  const path = url.split("?", 1)[0].toLowerCase();
+  return VIDEO_EXTENSIONS.some((ext) => path.endsWith(ext));
+}
+
 /** The bold identity line: a user's chosen display name, or their handle. */
 export function displayName(user: {
   username: string;

@@ -1,9 +1,11 @@
 import { ChangeEvent, useRef, useState } from "react";
 import { ApiError, uploadMedia } from "./api";
 
-const MAX_MEDIA_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 export const MAX_MEDIA_ITEMS = 4;
-export const ACCEPTED_MEDIA = "image/jpeg,image/png,image/webp,image/gif";
+export const ACCEPTED_MEDIA =
+  "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime";
 
 function messageFrom(err: unknown): string {
   if (err instanceof ApiError || err instanceof Error) {
@@ -35,11 +37,17 @@ export function useMediaAttachment() {
     const toUpload: File[] = [];
     for (const file of files) {
       if (remaining <= 0) {
-        setError(`You can attach up to ${MAX_MEDIA_ITEMS} images.`);
+        setError(`You can attach up to ${MAX_MEDIA_ITEMS} files.`);
         break;
       }
-      if (file.size > MAX_MEDIA_BYTES) {
-        setError("Each image must be 5 MB or smaller.");
+      const isVideo = file.type.startsWith("video/");
+      const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+      if (file.size > maxBytes) {
+        setError(
+          isVideo
+            ? "Each video must be 50 MB or smaller."
+            : "Each image must be 5 MB or smaller.",
+        );
         continue;
       }
       toUpload.push(file);

@@ -5,6 +5,7 @@ import {
   ApiError,
   createComment,
   displayName,
+  isVideoUrl,
   replyToComment,
   resolveMediaUrl,
   retweetComment,
@@ -145,9 +146,28 @@ export function RichContent({ text }: { text: string }) {
   );
 }
 
-// Renders a tweet/comment's uploaded images (media_urls), resolved to absolute
-// URLs, each clickable through to the full image. Lays out as a 2-column grid
-// when there is more than one image.
+// A native <video> player limited to the controls we want: play/pause,
+// timeline + duration, volume, and fullscreen. Picture-in-picture and the
+// settings/download menu are intentionally suppressed. Before it is played it
+// shows the first frame (preload="metadata") with the browser's play overlay.
+function VideoPlayer({ src, className }: { src: string; className: string }) {
+  return (
+    <video
+      className={className}
+      src={src}
+      controls
+      playsInline
+      preload="metadata"
+      disablePictureInPicture
+      controlsList="nodownload noplaybackrate noremoteplayback"
+      onClick={(event) => event.stopPropagation()}
+    />
+  );
+}
+
+// Renders a tweet/comment's uploaded media (media_urls), resolved to absolute
+// URLs. Images are clickable through to the full file; videos play inline.
+// Lays out as a 2-column grid when there is more than one item.
 export function MediaGallery({ urls }: { urls: string[] }) {
   const items = urls
     .map((url) => resolveMediaUrl(url))
@@ -157,35 +177,46 @@ export function MediaGallery({ urls }: { urls: string[] }) {
   }
 
   if (items.length === 1) {
+    const src = items[0];
     return (
       <div className="tweet-media-gallery">
-        <a
-          className="tweet-media-link"
-          href={items[0]}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <img className="tweet-media-image" src={items[0]} alt="" loading="lazy" />
-        </a>
+        {isVideoUrl(src) ? (
+          <VideoPlayer src={src} className="tweet-media-video" />
+        ) : (
+          <a
+            className="tweet-media-link"
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <img className="tweet-media-image" src={src} alt="" loading="lazy" />
+          </a>
+        )}
       </div>
     );
   }
 
   return (
     <div className="media-grid" data-count={items.length}>
-      {items.map((src) => (
-        <a
-          key={src}
-          className="media-grid__cell"
-          href={src}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <img src={src} alt="" loading="lazy" />
-        </a>
-      ))}
+      {items.map((src) =>
+        isVideoUrl(src) ? (
+          <div key={src} className="media-grid__cell">
+            <VideoPlayer src={src} className="media-grid__video" />
+          </div>
+        ) : (
+          <a
+            key={src}
+            className="media-grid__cell"
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <img src={src} alt="" loading="lazy" />
+          </a>
+        ),
+      )}
     </div>
   );
 }
@@ -210,8 +241,8 @@ export function MediaButton({ attachment }: { attachment: MediaAttachment }) {
           attachment.openPicker();
         }}
         disabled={attachment.atLimit}
-        aria-label="Add image"
-        title={attachment.atLimit ? "Image limit reached" : "Add image"}
+        aria-label="Add photo or video"
+        title={attachment.atLimit ? "Media limit reached" : "Add photo or video"}
       >
         <ImageIcon size={20} aria-hidden="true" />
       </button>
@@ -240,7 +271,7 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
         event.stopPropagation();
         attachment.remove(url);
       }}
-      aria-label="Remove image"
+      aria-label="Remove media"
     >
       <X size={16} aria-hidden="true" />
     </button>
@@ -251,11 +282,18 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
       {count === 1 ? (
         <div className="composer-media-item">
           {resolveMediaUrl(attachment.mediaUrls[0]) ? (
-            <img
-              className="composer-media-image"
-              src={resolveMediaUrl(attachment.mediaUrls[0])!}
-              alt="Attached preview"
-            />
+            isVideoUrl(attachment.mediaUrls[0]) ? (
+              <VideoPlayer
+                src={resolveMediaUrl(attachment.mediaUrls[0])!}
+                className="composer-media-image"
+              />
+            ) : (
+              <img
+                className="composer-media-image"
+                src={resolveMediaUrl(attachment.mediaUrls[0])!}
+                alt="Attached preview"
+              />
+            )
           ) : null}
           {removeButton(attachment.mediaUrls[0])}
         </div>
@@ -265,7 +303,13 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
             const src = resolveMediaUrl(url);
             return (
               <div className="media-grid__cell" key={url}>
-                {src ? <img src={src} alt="Attached preview" /> : null}
+                {src ? (
+                  isVideoUrl(url) ? (
+                    <VideoPlayer src={src} className="media-grid__video" />
+                  ) : (
+                    <img src={src} alt="Attached preview" />
+                  )
+                ) : null}
                 {removeButton(url)}
               </div>
             );
