@@ -10,7 +10,6 @@ from app.models import (  # noqa: F401
     Like,
     Notification,
     Post,
-    Retweet,
     User,
 )
 from fastapi import FastAPI

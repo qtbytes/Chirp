@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 class NotificationOut(BaseModel):
     id: int
-    # like | retweet | comment | reply | comment_like | comment_retweet | follow
+    # like | retweet (a quote of the recipient's post) | comment | reply | follow
     type: str
     actor: UserSummary
     tweet_id: int | None = None

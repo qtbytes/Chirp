@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.feed import FeedItem
 from app.models.like import Like
 from app.models.post import Post
-from app.models.retweet import Retweet
+from app.repositories.tweet_repository import _quote_counts_subquery
 
 
 def bulk_insert_feed_items(
@@ -95,11 +95,7 @@ def list_feed_tweets(
         .group_by(Post.root_id)
         .subquery()
     )
-    retweet_counts = (
-        select(Retweet.post_id, func.count().label("retweet_count"))
-        .group_by(Retweet.post_id)
-        .subquery()
-    )
+    retweet_counts = _quote_counts_subquery()
 
     stmt = (
         select(

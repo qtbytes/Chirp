@@ -13,7 +13,8 @@ def utcnow() -> datetime:
 class Notification(Base):
     """
     A single notification delivered to a user (the recipient) about something an
-    actor did to their content: like, retweet, comment, reply, or follow.
+    actor did to their content: like, retweet (a quote of their post), comment,
+    reply, or follow.
     """
 
     __tablename__ = "notifications"

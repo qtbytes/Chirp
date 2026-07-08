@@ -15,7 +15,6 @@ from app.models.feed import FeedItem
 from app.models.like import Like
 from app.models.notification import Notification
 from app.models.post import Post
-from app.models.retweet import Retweet
 
 
 def _utcnow() -> datetime:
@@ -79,9 +78,11 @@ def delete_post(db: Session, post_id: int, user_id: int) -> None:
     """
     Delete a post and its whole reply subtree. Only the author may delete.
 
-    Also removes the engagement (likes/retweets), fan-out feed rows, and
-    notifications that reference any deleted post, since SQLite here does not
-    enforce foreign keys and would otherwise leave orphaned rows.
+    Also removes the engagement (likes), fan-out feed rows, and notifications
+    that reference any deleted post, since SQLite here does not enforce foreign
+    keys and would otherwise leave orphaned rows. Quote posts that referenced a
+    deleted post keep their dangling ``quoted_post_id`` and simply render
+    without an embed.
     """
     post = db.get(Post, post_id)
     if post is None:
@@ -91,7 +92,6 @@ def delete_post(db: Session, post_id: int, user_id: int) -> None:
 
     ids = _collect_thread_ids(db, post_id)
     db.execute(delete(Like).where(Like.post_id.in_(ids)))
-    db.execute(delete(Retweet).where(Retweet.post_id.in_(ids)))
     db.execute(delete(FeedItem).where(FeedItem.post_id.in_(ids)))
     db.execute(delete(Notification).where(Notification.post_id.in_(ids)))
     db.execute(delete(Post).where(Post.id.in_(ids)))

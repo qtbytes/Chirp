@@ -109,8 +109,6 @@ export type NotificationType =
   | "retweet"
   | "comment"
   | "reply"
-  | "comment_like"
-  | "comment_retweet"
   | "follow";
 
 export type Notification = {

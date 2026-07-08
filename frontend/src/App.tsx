@@ -397,11 +397,9 @@ function PeopleRoute() {
 
 const NOTIFICATION_TEXT: Record<Notification["type"], string> = {
   like: "liked your tweet",
-  retweet: "retweeted your tweet",
+  retweet: "quoted your post",
   comment: "commented on your tweet",
   reply: "replied to your comment",
-  comment_like: "liked your comment",
-  comment_retweet: "retweeted your comment",
   follow: "followed you",
 };
 
@@ -409,7 +407,7 @@ function NotificationIcon({ type }: { type: Notification["type"] }) {
   if (type === "follow") {
     return <UserPlus size={16} className="notif-icon follow" aria-hidden="true" />;
   }
-  if (type === "retweet" || type === "comment_retweet") {
+  if (type === "retweet") {
     return <Repeat2 size={16} className="notif-icon retweet" aria-hidden="true" />;
   }
   if (type === "comment" || type === "reply") {
