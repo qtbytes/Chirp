@@ -66,11 +66,10 @@ import {
   MediaPreview,
   PostEditor,
   PostMenu,
+  PostBody,
   QuoteComposer,
   QuotedPostCard,
-  RichContent,
   TweetCard,
-  TweetLinkPreview,
   formatCompactDate,
   getErrorMessage,
   mergeCommentStats,
@@ -1088,10 +1087,9 @@ function TweetDetail({
             onCancel={() => setEditing(false)}
           />
         ) : (
-          <p><RichContent text={tweet.content} /></p>
+          <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
         )}
         {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
-        {tweet.media_urls.length === 0 ? <TweetLinkPreview text={tweet.content} /> : null}
         {tweet.quoted_post ? <QuotedPostCard post={tweet.quoted_post} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="tweet-actions detail-actions">

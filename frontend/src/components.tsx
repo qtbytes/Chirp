@@ -693,32 +693,10 @@ export function QuoteComposer({
   );
 }
 
-/**
- * A generic Open Graph "unfurl" card for a link. Fetches the preview lazily
- * (server-side unfurl, Redis-cached) and renders nothing until/unless one
- * exists, so a post with a bare link degrades to just the inline link.
- */
-export function LinkPreviewCard({ url }: { url: string }) {
-  const [preview, setPreview] = useState<LinkPreview | null>(null);
+/** The generic Open Graph "unfurl" card (presentational — data comes from PostBody). */
+function LinkPreviewCard({ preview }: { preview: LinkPreview }) {
   const [imageFailed, setImageFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setPreview(null);
-    setImageFailed(false);
-    void unfurlUrl(url).then((result) => {
-      if (!cancelled) {
-        setPreview(result);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [url]);
-
-  if (!preview) {
-    return null;
-  }
+  useEffect(() => setImageFailed(false), [preview.url]);
 
   return (
     <a
@@ -750,13 +728,66 @@ export function LinkPreviewCard({ url }: { url: string }) {
   );
 }
 
-/** Renders a link preview for the first previewable URL in a post's content. */
-export function TweetLinkPreview({ text }: { text: string }) {
-  const url = useMemo(() => firstPreviewableUrl(text), [text]);
-  if (!url) {
-    return null;
-  }
-  return <LinkPreviewCard url={url} />;
+/**
+ * Remove the previewed URL from the end of the text (Twitter hides the URL that
+ * produced the card). Only a trailing occurrence is stripped so a link in the
+ * middle of a sentence stays readable.
+ */
+function textWithoutTrailingUrl(text: string, url: string): string {
+  const trimmed = text.replace(/\s+$/, "");
+  return trimmed.endsWith(url)
+    ? trimmed.slice(0, trimmed.length - url.length).replace(/\s+$/, "")
+    : text;
+}
+
+/**
+ * Renders a post's text plus, when the first link has a preview, its unfurl
+ * card. The fetch is owned here so the text and card stay in sync: once a
+ * preview exists, the bare URL is dropped from the text (Twitter behaviour); if
+ * there is no preview, the URL just stays as an inline link.
+ */
+export function PostBody({
+  text,
+  enablePreview = true,
+}: {
+  text: string;
+  enablePreview?: boolean;
+}) {
+  const url = useMemo(
+    () => (enablePreview ? firstPreviewableUrl(text) : null),
+    [text, enablePreview],
+  );
+  const [preview, setPreview] = useState<LinkPreview | null>(null);
+
+  useEffect(() => {
+    if (!url) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    setPreview(null);
+    void unfurlUrl(url).then((result) => {
+      if (!cancelled) {
+        setPreview(result);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  const displayText = preview && url ? textWithoutTrailingUrl(text, url) : text;
+
+  return (
+    <>
+      {displayText.trim() ? (
+        <p>
+          <RichContent text={displayText} />
+        </p>
+      ) : null}
+      {preview ? <LinkPreviewCard preview={preview} /> : null}
+    </>
+  );
 }
 
 export function TweetCard({
@@ -927,10 +958,9 @@ export function TweetCard({
             onCancel={() => setEditing(false)}
           />
         ) : (
-          <p><RichContent text={tweet.content} /></p>
+          <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
         )}
         {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
-        {tweet.media_urls.length === 0 ? <TweetLinkPreview text={tweet.content} /> : null}
         {tweet.quoted_post ? <QuotedPostCard post={tweet.quoted_post} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions">
@@ -1178,12 +1208,12 @@ export function CommentCard({
             onCancel={() => setEditing(false)}
           />
         ) : (
-          <p><RichContent text={localComment.content} /></p>
+          <PostBody
+            text={localComment.content}
+            enablePreview={localComment.media_urls.length === 0}
+          />
         )}
         {localComment.media_urls.length > 0 ? <MediaGallery urls={localComment.media_urls} /> : null}
-        {localComment.media_urls.length === 0 ? (
-          <TweetLinkPreview text={localComment.content} />
-        ) : null}
         {localComment.quoted_post ? (
           <QuotedPostCard post={localComment.quoted_post} />
         ) : null}
