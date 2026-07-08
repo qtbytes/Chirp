@@ -1,12 +1,22 @@
+import tempfile
 from collections.abc import Generator
 
 import pytest
 from app.core.config import settings
-from app.db.database import Base, get_db
-from main import app
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+
+# Redirect uploads to a throwaway directory BEFORE importing `main` (which
+# mounts StaticFiles against settings.uploads_dir at import time). Without this,
+# the avatar tests write to the real ./uploads and — because a fresh test user
+# can get the same id as a real user — the upload endpoint's "remove previous
+# avatar" glob deletes real dev avatar files. See test_avatar_* in
+# test_profile_api.py.
+settings.uploads_dir = tempfile.mkdtemp(prefix="chirp-test-uploads-")
+
+from app.db.database import Base, get_db  # noqa: E402
+from main import app  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
 
 engine = create_engine(
     "sqlite://",
