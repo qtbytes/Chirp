@@ -70,6 +70,7 @@ import {
   QuotedPostCard,
   RichContent,
   TweetCard,
+  TweetLinkPreview,
   formatCompactDate,
   getErrorMessage,
   mergeCommentStats,
@@ -1090,6 +1091,7 @@ function TweetDetail({
           <p><RichContent text={tweet.content} /></p>
         )}
         {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
+        {tweet.media_urls.length === 0 ? <TweetLinkPreview text={tweet.content} /> : null}
         {tweet.quoted_post ? <QuotedPostCard post={tweet.quoted_post} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="tweet-actions detail-actions">

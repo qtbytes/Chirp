@@ -3,6 +3,7 @@ import type {
   CommentLikeToggleResult,
   CommentStats,
   LikeToggleResult,
+  LinkPreview,
   Notification,
   ProfileRepliesPage,
   ProfileTweetsPage,
@@ -247,6 +248,20 @@ export function unfollowUser(userId: number): Promise<void> {
 
 export function getTweet(tweetId: number): Promise<Tweet> {
   return request<Tweet>(`/tweets/${tweetId}`);
+}
+
+/**
+ * Unfurl a URL into a preview card. Returns null when there is no usable
+ * preview (unreachable, blocked, or no metadata) so callers just show the link.
+ */
+export async function unfurlUrl(url: string): Promise<LinkPreview | null> {
+  try {
+    return await request<LinkPreview>(
+      `/link-preview?url=${encodeURIComponent(url)}`,
+    );
+  } catch {
+    return null;
+  }
 }
 
 export function getUserProfile(username: string): Promise<UserProfile> {

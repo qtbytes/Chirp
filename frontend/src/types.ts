@@ -19,6 +19,14 @@ export type QuotedPost = {
   author: UserSummary;
 };
 
+export type LinkPreview = {
+  url: string;
+  title: string;
+  description: string | null;
+  image: string | null;
+  site_name: string | null;
+};
+
 export type Tweet = {
   id: number;
   content: string;

@@ -3,6 +3,7 @@ from app.api.routes import (
     comments,
     follows,
     interactions,
+    link_preview,
     media,
     notifications,
     timeline,
@@ -21,3 +22,4 @@ api_router.include_router(interactions.router)
 api_router.include_router(timeline.router)
 api_router.include_router(media.router)
 api_router.include_router(notifications.router)
+api_router.include_router(link_preview.router)

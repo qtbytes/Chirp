@@ -25,10 +25,12 @@ import {
   resolveMediaUrl,
   toggleCommentLike,
   toggleTweetLike,
+  unfurlUrl,
 } from "./api";
 import type {
   Comment,
   CommentStats,
+  LinkPreview,
   QuotedPost,
   Tweet,
   TweetStats,
@@ -70,6 +72,26 @@ function isImageUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * The first URL in some text worth unfurling into a preview card — i.e. an
+ * http(s) link that isn't itself an image or video (those already render
+ * inline). Returns null when there is none. Mirrors Twitter: one card per post.
+ */
+export function firstPreviewableUrl(text: string): string | null {
+  const matches = text.match(URL_REGEX);
+  if (!matches) {
+    return null;
+  }
+  for (const raw of matches) {
+    const url = raw.replace(TRAILING_PUNCTUATION, "");
+    if (isImageUrl(url) || isVideoUrl(url)) {
+      continue;
+    }
+    return url;
+  }
+  return null;
 }
 
 type ContentToken = { type: "text" | "url"; value: string };
@@ -671,6 +693,72 @@ export function QuoteComposer({
   );
 }
 
+/**
+ * A generic Open Graph "unfurl" card for a link. Fetches the preview lazily
+ * (server-side unfurl, Redis-cached) and renders nothing until/unless one
+ * exists, so a post with a bare link degrades to just the inline link.
+ */
+export function LinkPreviewCard({ url }: { url: string }) {
+  const [preview, setPreview] = useState<LinkPreview | null>(null);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreview(null);
+    setImageFailed(false);
+    void unfurlUrl(url).then((result) => {
+      if (!cancelled) {
+        setPreview(result);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (!preview) {
+    return null;
+  }
+
+  return (
+    <a
+      className="link-preview"
+      href={preview.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(event) => event.stopPropagation()}
+    >
+      {preview.image && !imageFailed ? (
+        <img
+          className="link-preview-image"
+          src={preview.image}
+          alt=""
+          loading="lazy"
+          onError={() => setImageFailed(true)}
+        />
+      ) : null}
+      <div className="link-preview-body">
+        {preview.site_name ? (
+          <span className="link-preview-site">{preview.site_name}</span>
+        ) : null}
+        <strong className="link-preview-title">{preview.title}</strong>
+        {preview.description ? (
+          <span className="link-preview-desc">{preview.description}</span>
+        ) : null}
+      </div>
+    </a>
+  );
+}
+
+/** Renders a link preview for the first previewable URL in a post's content. */
+export function TweetLinkPreview({ text }: { text: string }) {
+  const url = useMemo(() => firstPreviewableUrl(text), [text]);
+  if (!url) {
+    return null;
+  }
+  return <LinkPreviewCard url={url} />;
+}
+
 export function TweetCard({
   tweet,
   onOpen,
@@ -842,6 +930,7 @@ export function TweetCard({
           <p><RichContent text={tweet.content} /></p>
         )}
         {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
+        {tweet.media_urls.length === 0 ? <TweetLinkPreview text={tweet.content} /> : null}
         {tweet.quoted_post ? <QuotedPostCard post={tweet.quoted_post} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions">
@@ -1092,6 +1181,9 @@ export function CommentCard({
           <p><RichContent text={localComment.content} /></p>
         )}
         {localComment.media_urls.length > 0 ? <MediaGallery urls={localComment.media_urls} /> : null}
+        {localComment.media_urls.length === 0 ? (
+          <TweetLinkPreview text={localComment.content} />
+        ) : null}
         {localComment.quoted_post ? (
           <QuotedPostCard post={localComment.quoted_post} />
         ) : null}
