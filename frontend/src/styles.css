@@ -1406,7 +1406,13 @@ button.rail-link:disabled:hover {
 
 /* Profile "Replies" tab: each entry stacks the real parent post (a clickable
    tweet card) directly above the user's reply (a comment card). Their own
-   bottom borders provide the divider between and after the pair. */
+   bottom borders provide the divider between and after the pair. The reply is
+   always indented under its parent — including direct replies to a tweet, which
+   otherwise lack the `.reply` styling since they have no parent comment. */
+.profile-reply .comment-card {
+  padding-left: 38px;
+  background: color-mix(in srgb, var(--soft) 34%, transparent);
+}
 
 /* Brief flash on the post scrolled to when opening a thread from the replies
    tab, so the user can spot which post the reply was made to. */
