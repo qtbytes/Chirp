@@ -285,6 +285,33 @@ def test_comment_stats_endpoint_returns_counts_and_current_user_state() -> None:
     ]
 
 
+def test_thread_comments_are_nested_in_preorder() -> None:
+    client = TestClient(app)
+    client.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    tweet = client.post("/api/v1/tweets", json={"content": "root"}).json()
+
+    c1 = client.post(
+        f"/api/v1/tweets/{tweet['id']}/comments", json={"content": "c1"}
+    ).json()
+    c2 = client.post(
+        f"/api/v1/tweets/{tweet['id']}/comments", json={"content": "c2"}
+    ).json()
+    # A reply to c1, created AFTER the later top-level c2.
+    client.post(
+        f"/api/v1/comments/{c1['id']}/comments", json={"content": "reply-to-c1"}
+    )
+
+    listed = client.get(f"/api/v1/tweets/{tweet['id']}/comments").json()
+    # Nested pre-order: the reply nests directly under c1, before the later c2,
+    # rather than at the chronological end.
+    assert [c["content"] for c in listed] == ["c1", "reply-to-c1", "c2"]
+    reply_item = next(c for c in listed if c["content"] == "reply-to-c1")
+    assert reply_item["parent_comment_id"] == c1["id"]
+
+
 def test_comment_interactions_update_comment_counts() -> None:
     alice = TestClient(app)
     bob = TestClient(app)

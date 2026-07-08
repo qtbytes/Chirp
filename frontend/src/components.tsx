@@ -786,11 +786,13 @@ export function CommentCard({
   onChanged,
   onReplyCreated,
   currentUserId,
+  depth = 0,
 }: {
   comment: Comment;
   onChanged: () => void;
   onReplyCreated: () => void;
   currentUserId: number;
+  depth?: number;
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [reply, setReply] = useState("");
@@ -905,6 +907,7 @@ export function CommentCard({
     <article
       id={`post-${localComment.id}`}
       className={localComment.parent_comment_id ? "comment-card reply" : "comment-card"}
+      style={depth > 0 ? { paddingLeft: 18 + Math.min(depth, 8) * 22 } : undefined}
     >
       <Link
         to={`/${encodeURIComponent(localComment.author.username)}`}

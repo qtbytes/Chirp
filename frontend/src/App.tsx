@@ -917,6 +917,20 @@ function TweetDetail({
     [comments],
   );
 
+  // Nesting depth per comment. Comments arrive in thread (pre-order) order, so
+  // a comment's parent always precedes it and its depth is already known.
+  const depthByCommentId = useMemo(() => {
+    const depths = new Map<number, number>();
+    for (const item of comments) {
+      const depth =
+        item.parent_comment_id == null
+          ? 0
+          : (depths.get(item.parent_comment_id) ?? 0) + 1;
+      depths.set(item.id, depth);
+    }
+    return depths;
+  }, [comments]);
+
   const displayDate = useMemo(() => {
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: "medium",
@@ -1155,6 +1169,7 @@ function TweetDetail({
             key={item.id}
             comment={item}
             currentUserId={currentUserId}
+            depth={depthByCommentId.get(item.id) ?? 0}
             onChanged={() => {
               void loadTweetComments();
             }}

@@ -250,7 +250,14 @@ def list_comments_by_tweet(
     limit: int = 20,
     current_user_id: int | None = None,
 ) -> list[tuple[Post, User, int, int, int, bool]]:
-    """Return a tweet's whole-thread comments (oldest first) with authors."""
+    """
+    Return a tweet's whole-thread comments as a nested thread.
+
+    Comments are ordered depth-first (pre-order): each reply immediately follows
+    the comment it replies to, and siblings stay in creation order. This lets the
+    UI indent each comment under its parent instead of showing a flat, purely
+    chronological list.
+    """
     tweet = db.get(Post, tweet_id)
     if tweet is None or tweet.reply_to_id is not None:
         raise ValueError("tweet not found")
@@ -288,13 +295,30 @@ def list_comments_by_tweet(
         .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
         .where(Post.root_id == tweet_id, Post.id != tweet_id)
         .order_by(Post.created_at.asc(), Post.id.asc())
-        .limit(limit)
     )
     rows = db.execute(stmt).all()
 
+    # Group each comment under its parent (reply_to_id); a top-level comment's
+    # parent is the tweet itself. Siblings keep the SQL creation order.
+    rows_by_id: dict[int, tuple] = {}
+    children_by_parent: dict[int, list[int]] = {}
+    for row in rows:
+        post = row[0]
+        rows_by_id[post.id] = row
+        children_by_parent.setdefault(post.reply_to_id, []).append(post.id)
+
+    # Depth-first pre-order walk starting from the tweet's direct replies.
+    ordered: list[tuple] = []
+    stack = list(reversed(children_by_parent.get(tweet_id, [])))
+    while stack and len(ordered) < limit:
+        comment_id = stack.pop()
+        ordered.append(rows_by_id[comment_id])
+        for child_id in reversed(children_by_parent.get(comment_id, [])):
+            stack.append(child_id)
+
     liked_ids: set[int] = set()
     if current_user_id is not None:
-        comment_ids = [post.id for post, *_ in rows]
+        comment_ids = [row[0].id for row in ordered]
         if comment_ids:
             liked_ids = {
                 post_id
@@ -315,7 +339,7 @@ def list_comments_by_tweet(
             int(retweet_count),
             post.id in liked_ids,
         )
-        for post, user, like_count, comment_count, retweet_count in rows
+        for post, user, like_count, comment_count, retweet_count in ordered
     ]
 
 
