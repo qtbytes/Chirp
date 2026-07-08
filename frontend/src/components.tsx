@@ -598,19 +598,20 @@ export function QuoteComposer({
     setContent,
     280,
   );
+  const media = useMediaAttachment();
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
   const remaining = 280 - content.length;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (posting || remaining < 0) {
+    if (posting || remaining < 0 || media.uploading) {
       return;
     }
     setPosting(true);
     setError("");
     try {
-      const tweet = await createTweet(content.trim(), [], quoted.id);
+      const tweet = await createTweet(content.trim(), media.mediaUrls, quoted.id);
       onQuoted?.(tweet);
       onClose();
     } catch (err) {
@@ -648,14 +649,19 @@ export function QuoteComposer({
             aria-label="Quote comment"
             autoFocus
           />
+          <MediaPreview attachment={media} />
           <QuotedPostCard post={quoted} preview />
           {error ? <p className="form-error">{error}</p> : null}
           <div className="composer-actions">
             <div className="composer-tools">
               <EmojiPicker onSelect={insertEmoji} />
+              <MediaButton attachment={media} />
             </div>
             <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
-            <button className="primary-button compact" disabled={posting || remaining < 0}>
+            <button
+              className="primary-button compact"
+              disabled={posting || remaining < 0 || media.uploading}
+            >
               {posting ? "Posting…" : "Post"}
             </button>
           </div>
