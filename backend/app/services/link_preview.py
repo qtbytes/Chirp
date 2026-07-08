@@ -20,6 +20,7 @@ URLs *server-side*, this module:
 """
 
 import ipaddress
+import re
 import socket
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
@@ -244,6 +245,34 @@ def _oembed_endpoint(url: str) -> str | None:
     return _OEMBED_PROVIDERS.get(host)
 
 
+# YouTube thumbnails come as .../vi/<id>/hqdefault.jpg (480x360). The same path
+# with maxresdefault.jpg is 1280x720 — when it exists (not every video has it).
+_YT_THUMB_RE = re.compile(r"^(https?://i\.ytimg\.com/vi/[A-Za-z0-9_-]+/)[^/]+$")
+
+
+def _url_returns_image(url: str) -> bool:
+    """True if ``url`` responds 200 with an image content-type."""
+    try:
+        with httpx.Client(**_client_kwargs(follow_redirects=True)) as client:
+            with client.stream("GET", url) as response:
+                return response.status_code == 200 and "image" in response.headers.get(
+                    "content-type", ""
+                )
+    except httpx.HTTPError:
+        return False
+
+
+def _best_thumbnail(thumbnail_url: str | None) -> str | None:
+    """Upgrade a YouTube thumbnail to maxres when that file actually exists."""
+    if not thumbnail_url:
+        return thumbnail_url
+    match = _YT_THUMB_RE.match(thumbnail_url)
+    if not match:
+        return thumbnail_url
+    maxres = f"{match.group(1)}maxresdefault.jpg"
+    return maxres if _url_returns_image(maxres) else thumbnail_url
+
+
 def _fetch_via_oembed(url: str, endpoint: str) -> LinkPreviewOut | None:
     """
     Build a card from a provider's oEmbed JSON. The endpoint is a fixed, trusted
@@ -264,7 +293,7 @@ def _fetch_via_oembed(url: str, endpoint: str) -> LinkPreviewOut | None:
     title = data.get("title")
     if not title:
         return None
-    image = _absolute_http_url(data.get("thumbnail_url"), endpoint)
+    image = _best_thumbnail(_absolute_http_url(data.get("thumbnail_url"), endpoint))
     site_name = data.get("provider_name") or urlparse(url).hostname
     return LinkPreviewOut(
         url=url,

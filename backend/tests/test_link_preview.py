@@ -88,6 +88,29 @@ def test_link_preview_prefers_oembed_for_known_providers(monkeypatch) -> None:
     assert body["site_name"] == "YouTube"
 
 
+def test_best_thumbnail_upgrades_youtube_when_maxres_exists(monkeypatch) -> None:
+    hq = "https://i.ytimg.com/vi/sRGT90fqh4g/hqdefault.jpg"
+
+    # Non-YouTube thumbnails are left untouched (and never trigger a request).
+    monkeypatch.setattr(
+        link_preview_service,
+        "_url_returns_image",
+        lambda url: (_ for _ in ()).throw(AssertionError("should not check")),
+    )
+    assert link_preview_service._best_thumbnail("https://x.com/cover.png") == (
+        "https://x.com/cover.png"
+    )
+
+    # Upgrade to maxres only when that file actually exists.
+    monkeypatch.setattr(link_preview_service, "_url_returns_image", lambda url: True)
+    assert link_preview_service._best_thumbnail(hq) == (
+        "https://i.ytimg.com/vi/sRGT90fqh4g/maxresdefault.jpg"
+    )
+
+    monkeypatch.setattr(link_preview_service, "_url_returns_image", lambda url: False)
+    assert link_preview_service._best_thumbnail(hq) == hq
+
+
 def test_link_preview_without_metadata_returns_404(monkeypatch) -> None:
     monkeypatch.setattr(
         link_preview_service,
