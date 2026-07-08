@@ -77,6 +77,7 @@ import { useMediaAttachment } from "./useMediaAttachment";
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
 type LayoutContext = {
+  currentUser: UserSummary;
   refreshToken: number;
   onDiscoveryChanged: () => void;
   refreshUnread: () => void;
@@ -359,7 +360,7 @@ function AppLayout({
 
       <main className="feed-column">
         <Outlet
-          context={{ refreshToken, onDiscoveryChanged, refreshUnread } satisfies LayoutContext}
+          context={{ currentUser, refreshToken, onDiscoveryChanged, refreshUnread } satisfies LayoutContext}
         />
       </main>
 
@@ -502,7 +503,7 @@ function NotificationsView() {
 }
 
 function HomeView() {
-  const { refreshToken } = useOutletContext<LayoutContext>();
+  const { currentUser, refreshToken } = useOutletContext<LayoutContext>();
   const navigate = useNavigate();
   const location = useLocation();
   const activeTab: TimelineKind = location.pathname === "/following" ? "following" : "for-you";
@@ -632,7 +633,7 @@ function HomeView() {
         </div>
       </header>
 
-      <Composer onPosted={insertPostedTweet} />
+      <Composer currentUser={currentUser} onPosted={insertPostedTweet} />
 
       {feedError ? <div className="status-panel error">{feedError}</div> : null}
       {!loadingFeed && tweets.length === 0 && !feedError ? (
@@ -762,7 +763,13 @@ function ThemeToggle({
   );
 }
 
-function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
+function Composer({
+  currentUser,
+  onPosted,
+}: {
+  currentUser: UserSummary;
+  onPosted: (tweet: Tweet) => void;
+}) {
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
@@ -793,24 +800,27 @@ function Composer({ onPosted }: { onPosted: (tweet: Tweet) => void }) {
 
   return (
     <form className="composer" onSubmit={handleSubmit}>
-      <textarea
-        {...fieldProps}
-        value={content}
-        maxLength={280}
-        placeholder="What is happening?"
-        aria-label="Tweet content"
-      />
-      <MediaPreview attachment={media} />
-      {error ? <p className="form-error">{error}</p> : null}
-      <div className="composer-actions">
-        <div className="composer-tools">
-          <EmojiPicker onSelect={insertEmoji} />
-          <MediaButton attachment={media} />
+      <Avatar user={currentUser} />
+      <div className="composer-body">
+        <textarea
+          {...fieldProps}
+          value={content}
+          maxLength={280}
+          placeholder="What is happening?"
+          aria-label="Tweet content"
+        />
+        <MediaPreview attachment={media} />
+        {error ? <p className="form-error">{error}</p> : null}
+        <div className="composer-actions">
+          <div className="composer-tools">
+            <EmojiPicker onSelect={insertEmoji} />
+            <MediaButton attachment={media} />
+          </div>
+          <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
+          <button className="primary-button compact" disabled={posting || media.uploading || !canPost}>
+            {posting ? "Posting..." : "Post"}
+          </button>
         </div>
-        <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
-        <button className="primary-button compact" disabled={posting || media.uploading || !canPost}>
-          {posting ? "Posting..." : "Post"}
-        </button>
       </div>
     </form>
   );

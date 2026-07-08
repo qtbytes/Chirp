@@ -549,8 +549,16 @@ button.rail-link:disabled:hover {
 }
 
 .composer {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
   padding: 18px;
   border-bottom: 1px solid var(--line);
+}
+
+.composer-body {
+  min-width: 0;
 }
 
 .composer-actions {
