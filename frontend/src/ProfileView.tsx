@@ -246,7 +246,7 @@ export function ProfileView({
 
       <div className="tab-list" role="tablist" aria-label="Profile content">
         <Link
-          to={`/profile/${encodeURIComponent(username)}`}
+          to={`/${encodeURIComponent(username)}`}
           className={activeTab === "tweets" ? "tab active" : "tab"}
           role="tab"
           aria-selected={activeTab === "tweets"}
@@ -254,7 +254,7 @@ export function ProfileView({
           Tweets
         </Link>
         <Link
-          to={`/profile/${encodeURIComponent(username)}/replies`}
+          to={`/${encodeURIComponent(username)}/replies`}
           className={activeTab === "replies" ? "tab active" : "tab"}
           role="tab"
           aria-selected={activeTab === "replies"}
@@ -307,7 +307,7 @@ export function ProfileView({
                   <p className="replying-to">
                     Replying to{" "}
                     <Link
-                      to={`/profile/${encodeURIComponent(item.parent_tweet.author.username)}`}
+                      to={`/${encodeURIComponent(item.parent_tweet.author.username)}`}
                     >
                       @{item.parent_tweet.author.username}
                     </Link>

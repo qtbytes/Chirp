@@ -420,7 +420,7 @@ export function TweetCard({
       aria-label={`Open tweet by ${tweet.author.username}`}
     >
       <Link
-        to={`/profile/${encodeURIComponent(tweet.author.username)}`}
+        to={`/${encodeURIComponent(tweet.author.username)}`}
         className="author-link"
         onClick={(event) => event.stopPropagation()}
         aria-label={`View profile of ${tweet.author.username}`}
@@ -436,7 +436,7 @@ export function TweetCard({
         ) : null}
         <header>
           <Link
-            to={`/profile/${encodeURIComponent(tweet.author.username)}`}
+            to={`/${encodeURIComponent(tweet.author.username)}`}
             className="author-link"
             onClick={(event) => event.stopPropagation()}
           >
@@ -595,7 +595,7 @@ export function CommentCard({
   return (
     <article className={localComment.parent_comment_id ? "comment-card reply" : "comment-card"}>
       <Link
-        to={`/profile/${encodeURIComponent(localComment.author.username)}`}
+        to={`/${encodeURIComponent(localComment.author.username)}`}
         className="author-link"
         onClick={(event) => event.stopPropagation()}
         aria-label={`View profile of ${localComment.author.username}`}
@@ -611,7 +611,7 @@ export function CommentCard({
         ) : null}
         <header>
           <Link
-            to={`/profile/${encodeURIComponent(localComment.author.username)}`}
+            to={`/${encodeURIComponent(localComment.author.username)}`}
             className="author-link"
             onClick={(event) => event.stopPropagation()}
           >

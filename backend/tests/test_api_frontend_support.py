@@ -32,6 +32,15 @@ def test_register_login_me_and_logout() -> None:
     assert login_response.json()["username"] == "alice"
 
 
+def test_register_rejects_reserved_username() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"username": "search", "password": "password123"},
+    )
+    assert response.status_code == 422
+
+
 def test_login_rejects_bad_password() -> None:
     client = TestClient(app)
     client.post(

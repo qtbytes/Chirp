@@ -1,11 +1,38 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# Usernames double as top-level profile URLs (e.g. /alice), so they must not
+# collide with existing or likely-future app routes.
+RESERVED_USERNAMES = frozenset(
+    {
+        "search",
+        "following",
+        "notifications",
+        "tweet",
+        "home",
+        "explore",
+        "settings",
+        "profile",
+        "login",
+        "logout",
+        "register",
+        "about",
+        "me",
+    }
+)
 
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def _reject_reserved_username(cls, value: str) -> str:
+        if value.lower() in RESERVED_USERNAMES:
+            raise ValueError("username is reserved")
+        return value
 
 
 class UserSummary(BaseModel):

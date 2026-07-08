@@ -166,15 +166,15 @@ function App() {
       >
         <Route path="/" element={<HomeView />} />
         <Route path="/following" element={<HomeView />} />
-        <Route path="/people" element={<PeopleRoute />} />
+        <Route path="/search" element={<PeopleRoute />} />
         <Route path="/notifications" element={<NotificationsView />} />
         <Route path="/tweet/:tweetId" element={<TweetDetailRoute />} />
         <Route
-          path="/profile/:username"
+          path="/:username"
           element={<ProfileView currentUser={currentUser} onCurrentUserChange={setCurrentUser} />}
         />
         <Route
-          path="/profile/:username/replies"
+          path="/:username/replies"
           element={<ProfileView currentUser={currentUser} onCurrentUserChange={setCurrentUser} />}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -281,11 +281,11 @@ function AppLayout({
   const [refreshToken, setRefreshToken] = useState(0);
   const [unread, setUnread] = useState(0);
   const location = useLocation();
-  const isPeopleRoute = location.pathname === "/people";
+  const isSearchRoute = location.pathname === "/search";
   const isNotificationsRoute = location.pathname === "/notifications";
   const isHomeRoute =
-    !isPeopleRoute && !isNotificationsRoute && !location.pathname.startsWith("/profile");
-  const hideDiscovery = isPeopleRoute || isNotificationsRoute;
+    location.pathname === "/" || location.pathname === "/following";
+  const hideDiscovery = isSearchRoute || isNotificationsRoute;
   const onDiscoveryChanged = () => setRefreshToken((value) => value + 1);
 
   const refreshUnread = useCallback(async () => {
@@ -319,7 +319,7 @@ function AppLayout({
             <Home size={22} aria-hidden="true" />
             <span>Home</span>
           </Link>
-          <Link className={isPeopleRoute ? "rail-link active" : "rail-link"} to="/people">
+          <Link className={isSearchRoute ? "rail-link active" : "rail-link"} to="/search">
             <Search size={22} aria-hidden="true" />
             <span>Search</span>
           </Link>
@@ -341,7 +341,7 @@ function AppLayout({
         </nav>
         <div className="rail-user">
           <Link
-            to={`/profile/${encodeURIComponent(currentUser.username)}`}
+            to={`/${encodeURIComponent(currentUser.username)}`}
             className="author-link"
           >
             <Avatar user={currentUser} size="small" />
@@ -469,7 +469,7 @@ function NotificationsView() {
           {items.map((notification) => {
             const to =
               notification.type === "follow"
-                ? `/profile/${encodeURIComponent(notification.actor.username)}`
+                ? `/${encodeURIComponent(notification.actor.username)}`
                 : notification.tweet_id !== null
                   ? `/tweet/${notification.tweet_id}`
                   : "#";
@@ -962,7 +962,7 @@ function TweetDetail({
       <article className="detail-tweet">
         <div className="detail-author">
           <Link
-            to={`/profile/${encodeURIComponent(tweet.author.username)}`}
+            to={`/${encodeURIComponent(tweet.author.username)}`}
             className="author-link"
             aria-label={`View profile of ${tweet.author.username}`}
           >
@@ -970,7 +970,7 @@ function TweetDetail({
           </Link>
           <div>
             <Link
-              to={`/profile/${encodeURIComponent(tweet.author.username)}`}
+              to={`/${encodeURIComponent(tweet.author.username)}`}
               className="author-link"
             >
               <strong>@{tweet.author.username}</strong>
@@ -1127,7 +1127,7 @@ function UserDiscoveryPanel({
         {users.map((user) => (
           <div className="user-row" key={user.id}>
             <Link
-              to={`/profile/${encodeURIComponent(user.username)}`}
+              to={`/${encodeURIComponent(user.username)}`}
               className="author-link user-row-link"
               aria-label={`View profile of ${user.username}`}
             >
