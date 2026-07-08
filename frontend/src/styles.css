@@ -817,18 +817,88 @@ button.rail-link:disabled:hover {
   min-width: 0;
 }
 
-.retweet-banner {
+/* Embedded quoted post (Twitter-style quote tweet) */
+.quoted-post {
+  margin: 10px 0 2px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.quoted-post[role="link"]:hover {
+  background: var(--hover);
+}
+
+.quoted-post-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 4px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.quoted-post-head strong {
+  font-weight: 700;
+}
+
+.quoted-post-head span {
   color: var(--muted);
 }
 
-.retweet-banner svg {
-  flex-shrink: 0;
+.quoted-post-head .avatar {
+  width: 20px;
+  height: 20px;
+  font-size: 0.7rem;
+}
+
+.quoted-post-content {
+  margin-top: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.quoted-post .tweet-media-gallery {
+  margin-top: 8px;
+}
+
+/* Quote composer modal */
+.quote-composer {
+  background: var(--panel);
+  border-radius: 16px;
+  width: min(560px, calc(100vw - 32px));
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.quote-composer-head {
+  display: flex;
+  padding: 8px 10px;
+}
+
+.quote-composer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.quote-composer-form textarea {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1.1rem;
+}
+
+.quote-composer-form .quoted-post {
+  cursor: default;
 }
 
 .tweet-body header {

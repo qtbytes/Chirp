@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Heart,
   Image as ImageIcon,
@@ -14,6 +14,7 @@ import {
 import {
   ApiError,
   createComment,
+  createTweet,
   deleteComment,
   deleteTweet,
   displayName,
@@ -22,12 +23,17 @@ import {
   isVideoUrl,
   replyToComment,
   resolveMediaUrl,
-  retweetComment,
-  retweetTweet,
   toggleCommentLike,
   toggleTweetLike,
 } from "./api";
-import type { Comment, CommentStats, Tweet, TweetStats, UserSummary } from "./types";
+import type {
+  Comment,
+  CommentStats,
+  QuotedPost,
+  Tweet,
+  TweetStats,
+  UserSummary,
+} from "./types";
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
 import { ACCEPTED_MEDIA, useMediaAttachment, type MediaAttachment } from "./useMediaAttachment";
@@ -519,18 +525,160 @@ export function PostEditor({
   );
 }
 
+/**
+ * The original post embedded inside a quote tweet, shown as a bordered card.
+ *
+ * In `preview` mode (inside the quote composer) it is inert; otherwise clicking
+ * it opens the quoted post.
+ */
+export function QuotedPostCard({
+  post,
+  preview = false,
+}: {
+  post: QuotedPost;
+  preview?: boolean;
+}) {
+  const navigate = useNavigate();
+  return (
+    <div
+      className="quoted-post"
+      role={preview ? undefined : "link"}
+      tabIndex={preview ? undefined : 0}
+      onClick={
+        preview
+          ? undefined
+          : (event) => {
+              event.stopPropagation();
+              navigate(`/tweet/${post.id}`);
+            }
+      }
+      onKeyDown={
+        preview
+          ? undefined
+          : (event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                navigate(`/tweet/${post.id}`);
+              }
+            }
+      }
+    >
+      <header className="quoted-post-head">
+        <Avatar user={post.author} size="small" />
+        <strong>{displayName(post.author)}</strong>
+        <span>@{post.author.username}</span>
+      </header>
+      {post.content ? (
+        <div className="quoted-post-content">
+          <RichContent text={post.content} />
+        </div>
+      ) : null}
+      {post.media_urls.length > 0 ? <MediaGallery urls={post.media_urls} /> : null}
+    </div>
+  );
+}
+
+/**
+ * Twitter-style quote composer: an optional comment plus the embedded original.
+ * Submitting creates a new top-level post that quotes `quoted`.
+ */
+export function QuoteComposer({
+  quoted,
+  onClose,
+  onQuoted,
+}: {
+  quoted: QuotedPost;
+  onClose: () => void;
+  onQuoted?: (tweet: Tweet) => void;
+}) {
+  const [content, setContent] = useState("");
+  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
+    content,
+    setContent,
+    280,
+  );
+  const [posting, setPosting] = useState(false);
+  const [error, setError] = useState("");
+  const remaining = 280 - content.length;
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (posting || remaining < 0) {
+      return;
+    }
+    setPosting(true);
+    setError("");
+    try {
+      const tweet = await createTweet(content.trim(), [], quoted.id);
+      onQuoted?.(tweet);
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="quote-composer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Quote post"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="quote-composer-head">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={20} aria-hidden="true" />
+          </button>
+        </div>
+        <form className="quote-composer-form" onSubmit={handleSubmit}>
+          <textarea
+            {...fieldProps}
+            value={content}
+            maxLength={280}
+            placeholder="Add a comment"
+            aria-label="Quote comment"
+            autoFocus
+          />
+          <QuotedPostCard post={quoted} preview />
+          {error ? <p className="form-error">{error}</p> : null}
+          <div className="composer-actions">
+            <div className="composer-tools">
+              <EmojiPicker onSelect={insertEmoji} />
+            </div>
+            <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
+            <button className="primary-button compact" disabled={posting || remaining < 0}>
+              {posting ? "Posting…" : "Post"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function TweetCard({
   tweet,
   onOpen,
   onTweetPatch,
   currentUserId,
   onDeleted,
+  onQuoted,
 }: {
   tweet: Tweet;
   onOpen: () => void;
   onTweetPatch: (tweetId: number, patch: Partial<Tweet>) => void;
   currentUserId: number;
   onDeleted: (tweetId: number) => void;
+  onQuoted?: (tweet: Tweet) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -573,7 +721,8 @@ export function TweetCard({
   const [comment, setComment] = useState("");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(comment, setComment, 1000);
   const media = useMediaAttachment();
-  const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
+  const [acting, setActing] = useState<"like" | "comment" | null>(null);
+  const [quoting, setQuoting] = useState(false);
   const [error, setError] = useState("");
   const displayDate = useMemo(() => {
     return new Intl.DateTimeFormat(undefined, {
@@ -584,19 +733,9 @@ export function TweetCard({
     }).format(parseBackendDate(tweet.created_at));
   }, [tweet.created_at]);
 
-  async function runRetweetAction() {
-    setActing("retweet");
-    setError("");
-    try {
-      const result = await retweetTweet(tweet.id);
-      if (result.created) {
-        onTweetPatch(tweet.id, { retweet_count: tweet.retweet_count + 1 });
-      }
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
+  function handleQuoted(created: Tweet) {
+    onTweetPatch(tweet.id, { retweet_count: tweet.retweet_count + 1 });
+    onQuoted?.(created);
   }
 
   async function toggleLikeAction() {
@@ -672,12 +811,6 @@ export function TweetCard({
         />
       ) : null}
       <div className="tweet-body">
-        {tweet.retweeted_by ? (
-          <p className="retweet-banner">
-            <Repeat2 size={14} aria-hidden="true" />
-            <span>{displayName(tweet.retweeted_by)} retweeted</span>
-          </p>
-        ) : null}
         <header>
           <Link
             to={`/${encodeURIComponent(tweet.author.username)}`}
@@ -703,6 +836,7 @@ export function TweetCard({
           <p><RichContent text={tweet.content} /></p>
         )}
         {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
+        {tweet.quoted_post ? <QuotedPostCard post={tweet.quoted_post} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions">
           <button
@@ -720,9 +854,9 @@ export function TweetCard({
             className="tweet-action retweet"
             onClick={(event) => {
               event.stopPropagation();
-              void runRetweetAction();
+              setQuoting(true);
             }}
-            disabled={acting === "retweet"}
+            aria-label="Quote"
           >
             <Repeat2 size={18} aria-hidden="true" />
             <span>{tweet.retweet_count}</span>
@@ -777,6 +911,13 @@ export function TweetCard({
           onCancel={() => setConfirmingDelete(false)}
         />
       ) : null}
+      {quoting ? (
+        <QuoteComposer
+          quoted={tweet}
+          onClose={() => setQuoting(false)}
+          onQuoted={handleQuoted}
+        />
+      ) : null}
     </article>
   );
 }
@@ -799,7 +940,8 @@ export function CommentCard({
   const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(reply, setReply, 1000);
   const media = useMediaAttachment();
   const [localComment, setLocalComment] = useState(comment);
-  const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
+  const [acting, setActing] = useState<"like" | "comment" | null>(null);
+  const [quoting, setQuoting] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -847,17 +989,11 @@ export function CommentCard({
     }
   }
 
-  async function runCommentRetweetAction(task: () => Promise<void>) {
-    setActing("retweet");
-    setError("");
-    try {
-      await task();
-      onChanged();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
+  function handleQuoted() {
+    setLocalComment((value) => ({
+      ...value,
+      retweet_count: value.retweet_count + 1,
+    }));
   }
 
   async function toggleCommentLikeAction() {
@@ -924,12 +1060,6 @@ export function CommentCard({
         />
       ) : null}
       <div className="comment-body">
-        {localComment.retweeted_by ? (
-          <p className="retweet-banner">
-            <Repeat2 size={14} aria-hidden="true" />
-            <span>{displayName(localComment.retweeted_by)} retweeted</span>
-          </p>
-        ) : null}
         <header>
           <Link
             to={`/${encodeURIComponent(localComment.author.username)}`}
@@ -956,6 +1086,9 @@ export function CommentCard({
           <p><RichContent text={localComment.content} /></p>
         )}
         {localComment.media_urls.length > 0 ? <MediaGallery urls={localComment.media_urls} /> : null}
+        {localComment.quoted_post ? (
+          <QuotedPostCard post={localComment.quoted_post} />
+        ) : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions comment-actions">
           <button
@@ -968,10 +1101,8 @@ export function CommentCard({
           </button>
           <button
             className="tweet-action retweet"
-            onClick={() =>
-              void runCommentRetweetAction(() => retweetComment(localComment.id))
-            }
-            disabled={acting === "retweet"}
+            onClick={() => setQuoting(true)}
+            aria-label="Quote"
           >
             <Repeat2 size={16} aria-hidden="true" />
             <span>{localComment.retweet_count}</span>
@@ -1021,6 +1152,13 @@ export function CommentCard({
           busy={deleting}
           onConfirm={() => void confirmDelete()}
           onCancel={() => setConfirmingDelete(false)}
+        />
+      ) : null}
+      {quoting ? (
+        <QuoteComposer
+          quoted={localComment}
+          onClose={() => setQuoting(false)}
+          onQuoted={handleQuoted}
         />
       ) : null}
     </article>

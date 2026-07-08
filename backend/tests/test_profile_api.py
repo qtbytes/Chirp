@@ -87,31 +87,38 @@ def test_user_tweets_newest_first_with_cursor() -> None:
     assert page2["next_cursor"] is None
 
 
-def test_profile_feed_includes_retweets() -> None:
+def test_profile_feed_includes_quotes() -> None:
     alice = TestClient(app)
     register(alice, "alice")
     bob = TestClient(app)
     register(bob, "bob")
 
-    # bob posts a tweet, alice posts her own, then alice retweets bob's
+    # bob posts a tweet, alice posts her own, then alice quotes bob's
     bob_tweet = bob.post("/api/v1/tweets", json={"content": "bob original"}).json()
     alice.post("/api/v1/tweets", json={"content": "alice own"})
-    assert alice.post(f"/api/v1/tweets/{bob_tweet['id']}/retweets").status_code == 201
+    assert (
+        alice.post(
+            "/api/v1/tweets",
+            json={"content": "quoting bob", "quoted_post_id": bob_tweet["id"]},
+        ).status_code
+        == 201
+    )
 
     items = alice.get("/api/v1/users/alice/tweets").json()["items"]
-    # the retweet is newest, so it surfaces first, marked as retweeted by alice
+    # the quote is a post by alice; newest first, embedding bob's tweet
     assert len(items) == 2
-    retweet_item = items[0]
-    assert retweet_item["content"] == "bob original"
-    assert retweet_item["author"]["username"] == "bob"
-    assert retweet_item["retweeted_by"]["username"] == "alice"
-    # alice's own tweet has no retweet marker
+    quote_item = items[0]
+    assert quote_item["content"] == "quoting bob"
+    assert quote_item["author"]["username"] == "alice"
+    assert quote_item["quoted_post"]["content"] == "bob original"
+    assert quote_item["quoted_post"]["author"]["username"] == "bob"
+    # alice's own plain tweet embeds nothing
     own_item = items[1]
     assert own_item["content"] == "alice own"
-    assert own_item["retweeted_by"] is None
+    assert own_item["quoted_post"] is None
 
 
-def test_home_timeline_shows_followee_retweets_once() -> None:
+def test_home_timeline_shows_followee_quotes() -> None:
     alice = TestClient(app)
     register(alice, "alice")
     bob = TestClient(app)
@@ -123,17 +130,22 @@ def test_home_timeline_shows_followee_retweets_once() -> None:
     alice.post(f"/api/v1/follows/{bob_id}")
     alice.post(f"/api/v1/follows/{carol_id}")
 
-    # carol posts, then bob retweets it
+    # carol posts, then bob quotes it
     carol_tweet = carol.post("/api/v1/tweets", json={"content": "carol says hi"}).json()
-    assert bob.post(f"/api/v1/tweets/{carol_tweet['id']}/retweets").status_code == 201
+    quote = bob.post(
+        "/api/v1/tweets",
+        json={"content": "bob quotes carol", "quoted_post_id": carol_tweet["id"]},
+    ).json()
 
     items = alice.get("/api/v1/timeline/home").json()["items"]
-    # even though alice follows both the author and the retweeter, the tweet
-    # appears once — surfaced as bob's retweet (the most recent activity)
-    matching = [item for item in items if item["id"] == carol_tweet["id"]]
-    assert len(matching) == 1
-    assert matching[0]["retweeted_by"]["username"] == "bob"
-    assert matching[0]["author"]["username"] == "carol"
+    ids = [item["id"] for item in items]
+    # both carol's original and bob's quote of it are their own posts
+    assert carol_tweet["id"] in ids
+    assert quote["id"] in ids
+    quote_item = next(item for item in items if item["id"] == quote["id"])
+    assert quote_item["author"]["username"] == "bob"
+    assert quote_item["quoted_post"]["id"] == carol_tweet["id"]
+    assert quote_item["quoted_post"]["author"]["username"] == "carol"
 
 
 def test_user_tweets_error_paths() -> None:
@@ -174,7 +186,7 @@ def test_user_replies_include_parent_tweet() -> None:
     assert item["parent_tweet"]["comment_count"] == 1
 
 
-def test_replies_feed_includes_retweeted_comments() -> None:
+def test_quote_of_comment_embeds_comment_as_tweet() -> None:
     alice = TestClient(app)
     register(alice, "alice")
     bob = TestClient(app)
@@ -186,21 +198,22 @@ def test_replies_feed_includes_retweeted_comments() -> None:
         f"/api/v1/tweets/{tweet['id']}/comments", json={"content": "bob's reply"}
     ).json()
 
-    # alice retweets bob's comment
-    assert alice.post(f"/api/v1/comments/{comment['id']}/retweets").status_code in (
-        200,
-        201,
-        204,
+    # alice quotes bob's comment, producing a top-level tweet that embeds it
+    quote = alice.post(
+        "/api/v1/tweets",
+        json={"content": "quoting a comment", "quoted_post_id": comment["id"]},
     )
+    assert quote.status_code == 201
 
-    items = alice.get("/api/v1/users/alice/replies").json()["items"]
-    # the retweeted comment shows on alice's replies, authored by bob,
-    # marked as retweeted by alice
+    items = alice.get("/api/v1/users/alice/tweets").json()["items"]
     assert len(items) == 1
-    entry = items[0]["comment"]
-    assert entry["content"] == "bob's reply"
-    assert entry["author"]["username"] == "bob"
-    assert entry["retweeted_by"]["username"] == "alice"
+    entry = items[0]
+    assert entry["content"] == "quoting a comment"
+    assert entry["quoted_post"]["content"] == "bob's reply"
+    assert entry["quoted_post"]["author"]["username"] == "bob"
+
+    # a quote is not a reply, so alice's replies feed stays empty
+    assert alice.get("/api/v1/users/alice/replies").json()["items"] == []
 
 
 def test_user_replies_parent_is_immediate_not_root() -> None:

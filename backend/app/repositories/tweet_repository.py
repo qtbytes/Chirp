@@ -1,12 +1,28 @@
 from datetime import datetime
 
-from sqlalchemy import and_, func, literal, or_, select, union_all
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.like import Like
 from app.models.post import Post
-from app.models.retweet import Retweet
 from app.models.user import User
+from app.repositories.notification_repository import add_notification
+
+
+def _quote_counts_subquery(post_ids: list[int] | None = None):
+    """
+    Subquery counting how many quote posts reference each post.
+
+    A "retweet" is now a quote post (a post whose ``quoted_post_id`` points at
+    the original), so the retweet count is simply the number of such posts.
+    """
+    stmt = select(
+        Post.quoted_post_id.label("post_id"),
+        func.count().label("retweet_count"),
+    ).where(Post.quoted_post_id.is_not(None))
+    if post_ids is not None:
+        stmt = stmt.where(Post.quoted_post_id.in_(post_ids))
+    return stmt.group_by(Post.quoted_post_id).subquery()
 
 
 def create_tweet(
@@ -14,17 +30,43 @@ def create_tweet(
     author_id: int,
     content: str,
     media_urls: list[str] | None = None,
+    quoted_post_id: int | None = None,
 ) -> Post | None:
     """
     Create a top-level post (tweet) and reload it with author information.
 
     A top-level post is its own thread root, so ``root_id`` is set to the post's
-    own id after it is assigned.
+    own id after it is assigned. When ``quoted_post_id`` is given the post is a
+    quote (Twitter-style repost); the quoted author is notified.
+
+    Raises ``ValueError`` if ``quoted_post_id`` refers to a post that does not
+    exist.
     """
-    post = Post(user_id=author_id, content=content, media_urls=media_urls or None)
+    quoted = None
+    if quoted_post_id is not None:
+        quoted = db.get(Post, quoted_post_id)
+        if quoted is None:
+            raise ValueError("quoted post not found")
+
+    post = Post(
+        user_id=author_id,
+        content=content,
+        media_urls=media_urls or None,
+        quoted_post_id=quoted_post_id,
+    )
     db.add(post)
     db.flush()  # assign post.id
     post.root_id = post.id
+
+    if quoted is not None and quoted.user_id != author_id:
+        add_notification(
+            db,
+            recipient_id=quoted.user_id,
+            actor_id=author_id,
+            type="retweet",
+            post_id=post.id,
+        )
+
     db.commit()
 
     return db.scalar(
@@ -74,12 +116,7 @@ def list_tweet_stats(
         .subquery()
     )
     comment_counts = _thread_reply_counts(ordered_ids)
-    retweet_counts = (
-        select(Retweet.post_id, func.count().label("retweet_count"))
-        .where(Retweet.post_id.in_(ordered_ids))
-        .group_by(Retweet.post_id)
-        .subquery()
-    )
+    retweet_counts = _quote_counts_subquery(ordered_ids)
 
     rows = db.execute(
         select(
@@ -135,12 +172,7 @@ def _load_tweet_rows_by_ids(
         .subquery()
     )
     comment_counts = _thread_reply_counts(unique_ids)
-    retweet_counts = (
-        select(Retweet.post_id, func.count().label("retweet_count"))
-        .where(Retweet.post_id.in_(unique_ids))
-        .group_by(Retweet.post_id)
-        .subquery()
-    )
+    retweet_counts = _quote_counts_subquery(unique_ids)
 
     rows = db.execute(
         select(
@@ -189,107 +221,47 @@ def list_feed_with_retweets(
     cursor_id: int | None = None,
 ) -> list[dict]:
     """
-    Merge top-level tweets and retweeted tweets from a set of authors into one
-    feed, ordered by activity time. Retweeted *comments* are intentionally
-    excluded here — they belong to the replies feed — so only top-level posts
-    participate. Retweet rows carry ``"retweeted_by"`` (the retweeting User).
+    Return the given authors' top-level posts newest-first.
+
+    Quotes (Twitter-style reposts) are ordinary top-level posts now, so they
+    surface here naturally by their own ``created_at`` — no separate retweet
+    join is needed.
     """
     if not author_ids:
         return []
 
-    own = select(
-        Post.id.label("tweet_id"),
-        Post.created_at.label("activity_at"),
-        literal(None).label("retweeter_id"),
-    ).where(Post.user_id.in_(author_ids), Post.reply_to_id.is_(None))
-
-    retweeted = (
-        select(
-            Retweet.post_id.label("tweet_id"),
-            Retweet.created_at.label("activity_at"),
-            Retweet.user_id.label("retweeter_id"),
-        )
-        .join(Post, Post.id == Retweet.post_id)
-        .where(Retweet.user_id.in_(author_ids), Post.reply_to_id.is_(None))
-    )
-
-    return _assemble_activity_feed(
-        db, own, retweeted, limit, current_user_id, cursor_created_at, cursor_id
-    )
-
-
-def _assemble_activity_feed(
-    db: Session,
-    own_select,
-    retweet_select,
-    limit: int,
-    current_user_id: int | None,
-    cursor_created_at: datetime | None,
-    cursor_id: int | None,
-) -> list[dict]:
-    """Shared dedup + ordering + hydration for activity feeds (see callers)."""
-    combined = union_all(own_select, retweet_select).subquery()
-
-    ranked = select(
-        combined.c.tweet_id,
-        combined.c.activity_at,
-        combined.c.retweeter_id,
-        func.row_number()
-        .over(
-            partition_by=combined.c.tweet_id,
-            order_by=(
-                combined.c.activity_at.desc(),
-                combined.c.retweeter_id.desc(),
-            ),
-        )
-        .label("rn"),
-    ).subquery()
-
-    stmt = (
-        select(ranked)
-        .where(ranked.c.rn == 1)
-        .order_by(ranked.c.activity_at.desc(), ranked.c.tweet_id.desc())
+    ident_stmt = (
+        select(Post.id, Post.created_at)
+        .where(Post.user_id.in_(author_ids), Post.reply_to_id.is_(None))
+        .order_by(Post.created_at.desc(), Post.id.desc())
         .limit(limit + 1)
     )
     if cursor_created_at is not None and cursor_id is not None:
-        stmt = stmt.where(
+        ident_stmt = ident_stmt.where(
             or_(
-                ranked.c.activity_at < cursor_created_at,
+                Post.created_at < cursor_created_at,
                 and_(
-                    ranked.c.activity_at == cursor_created_at,
-                    ranked.c.tweet_id < cursor_id,
+                    Post.created_at == cursor_created_at,
+                    Post.id < cursor_id,
                 ),
             )
         )
 
-    ident_rows = db.execute(stmt).all()
+    ident_rows = db.execute(ident_stmt).all()
     tweet_rows = _load_tweet_rows_by_ids(
-        db, [row.tweet_id for row in ident_rows], current_user_id
+        db, [row_id for row_id, _ in ident_rows], current_user_id
     )
 
-    retweeter_ids = {r.retweeter_id for r in ident_rows if r.retweeter_id is not None}
-    retweeters_by_id: dict[int, User] = {}
-    if retweeter_ids:
-        retweeters_by_id = {
-            user.id: user
-            for user in db.scalars(
-                select(User).where(User.id.in_(retweeter_ids))
-            ).all()
-        }
-
     feed: list[dict] = []
-    for row in ident_rows:
-        base = tweet_rows.get(row.tweet_id)
+    for row_id, created_at in ident_rows:
+        base = tweet_rows.get(row_id)
         if base is None:
             continue
         feed.append(
             {
                 **base,
-                "retweeted_by": retweeters_by_id.get(row.retweeter_id)
-                if row.retweeter_id is not None
-                else None,
-                "cursor_created_at": row.activity_at,
-                "cursor_id": row.tweet_id,
+                "cursor_created_at": created_at,
+                "cursor_id": row_id,
             }
         )
     return feed
@@ -314,11 +286,7 @@ def list_for_you_tweets(
         .group_by(Post.root_id)
         .subquery()
     )
-    retweet_counts = (
-        select(Retweet.post_id, func.count().label("retweet_count"))
-        .group_by(Retweet.post_id)
-        .subquery()
-    )
+    retweet_counts = _quote_counts_subquery()
 
     stmt = (
         select(

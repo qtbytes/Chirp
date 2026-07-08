@@ -6,7 +6,6 @@ import type {
   Notification,
   ProfileRepliesPage,
   ProfileTweetsPage,
-  RetweetResult,
   TimelineKind,
   TimelinePage,
   Tweet,
@@ -123,10 +122,18 @@ export function uploadMedia(file: File): Promise<{ url: string }> {
   });
 }
 
-export function createTweet(content: string, mediaUrls: string[] = []): Promise<Tweet> {
+export function createTweet(
+  content: string,
+  mediaUrls: string[] = [],
+  quotedPostId?: number,
+): Promise<Tweet> {
   return request<Tweet>("/tweets", {
     method: "POST",
-    body: JSON.stringify({ content, media_urls: mediaUrls }),
+    body: JSON.stringify({
+      content,
+      media_urls: mediaUrls,
+      ...(quotedPostId != null ? { quoted_post_id: quotedPostId } : {}),
+    }),
   });
 }
 
@@ -207,14 +214,6 @@ export function replyToComment(
     method: "POST",
     body: JSON.stringify({ content, media_urls: mediaUrls }),
   });
-}
-
-export function retweetComment(commentId: number): Promise<void> {
-  return request<void>(`/comments/${commentId}/retweets`, { method: "POST" });
-}
-
-export function retweetTweet(tweetId: number): Promise<RetweetResult> {
-  return request<RetweetResult>(`/tweets/${tweetId}/retweets`, { method: "POST" });
 }
 
 export function getTimeline(kind: TimelineKind, cursor?: string | null): Promise<TimelinePage> {

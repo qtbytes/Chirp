@@ -21,6 +21,7 @@ from app.schemas.user import (
     UserSummary,
     UserUpdate,
 )
+from app.services.serializers import serialize_quoted_post
 from app.services.timeline_service import TimelineService, decode_cursor, encode_cursor
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
@@ -221,7 +222,6 @@ def list_user_replies(
     for row in page_rows:
         comment = row["comment"]
         tweet = row["tweet"]
-        retweeter = row.get("retweeted_by")
         c_stats = comment_stats.get(comment.id, empty)
         t_stats = parent_stats.get(tweet.id, empty)
         items.append(
@@ -239,11 +239,6 @@ def list_user_replies(
                     comment_count=c_stats["comment_count"],
                     retweet_count=c_stats["retweet_count"],
                     liked_by_me=c_stats["liked_by_me"],
-                    retweeted_by=(
-                        UserSummary.model_validate(retweeter)
-                        if retweeter is not None
-                        else None
-                    ),
                 ),
                 parent_tweet=TweetOut(
                     id=tweet.id,
@@ -254,8 +249,9 @@ def list_user_replies(
                     author=UserSummary.model_validate(row["tweet_author"]),
                     like_count=t_stats["like_count"],
                     comment_count=t_stats["comment_count"],
-                    retweet_count=t_stats["retweet_count"],
                     liked_by_me=t_stats["liked_by_me"],
+                    retweet_count=t_stats["retweet_count"],
+                    quoted_post=serialize_quoted_post(tweet.quoted_post),
                 ),
             )
         )

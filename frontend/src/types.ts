@@ -11,6 +11,14 @@ export type UserDiscovery = UserSummary & {
   is_current_user: boolean;
 };
 
+export type QuotedPost = {
+  id: number;
+  content: string;
+  media_urls: string[];
+  created_at: string;
+  author: UserSummary;
+};
+
 export type Tweet = {
   id: number;
   content: string;
@@ -22,7 +30,7 @@ export type Tweet = {
   comment_count: number;
   retweet_count: number;
   liked_by_me: boolean;
-  retweeted_by: UserSummary | null;
+  quoted_post: QuotedPost | null;
 };
 
 export type LikeToggleResult = {
@@ -37,12 +45,6 @@ export type TweetStats = {
   comment_count: number;
   retweet_count: number;
   liked_by_me: boolean;
-};
-
-export type RetweetResult = {
-  tweet_id: number;
-  retweeted: boolean;
-  created: boolean;
 };
 
 export type CommentLikeToggleResult = {
@@ -72,7 +74,7 @@ export type Comment = {
   comment_count: number;
   retweet_count: number;
   liked_by_me: boolean;
-  retweeted_by: UserSummary | null;
+  quoted_post: QuotedPost | null;
 };
 
 export type TimelinePage = {

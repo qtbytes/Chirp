@@ -45,7 +45,6 @@ import {
   logout,
   markNotificationsRead,
   register,
-  retweetTweet,
   toggleTweetLike,
   unfollowUser,
 } from "./api";
@@ -67,6 +66,8 @@ import {
   MediaPreview,
   PostEditor,
   PostMenu,
+  QuoteComposer,
+  QuotedPostCard,
   RichContent,
   TweetCard,
   formatCompactDate,
@@ -663,6 +664,7 @@ function HomeView() {
             onTweetPatch={patchTweet}
             currentUserId={currentUser.id}
             onDeleted={removeTweet}
+            onQuoted={insertPostedTweet}
           />
         ))}
       </section>
@@ -910,7 +912,8 @@ function TweetDetail({
   const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(comment, setComment, 1000);
   const media = useMediaAttachment();
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<"like" | "retweet" | "comment" | null>(null);
+  const [acting, setActing] = useState<"like" | "comment" | null>(null);
+  const [quoting, setQuoting] = useState(false);
   const [error, setError] = useState("");
   const commentIdsKey = useMemo(
     () => comments.map((item) => item.id).join(","),
@@ -1000,19 +1003,8 @@ function TweetDetail({
     };
   }, [commentIdsKey]);
 
-  async function runDetailRetweetAction() {
-    setActing("retweet");
-    setError("");
-    try {
-      const result = await retweetTweet(tweet.id);
-      if (result.created) {
-        onTweetPatch(tweet.id, { retweet_count: tweet.retweet_count + 1 });
-      }
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
+  function handleDetailQuoted() {
+    onTweetPatch(tweet.id, { retweet_count: tweet.retweet_count + 1 });
   }
 
   async function toggleDetailLikeAction() {
@@ -1100,6 +1092,7 @@ function TweetDetail({
           <p><RichContent text={tweet.content} /></p>
         )}
         {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
+        {tweet.quoted_post ? <QuotedPostCard post={tweet.quoted_post} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="tweet-actions detail-actions">
           <button
@@ -1111,8 +1104,8 @@ function TweetDetail({
           </button>
           <button
             className="tweet-action retweet"
-            onClick={() => void runDetailRetweetAction()}
-            disabled={acting === "retweet"}
+            onClick={() => setQuoting(true)}
+            aria-label="Quote"
           >
             <Repeat2 size={18} aria-hidden="true" />
             <span>{tweet.retweet_count}</span>
@@ -1187,6 +1180,13 @@ function TweetDetail({
           busy={deleting}
           onConfirm={() => void confirmDelete()}
           onCancel={() => setConfirmingDelete(false)}
+        />
+      ) : null}
+      {quoting ? (
+        <QuoteComposer
+          quoted={tweet}
+          onClose={() => setQuoting(false)}
+          onQuoted={handleDetailQuoted}
         />
       ) : null}
     </section>

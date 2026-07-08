@@ -23,13 +23,19 @@ def test_engagement_generates_notifications() -> None:
     tweet = alice.post("/api/v1/tweets", json={"content": "hello world"})
     tweet_id = tweet.json()["id"]
 
-    # bob likes, comments on, and retweets alice's tweet
+    # bob likes, comments on, and quotes (retweets) alice's tweet
     assert bob.post(f"/api/v1/tweets/{tweet_id}/likes/toggle").status_code == 200
     assert (
         bob.post(f"/api/v1/tweets/{tweet_id}/comments", json={"content": "nice"}).status_code
         == 201
     )
-    assert bob.post(f"/api/v1/tweets/{tweet_id}/retweets").status_code == 201
+    assert (
+        bob.post(
+            "/api/v1/tweets",
+            json={"content": "worth a look", "quoted_post_id": tweet_id},
+        ).status_code
+        == 201
+    )
 
     # alice sees notifications for all four actions, from bob
     unread = alice.get("/api/v1/notifications/unread-count")

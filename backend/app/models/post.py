@@ -48,8 +48,19 @@ class Post(Base):
         ForeignKey("posts.id"), nullable=True
     )
     root_id: Mapped[int | None] = mapped_column(ForeignKey("posts.id"), nullable=True)
+    # When set, this post is a quote (Twitter-style): a normal top-level post
+    # that embeds another post. A "retweet" is just a quote with empty content.
+    quoted_post_id: Mapped[int | None] = mapped_column(
+        ForeignKey("posts.id"), nullable=True
+    )
 
     author = relationship("User", back_populates="posts")
+    quoted_post = relationship(
+        "Post",
+        remote_side=[id],
+        foreign_keys=[quoted_post_id],
+        viewonly=True,
+    )
 
     @property
     def is_reply(self) -> bool:

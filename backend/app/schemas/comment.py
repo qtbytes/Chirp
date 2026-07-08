@@ -34,7 +34,7 @@ class CommentOut(BaseModel):
     comment_count: int = 0
     retweet_count: int = 0
     liked_by_me: bool = False
-    retweeted_by: UserSummary | None = None
+    quoted_post: "QuotedPostOut | None" = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,6 +57,7 @@ class ProfileRepliesPage(BaseModel):
     next_cursor: str | None = None
 
 
-from app.schemas.tweet import TweetOut  # noqa: E402
+from app.schemas.tweet import QuotedPostOut, TweetOut  # noqa: E402
 
+CommentOut.model_rebuild()
 ReplyWithParentOut.model_rebuild()

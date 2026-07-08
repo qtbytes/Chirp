@@ -160,7 +160,7 @@ def test_session_can_create_tweet() -> None:
     assert response.json()["author"]["username"] == "alice"
 
 
-def test_retweet_action_updates_timeline_count() -> None:
+def test_quote_tweet_embeds_original_and_updates_retweet_count() -> None:
     alice = TestClient(app)
     bob = TestClient(app)
     alice.post(
@@ -172,21 +172,45 @@ def test_retweet_action_updates_timeline_count() -> None:
         json={"username": "bob", "password": "password123"},
     )
 
-    tweet = alice.post("/api/v1/tweets", json={"content": "retweet me"}).json()
-    response = bob.post(f"/api/v1/tweets/{tweet['id']}/retweets")
-    assert response.status_code == 201
-    assert response.json()["created"] is True
+    tweet = alice.post("/api/v1/tweets", json={"content": "quote me"}).json()
 
-    duplicate_response = bob.post(f"/api/v1/tweets/{tweet['id']}/retweets")
-    assert duplicate_response.status_code == 201
-    assert duplicate_response.json()["created"] is False
+    # A quote with a comment of its own.
+    quote_response = bob.post(
+        "/api/v1/tweets",
+        json={"content": "great point", "quoted_post_id": tweet["id"]},
+    )
+    assert quote_response.status_code == 201
+    quote = quote_response.json()
+    assert quote["content"] == "great point"
+    assert quote["quoted_post"]["id"] == tweet["id"]
+    assert quote["quoted_post"]["content"] == "quote me"
+    assert quote["quoted_post"]["author"]["username"] == "alice"
+
+    # A plain retweet is just a quote with no comment of its own.
+    plain_response = bob.post(
+        "/api/v1/tweets", json={"quoted_post_id": tweet["id"]}
+    )
+    assert plain_response.status_code == 201
+    assert plain_response.json()["quoted_post"]["id"] == tweet["id"]
 
     timeline_response = bob.get("/api/v1/timeline/for-you")
     assert timeline_response.status_code == 200
     timeline_tweet = next(
         item for item in timeline_response.json()["items"] if item["id"] == tweet["id"]
     )
-    assert timeline_tweet["retweet_count"] == 1
+    assert timeline_tweet["retweet_count"] == 2
+
+
+def test_quote_of_missing_post_returns_404() -> None:
+    client = TestClient(app)
+    client.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": "password123"},
+    )
+    response = client.post(
+        "/api/v1/tweets", json={"content": "hi", "quoted_post_id": 999999}
+    )
+    assert response.status_code == 404
 
 
 def test_tweet_like_toggle_updates_state_and_count() -> None:
@@ -227,7 +251,7 @@ def test_tweet_stats_endpoint_returns_counts_and_current_user_state() -> None:
     tweet = alice.post("/api/v1/tweets", json={"content": "stats"}).json()
 
     bob.post(f"/api/v1/tweets/{tweet['id']}/likes/toggle")
-    bob.post(f"/api/v1/tweets/{tweet['id']}/retweets")
+    bob.post("/api/v1/tweets", json={"content": "q", "quoted_post_id": tweet["id"]})
     bob.post(
         f"/api/v1/tweets/{tweet['id']}/comments",
         json={"content": "reply"},
@@ -265,7 +289,7 @@ def test_comment_stats_endpoint_returns_counts_and_current_user_state() -> None:
     ).json()
 
     alice.post(f"/api/v1/comments/{comment['id']}/likes/toggle")
-    alice.post(f"/api/v1/comments/{comment['id']}/retweets")
+    alice.post("/api/v1/tweets", json={"content": "q", "quoted_post_id": comment["id"]})
     alice.post(
         f"/api/v1/comments/{comment['id']}/comments",
         json={"content": "reply"},
@@ -333,7 +357,9 @@ def test_comment_interactions_update_comment_counts() -> None:
     like_response = alice.post(f"/api/v1/comments/{comment['id']}/likes/toggle")
     unlike_response = alice.post(f"/api/v1/comments/{comment['id']}/likes/toggle")
     second_like_response = alice.post(f"/api/v1/comments/{comment['id']}/likes/toggle")
-    retweet_response = alice.post(f"/api/v1/comments/{comment['id']}/retweets")
+    retweet_response = alice.post(
+        "/api/v1/tweets", json={"content": "quoting", "quoted_post_id": comment["id"]}
+    )
     reply_response = alice.post(
         f"/api/v1/comments/{comment['id']}/comments",
         json={"content": "reply"},

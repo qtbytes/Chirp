@@ -10,6 +10,7 @@ from app.db.redis_client import get_redis_client
 from app.repositories import feed_repository, follow_repository, tweet_repository
 from app.schemas.tweet import TimelinePage, TweetOut
 from app.schemas.user import UserSummary
+from app.services.serializers import serialize_quoted_post
 
 
 def encode_cursor(created_at: datetime, row_id: int) -> str:
@@ -157,7 +158,6 @@ class TimelineService:
         }
         """
         tweet = row["tweet"]
-        retweeter = row.get("retweeted_by")
 
         return TweetOut(
             id=tweet.id,
@@ -170,9 +170,7 @@ class TimelineService:
             comment_count=row["comment_count"],
             retweet_count=row["retweet_count"],
             liked_by_me=row.get("liked_by_me", False),
-            retweeted_by=(
-                UserSummary.model_validate(retweeter) if retweeter is not None else None
-            ),
+            quoted_post=serialize_quoted_post(tweet.quoted_post),
         )
 
     def _build_page(

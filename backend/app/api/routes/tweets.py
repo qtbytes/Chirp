@@ -8,6 +8,7 @@ from app.models.post import Post
 from app.repositories import post_repository, tweet_repository, user_repository
 from app.schemas.tweet import TweetCreate, TweetOut, TweetStatsOut
 from app.schemas.user import UserSummary
+from app.services.serializers import serialize_quoted_post
 from app.services.timeline_service import TimelineService, enqueue_feed_fanout_job
 
 router = APIRouter(prefix="/tweets", tags=["tweets"])
@@ -75,12 +76,19 @@ def create_tweet(
             detail="user not found",
         )
 
-    tweet = tweet_repository.create_tweet(
-        db,
-        author_id=current_user_id,
-        content=payload.content,
-        media_urls=payload.media_urls,
-    )
+    try:
+        tweet = tweet_repository.create_tweet(
+            db,
+            author_id=current_user_id,
+            content=payload.content,
+            media_urls=payload.media_urls,
+            quoted_post_id=payload.quoted_post_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
     enqueue_feed_fanout_job(
         tweet_id=tweet.id,
@@ -137,6 +145,7 @@ def get_tweet(
         comment_count=stats["comment_count"],
         retweet_count=stats["retweet_count"],
         liked_by_me=stats["liked_by_me"],
+        quoted_post=serialize_quoted_post(tweet.quoted_post),
     )
 
 
@@ -192,6 +201,7 @@ def edit_tweet(
         comment_count=stats["comment_count"],
         retweet_count=stats["retweet_count"],
         liked_by_me=stats["liked_by_me"],
+        quoted_post=serialize_quoted_post(tweet.quoted_post),
     )
 
 
