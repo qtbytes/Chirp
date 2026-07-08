@@ -1335,8 +1335,14 @@ button.rail-link:disabled:hover {
 }
 
 .profile-name {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 20px;
+}
+
+.profile-handle {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 15px;
 }
 
 .profile-bio {
@@ -1478,10 +1484,25 @@ a.tab {
   color: #ffffff;
 }
 
-.edit-bio {
+.edit-bio,
+.edit-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.edit-field span:first-child {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.edit-field input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--input);
+  color: var(--ink);
+  padding: 10px 12px;
+  font: inherit;
 }
 
 .edit-bio span:first-child {

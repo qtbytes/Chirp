@@ -27,6 +27,14 @@ export function resolveMediaUrl(path: string | null): string | null {
   return path.startsWith("http") ? path : `${BACKEND_ORIGIN}${path}`;
 }
 
+/** The bold identity line: a user's chosen display name, or their handle. */
+export function displayName(user: {
+  username: string;
+  display_name?: string | null;
+}): string {
+  return user.display_name?.trim() || user.username;
+}
+
 type ApiErrorPayload = {
   detail?: string | Array<{ msg?: string; [key: string]: unknown }>;
 };
@@ -234,10 +242,12 @@ export function getUserReplies(
   );
 }
 
-export function updateProfile(bio: string): Promise<UserProfile> {
+export function updateProfile(
+  fields: { display_name?: string; bio?: string },
+): Promise<UserProfile> {
   return request<UserProfile>("/users/me", {
     method: "PATCH",
-    body: JSON.stringify({ bio }),
+    body: JSON.stringify(fields),
   });
 }
 

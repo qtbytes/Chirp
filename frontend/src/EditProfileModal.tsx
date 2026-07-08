@@ -13,6 +13,7 @@ export function EditProfileModal({
   onClose: () => void;
   onSaved: (profile: UserProfile) => void;
 }) {
+  const [name, setName] = useState(profile.display_name ?? "");
   const [bio, setBio] = useState(profile.bio ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -43,8 +44,15 @@ export function EditProfileModal({
         updated = await uploadAvatar(file);
         setFile(null);
       }
+      const fields: { display_name?: string; bio?: string } = {};
+      if (name !== (profile.display_name ?? "")) {
+        fields.display_name = name;
+      }
       if (bio !== (profile.bio ?? "")) {
-        updated = await updateProfile(bio);
+        fields.bio = bio;
+      }
+      if (Object.keys(fields).length > 0) {
+        updated = await updateProfile(fields);
       }
       onSaved(updated);
       onClose();
@@ -105,6 +113,16 @@ export function EditProfileModal({
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
           </div>
+          <label className="edit-field">
+            <span>Name</span>
+            <input
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={50}
+              placeholder="Your display name"
+            />
+          </label>
           <label className="edit-bio">
             <span>Bio</span>
             <textarea

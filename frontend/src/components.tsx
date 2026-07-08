@@ -4,6 +4,7 @@ import { Heart, Image as ImageIcon, Loader2, MessageCircle, Repeat2, X } from "l
 import {
   ApiError,
   createComment,
+  displayName,
   replyToComment,
   resolveMediaUrl,
   retweetComment,
@@ -386,7 +387,7 @@ export function TweetCard({
         {tweet.retweeted_by ? (
           <p className="retweet-banner">
             <Repeat2 size={14} aria-hidden="true" />
-            <span>{tweet.retweeted_by.username} retweeted</span>
+            <span>{displayName(tweet.retweeted_by)} retweeted</span>
           </p>
         ) : null}
         <header>
@@ -395,8 +396,9 @@ export function TweetCard({
             className="author-link"
             onClick={(event) => event.stopPropagation()}
           >
-            <strong>@{tweet.author.username}</strong>
+            <strong>{displayName(tweet.author)}</strong>
           </Link>
+          <span>@{tweet.author.username}</span>
           <span>{displayDate}</span>
         </header>
         <p><RichContent text={tweet.content} /></p>
@@ -560,7 +562,7 @@ export function CommentCard({
         {localComment.retweeted_by ? (
           <p className="retweet-banner">
             <Repeat2 size={14} aria-hidden="true" />
-            <span>{localComment.retweeted_by.username} retweeted</span>
+            <span>{displayName(localComment.retweeted_by)} retweeted</span>
           </p>
         ) : null}
         <header>
@@ -569,8 +571,9 @@ export function CommentCard({
             className="author-link"
             onClick={(event) => event.stopPropagation()}
           >
-            <strong>@{localComment.author.username}</strong>
+            <strong>{displayName(localComment.author)}</strong>
           </Link>
+          <span>@{localComment.author.username}</span>
           <span>{formatCompactDate(localComment.created_at)}</span>
           {localComment.parent_comment_id ? <span>Reply</span> : null}
         </header>

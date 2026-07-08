@@ -28,6 +28,7 @@ import {
 import {
   createComment,
   createTweet,
+  displayName,
   followUser,
   getCommentStats,
   getCurrentUser,
@@ -345,8 +346,8 @@ function AppLayout({
           >
             <Avatar user={currentUser} size="small" />
             <div>
-              <strong>@{currentUser.username}</strong>
-              <span>User {currentUser.id}</span>
+              <strong>{displayName(currentUser)}</strong>
+              <span>@{currentUser.username}</span>
             </div>
           </Link>
           <div className="rail-user-actions">
@@ -1132,8 +1133,8 @@ function UserDiscoveryPanel({
             >
               <Avatar user={user} size="small" />
               <div className="user-copy">
-                <strong>@{user.username}</strong>
-                <span>{user.is_current_user ? "You" : `User ${user.id}`}</span>
+                <strong>{displayName(user)}</strong>
+                <span>@{user.username}</span>
               </div>
             </Link>
             {!user.is_current_user ? (

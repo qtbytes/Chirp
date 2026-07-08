@@ -1,6 +1,7 @@
 export type UserSummary = {
   id: number;
   username: string;
+  display_name: string | null;
   created_at: string;
   avatar_url: string | null;
 };
@@ -83,6 +84,7 @@ export type TimelineKind = "for-you" | "following";
 export type UserProfile = {
   id: number;
   username: string;
+  display_name: string | null;
   bio: string | null;
   avatar_url: string | null;
   created_at: string;

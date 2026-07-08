@@ -285,6 +285,46 @@ def test_update_bio() -> None:
     assert profile["bio"] == "Building things."
 
 
+def test_display_name_defaults_to_none_and_round_trips() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+
+    profile = client.get("/api/v1/users/alice/profile").json()
+    assert profile["display_name"] is None
+
+    response = client.patch("/api/v1/users/me", json={"display_name": "Alice L."})
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "Alice L."
+
+    # surfaced on the profile and in the discovery list
+    assert client.get("/api/v1/users/alice/profile").json()["display_name"] == "Alice L."
+    users = {u["username"]: u for u in client.get("/api/v1/users").json()}
+    assert users["alice"]["display_name"] == "Alice L."
+
+
+def test_updating_display_name_leaves_bio_untouched() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+
+    client.patch("/api/v1/users/me", json={"bio": "Building things."})
+    # a partial update that only sends display_name must not wipe the bio
+    client.patch("/api/v1/users/me", json={"display_name": "Alice"})
+
+    profile = client.get("/api/v1/users/alice/profile").json()
+    assert profile["display_name"] == "Alice"
+    assert profile["bio"] == "Building things."
+
+
+def test_blank_display_name_clears_back_to_username_fallback() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+
+    client.patch("/api/v1/users/me", json={"display_name": "Alice"})
+    cleared = client.patch("/api/v1/users/me", json={"display_name": "   "})
+    assert cleared.status_code == 200
+    assert cleared.json()["display_name"] is None
+
+
 def test_update_bio_rejects_too_long() -> None:
     client = TestClient(app)
     register(client, "alice")

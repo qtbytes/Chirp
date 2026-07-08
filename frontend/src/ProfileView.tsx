@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Calendar, Loader2 } from "lucide-react";
 import {
   ApiError,
+  displayName,
   followUser,
   getUserProfile,
   getUserReplies,
@@ -202,7 +203,7 @@ export function ProfileView({
           <ArrowLeft size={20} aria-hidden="true" />
         </button>
         <div className="profile-toolbar-copy">
-          <h2>@{profile.username}</h2>
+          <h2>{displayName(profile)}</h2>
           <span>{profile.tweet_count} Tweets</span>
         </div>
       </div>
@@ -225,7 +226,8 @@ export function ProfileView({
             </button>
           )}
         </div>
-        <h1 className="profile-name">@{profile.username}</h1>
+        <h1 className="profile-name">{displayName(profile)}</h1>
+        <p className="profile-handle">@{profile.username}</p>
         {profile.bio ? <p className="profile-bio">{profile.bio}</p> : null}
         <p className="profile-meta">
           <Calendar size={16} aria-hidden="true" />
@@ -349,6 +351,7 @@ export function ProfileView({
             if (updated.id === currentUser.id) {
               onCurrentUserChange({
                 ...currentUser,
+                display_name: updated.display_name,
                 avatar_url: updated.avatar_url,
               });
             }

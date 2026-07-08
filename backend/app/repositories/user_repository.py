@@ -53,12 +53,21 @@ def list_users(
     return [(user, user.id in followed_ids) for user in users]
 
 
-def update_user_bio(db: Session, user_id: int, bio: str | None) -> User:
+def update_user_profile(db: Session, user_id: int, fields: dict) -> User:
+    """Apply a partial profile update; only keys present in ``fields`` change."""
     user = db.get(User, user_id)
     if user is None:
         raise ValueError("user not found")
 
-    user.bio = bio
+    for key in ("display_name", "bio"):
+        if key in fields:
+            value = fields[key]
+            # Treat blank input as "cleared" so an empty field falls back to
+            # the username rather than showing an empty display name.
+            if isinstance(value, str) and value.strip() == "":
+                value = None
+            setattr(user, key, value)
+
     db.commit()
     db.refresh(user)
     return user

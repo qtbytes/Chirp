@@ -69,6 +69,8 @@ def list_users(
         UserDiscoveryOut(
             id=user.id,
             username=user.username,
+            display_name=user.display_name,
+            avatar_url=user.avatar_url,
             created_at=user.created_at,
             is_following=is_following,
             is_current_user=user.id == current_user_id,
@@ -81,6 +83,7 @@ def _build_profile(db: Session, user: User, current_user_id: int) -> UserProfile
     return UserProfileOut(
         id=user.id,
         username=user.username,
+        display_name=user.display_name,
         bio=user.bio,
         avatar_url=user.avatar_url,
         created_at=user.created_at,
@@ -262,10 +265,10 @@ def update_current_user(
     db: Session = Depends(get_db),
 ) -> UserProfileOut:
     try:
-        user = user_repository.update_user_bio(
+        user = user_repository.update_user_profile(
             db,
             user_id=current_user_id,
-            bio=payload.bio,
+            fields=payload.model_dump(exclude_unset=True),
         )
     except ValueError as exc:
         raise HTTPException(

@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
 class UserSummary(BaseModel):
     id: int
     username: str
+    display_name: str | None = None
     created_at: datetime
     avatar_url: str | None = None
 
@@ -28,12 +29,14 @@ class UserDiscoveryOut(UserSummary):
 
 
 class UserUpdate(BaseModel):
+    display_name: str | None = Field(default=None, max_length=50)
     bio: str | None = Field(default=None, max_length=160)
 
 
 class UserProfileOut(BaseModel):
     id: int
     username: str
+    display_name: str | None = None
     bio: str | None = None
     avatar_url: str | None = None
     created_at: datetime
