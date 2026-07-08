@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     rq_job_timeout_seconds: int = 600
     run_fanout_inline_when_queue_unavailable: bool = True
 
+    # Link previews fetch arbitrary user URLs server-side.
+    # - Set link_preview_http_proxy to route those fetches through an outbound
+    #   proxy (e.g. "http://127.0.0.1:7897" for Clash/Surge). Behind such a
+    #   proxy the proxy resolves and connects, so the local resolved-IP SSRF
+    #   check is skipped automatically.
+    # - link_preview_verify_dns toggles the resolved-IP check for direct
+    #   (no-proxy) fetches. Scheme, IP-literal, and internal-hostname blocking
+    #   stay on regardless of both settings.
+    link_preview_http_proxy: str | None = None
+    link_preview_verify_dns: bool = True
+
     rate_limit_enabled: bool = True
     rate_limit_post_tweet_max_requests: int = 10
     rate_limit_post_tweet_window_seconds: int = 60

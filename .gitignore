@@ -1,6 +1,8 @@
 twitter.db
 dump.rdb
 twitter_system.egg-info
+.env
+**/.env
 backend/twitter.db
 backend/.pytest_cache
 backend/.pycache

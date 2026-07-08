@@ -26,13 +26,19 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from app.core.config import settings
 from app.db.redis_client import get_redis_client
 from app.schemas.link_preview import LinkPreviewOut
 
 _USER_AGENT = "ChirpLinkPreview/1.0 (+https://github.com/) bot"
-_REQUEST_TIMEOUT = 5.0
+_REQUEST_TIMEOUT = 8.0
 _MAX_REDIRECTS = 5
-_MAX_BYTES = 512 * 1024  # only need the <head>, so cap the download hard
+# Hard ceiling on how much of a page we pull. We stop earlier at </head>; this
+# only bounds pathological pages whose head never closes. 1 MB comfortably
+# covers script-heavy pages (YouTube's OG tags sit near ~640 KB).
+_MAX_BYTES = 1024 * 1024
+_HEAD_CLOSE = b"</head>"
+_HEAD_CLOSE_LEN = len(_HEAD_CLOSE)
 
 _CACHE_PREFIX = "linkpreview:"
 _POSITIVE_TTL = 24 * 60 * 60  # a good card rarely changes; cache it a day
@@ -40,25 +46,61 @@ _NEGATIVE_TTL = 60 * 60  # remember "no card here" briefly to avoid re-fetch sto
 
 
 # --- SSRF guards -----------------------------------------------------------
+#
+# Two layers, because they defend different things:
+#   1. Always-on checks that need no DNS — the scheme, IP-literal hosts, and an
+#      internal-hostname denylist. These catch the direct SSRF a user could type
+#      (http://169.254.169.254, http://127.0.0.1, http://localhost, ...).
+#   2. An optional DNS-resolution check (settings.link_preview_verify_dns) that
+#      rejects hostnames resolving to internal IPs. It is disabled behind a
+#      fake-IP proxy (e.g. Clash/Surge TUN mode), where DNS returns synthetic
+#      addresses in 198.18.0.0/15 for *every* host — there the check is both
+#      wrong (blocks legit sites) and useless (the app never connects to the
+#      resolved IP; the proxy does).
+
+_BLOCKED_HOST_NAMES = {"localhost"}
+_BLOCKED_HOST_SUFFIXES = (".localhost", ".local", ".internal")
+
+
+def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
 
 
 def _host_is_safe(host: str) -> bool:
-    """True only if every address ``host`` resolves to is publicly routable."""
+    """True if ``host`` is not an obviously-internal target we must not fetch."""
+    host = host.strip(".").lower()
+    if not host:
+        return False
+
+    # IP-literal host: judge it directly. No DNS, so a proxy's synthetic
+    # addresses can't interfere, and this still blocks 127.0.0.1 / 10.x / etc.
+    try:
+        return not _ip_is_blocked(ipaddress.ip_address(host))
+    except ValueError:
+        pass
+
+    if host in _BLOCKED_HOST_NAMES or host.endswith(_BLOCKED_HOST_SUFFIXES):
+        return False
+
+    # Hostname → resolved-IP check. Skipped when disabled, or when an outbound
+    # proxy is configured (the proxy — not this app — resolves and connects, so
+    # local resolution is both meaningless and, behind fake-IP DNS, wrong).
+    if not settings.link_preview_verify_dns or settings.link_preview_http_proxy:
+        return True
+
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
         return False
-
     for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
+        if _ip_is_blocked(ipaddress.ip_address(info[4][0])):
             return False
     return True
 
@@ -181,12 +223,15 @@ def _fetch_html(url: str) -> tuple[str, str] | None:
     """
     current = url
     headers = {"User-Agent": _USER_AGENT, "Accept": "text/html,*/*"}
+    client_kwargs: dict = {
+        "follow_redirects": False,
+        "timeout": _REQUEST_TIMEOUT,
+        "headers": headers,
+    }
+    if settings.link_preview_http_proxy:
+        client_kwargs["proxy"] = settings.link_preview_http_proxy
     try:
-        with httpx.Client(
-            follow_redirects=False,
-            timeout=_REQUEST_TIMEOUT,
-            headers=headers,
-        ) as client:
+        with httpx.Client(**client_kwargs) as client:
             for _ in range(_MAX_REDIRECTS + 1):
                 if not _url_is_fetchable(current):
                     return None
@@ -203,10 +248,20 @@ def _fetch_html(url: str) -> tuple[str, str] | None:
                     if "html" not in content_type.lower():
                         return None
 
+                    # Read only as far as we need. All the metadata lives in
+                    # <head>, so stop once it closes — some pages (YouTube) put
+                    # ~600 KB of inline script before their OG tags, so we can't
+                    # cut too early, but we also shouldn't pull whole MB bodies.
                     chunks = bytearray()
+                    scan_from = 0
+                    done = False
                     for chunk in response.iter_bytes():
                         chunks.extend(chunk)
-                        if len(chunks) >= _MAX_BYTES:
+                        window = chunks[max(0, scan_from - _HEAD_CLOSE_LEN) :].lower()
+                        if _HEAD_CLOSE in window:
+                            done = True
+                        scan_from = len(chunks)
+                        if done or len(chunks) >= _MAX_BYTES:
                             break
                     html = bytes(chunks).decode(
                         response.encoding or "utf-8", errors="replace"
