@@ -672,6 +672,9 @@ function HomeView() {
 function TweetDetailRoute() {
   const { tweetId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const scrollToPostId = (location.state as { scrollToPostId?: number } | null)
+    ?.scrollToPostId;
   const numericTweetId = Number(tweetId);
   const [tweet, setTweet] = useState<Tweet | null>(null);
   const [error, setError] = useState("");
@@ -733,7 +736,14 @@ function TweetDetailRoute() {
   if (error || !tweet) {
     return <div className="status-panel error">{error || "Tweet not found."}</div>;
   }
-  return <TweetDetail tweet={tweet} onBack={() => navigate(-1)} onTweetPatch={patchTweet} />;
+  return (
+    <TweetDetail
+      tweet={tweet}
+      onBack={() => navigate(-1)}
+      onTweetPatch={patchTweet}
+      scrollToPostId={scrollToPostId}
+    />
+  );
 }
 
 function ThemeToggle({
@@ -831,10 +841,12 @@ function TweetDetail({
   tweet,
   onBack,
   onTweetPatch,
+  scrollToPostId,
 }: {
   tweet: Tweet;
   onBack: () => void;
   onTweetPatch: (tweetId: number, patch: Partial<Tweet>) => void;
+  scrollToPostId?: number;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [comment, setComment] = useState("");
@@ -870,6 +882,25 @@ function TweetDetail({
   useEffect(() => {
     void loadTweetComments();
   }, [loadTweetComments]);
+
+  // When opened from the profile "Replies" tab, scroll to the specific post the
+  // reply was made to (the root tweet or a comment in the thread) once loaded.
+  useEffect(() => {
+    if (scrollToPostId === undefined || loading) {
+      return;
+    }
+    const target = document.getElementById(`post-${scrollToPostId}`);
+    if (!target) {
+      return;
+    }
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    target.classList.add("post-scroll-highlight");
+    const timer = window.setTimeout(
+      () => target.classList.remove("post-scroll-highlight"),
+      2200,
+    );
+    return () => window.clearTimeout(timer);
+  }, [scrollToPostId, loading]);
 
   useEffect(() => {
     if (!commentIdsKey) {
@@ -959,7 +990,7 @@ function TweetDetail({
         <h2 id="tweet-detail-title">Tweet</h2>
       </div>
 
-      <article className="detail-tweet">
+      <article id={`post-${tweet.id}`} className="detail-tweet">
         <div className="detail-author">
           <Link
             to={`/${encodeURIComponent(tweet.author.username)}`}

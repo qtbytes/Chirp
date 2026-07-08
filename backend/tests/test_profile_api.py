@@ -203,6 +203,32 @@ def test_replies_feed_includes_retweeted_comments() -> None:
     assert entry["retweeted_by"]["username"] == "alice"
 
 
+def test_user_replies_parent_is_immediate_not_root() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    # bob posts a tweet, then a top-level comment on it
+    tweet = bob.post("/api/v1/tweets", json={"content": "root tweet"}).json()
+    parent_comment = bob.post(
+        f"/api/v1/tweets/{tweet['id']}/comments", json={"content": "parent comment"}
+    ).json()
+
+    # alice replies to bob's comment (a nested reply, not on the root tweet)
+    alice.post(
+        f"/api/v1/comments/{parent_comment['id']}/comments",
+        json={"content": "my nested reply"},
+    )
+
+    items = alice.get("/api/v1/users/alice/replies").json()["items"]
+    assert len(items) == 1
+    assert items[0]["comment"]["content"] == "my nested reply"
+    # the parent is the immediate parent comment, not the thread root tweet
+    assert items[0]["parent_tweet"]["content"] == "parent comment"
+    assert items[0]["parent_tweet"]["author"]["username"] == "bob"
+
+
 def test_user_replies_error_paths() -> None:
     client = TestClient(app)
     register(client, "alice")

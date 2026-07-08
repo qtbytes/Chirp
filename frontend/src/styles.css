@@ -1404,38 +1404,24 @@ button.rail-link:disabled:hover {
   color: var(--danger);
 }
 
-.reply-thread {
-  border-bottom: 1px solid var(--line);
+/* Profile "Replies" tab: each entry stacks the real parent post (a clickable
+   tweet card) directly above the user's reply (a comment card). Their own
+   bottom borders provide the divider between and after the pair. */
+
+/* Brief flash on the post scrolled to when opening a thread from the replies
+   tab, so the user can spot which post the reply was made to. */
+.post-scroll-highlight {
+  animation: post-flash 2.2s ease-out;
 }
 
-.reply-thread .tweet-card {
-  border-bottom: none;
-}
-
-.reply-thread-item {
-  padding: 0 16px 12px 40px;
-  position: relative;
-}
-
-.reply-thread-item::before {
-  content: "";
-  position: absolute;
-  left: 34px;
-  top: -12px;
-  bottom: 12px;
-  width: 2px;
-  background: var(--line);
-}
-
-.replying-to {
-  margin: 0 0 4px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.replying-to a {
-  color: var(--accent);
-  text-decoration: none;
+@keyframes post-flash {
+  0%,
+  25% {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
 }
 
 a.tab {

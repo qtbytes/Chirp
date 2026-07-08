@@ -593,7 +593,10 @@ export function CommentCard({
   }
 
   return (
-    <article className={localComment.parent_comment_id ? "comment-card reply" : "comment-card"}>
+    <article
+      id={`post-${localComment.id}`}
+      className={localComment.parent_comment_id ? "comment-card reply" : "comment-card"}
+    >
       <Link
         to={`/${encodeURIComponent(localComment.author.username)}`}
         className="author-link"

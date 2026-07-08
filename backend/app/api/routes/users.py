@@ -191,19 +191,30 @@ def list_user_replies(
     page_rows = rows[:limit]
 
     comment_ids = [row["comment"].id for row in page_rows]
-    tweet_ids = [row["tweet"].id for row in page_rows]
     comment_stats = {
         stats["id"]: stats
         for stats in engagement_repository.list_comment_stats(
             db, comment_ids=comment_ids, current_user_id=current_user_id
         )
     }
-    tweet_stats = {
-        stats["id"]: stats
-        for stats in tweet_repository.list_tweet_stats(
-            db, tweet_ids=tweet_ids, current_user_id=current_user_id
-        )
-    }
+
+    # The parent may be a top-level tweet or another comment; each has its own
+    # count semantics, so stat it with the matching method.
+    parent_posts = {row["tweet"].id: row["tweet"] for row in page_rows}
+    tweet_parent_ids = [pid for pid, p in parent_posts.items() if p.reply_to_id is None]
+    comment_parent_ids = [
+        pid for pid, p in parent_posts.items() if p.reply_to_id is not None
+    ]
+    parent_stats: dict[int, dict] = {}
+    for stats in tweet_repository.list_tweet_stats(
+        db, tweet_ids=tweet_parent_ids, current_user_id=current_user_id
+    ):
+        parent_stats[stats["id"]] = stats
+    for stats in engagement_repository.list_comment_stats(
+        db, comment_ids=comment_parent_ids, current_user_id=current_user_id
+    ):
+        parent_stats[stats["id"]] = stats
+
     empty = {"like_count": 0, "comment_count": 0, "retweet_count": 0, "liked_by_me": False}
 
     items = []
@@ -212,7 +223,7 @@ def list_user_replies(
         tweet = row["tweet"]
         retweeter = row.get("retweeted_by")
         c_stats = comment_stats.get(comment.id, empty)
-        t_stats = tweet_stats.get(tweet.id, empty)
+        t_stats = parent_stats.get(tweet.id, empty)
         items.append(
             ReplyWithParentOut(
                 comment=CommentOut(

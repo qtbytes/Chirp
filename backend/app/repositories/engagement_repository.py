@@ -380,21 +380,24 @@ def list_comment_stats(
 
 def _load_reply_rows_by_ids(db: Session, comment_ids: list[int]) -> dict[int, dict]:
     """
-    Load reply posts (with author + parent tweet + tweet author) by id.
+    Load reply posts (with author + immediate parent + parent author) by id.
 
-    Replies whose root tweet no longer exists are dropped by the inner join.
+    The parent is the post the reply was made to (``reply_to_id``) — the real
+    parent, which may be a top-level tweet or another comment, not necessarily
+    the thread root. Replies whose parent no longer exists are dropped by the
+    inner join.
     """
     if not comment_ids:
         return {}
 
     CommentAuthor = aliased(User)
-    RootPost = aliased(Post)
-    TweetAuthor = aliased(User)
+    ParentPost = aliased(Post)
+    ParentAuthor = aliased(User)
     rows = db.execute(
-        select(Post, RootPost, CommentAuthor, TweetAuthor)
-        .join(RootPost, RootPost.id == Post.root_id)
+        select(Post, ParentPost, CommentAuthor, ParentAuthor)
+        .join(ParentPost, ParentPost.id == Post.reply_to_id)
         .join(CommentAuthor, CommentAuthor.id == Post.user_id)
-        .join(TweetAuthor, TweetAuthor.id == RootPost.user_id)
+        .join(ParentAuthor, ParentAuthor.id == ParentPost.user_id)
         .where(Post.id.in_(comment_ids))
     ).all()
 
@@ -402,10 +405,10 @@ def _load_reply_rows_by_ids(db: Session, comment_ids: list[int]) -> dict[int, di
         comment.id: {
             "comment": comment,
             "comment_author": comment_author,
-            "tweet": root_post,
-            "tweet_author": tweet_author,
+            "tweet": parent_post,
+            "tweet_author": parent_author,
         }
-        for comment, root_post, comment_author, tweet_author in rows
+        for comment, parent_post, comment_author, parent_author in rows
     }
 
 

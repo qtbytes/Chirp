@@ -127,10 +127,10 @@ export function ProfileView({
     );
   }, []);
 
-  const patchReplyParent = useCallback((tweetId: number, patch: Partial<Tweet>) => {
+  const patchReplyParent = useCallback((postId: number, patch: Partial<Tweet>) => {
     setReplies((current) =>
       current.map((item) =>
-        item.parent_tweet.id === tweetId
+        item.parent_tweet.id === postId
           ? { ...item, parent_tweet: { ...item.parent_tweet, ...patch } }
           : item,
       ),
@@ -297,29 +297,21 @@ export function ProfileView({
           ) : null}
           <section className="tweet-list">
             {replies.map((item) => (
-              <div className="reply-thread" key={item.comment.id}>
+              <div className="profile-reply" key={item.comment.id}>
                 <TweetCard
                   tweet={item.parent_tweet}
-                  onOpen={() => navigate(`/tweet/${item.parent_tweet.id}`)}
+                  onOpen={() =>
+                    navigate(`/tweet/${item.comment.tweet_id}`, {
+                      state: { scrollToPostId: item.parent_tweet.id },
+                    })
+                  }
                   onTweetPatch={patchReplyParent}
                 />
-                <div className="reply-thread-item">
-                  <p className="replying-to">
-                    Replying to{" "}
-                    <Link
-                      to={`/${encodeURIComponent(item.parent_tweet.author.username)}`}
-                    >
-                      @{item.parent_tweet.author.username}
-                    </Link>
-                  </p>
-                  <CommentCard
-                    comment={item.comment}
-                    onChanged={() => void loadReplies()}
-                    onReplyCreated={() => patchReplyParent(item.parent_tweet.id, {
-                      comment_count: item.parent_tweet.comment_count + 1,
-                    })}
-                  />
-                </div>
+                <CommentCard
+                  comment={item.comment}
+                  onChanged={() => void loadReplies()}
+                  onReplyCreated={() => void loadReplies()}
+                />
               </div>
             ))}
           </section>
