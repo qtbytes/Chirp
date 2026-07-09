@@ -10,6 +10,8 @@
 deploy/out/
 # Per-host deploy settings; git pull must never overwrite them.
 deploy/deploy.conf
+# Build fingerprints written by deploy.sh on the server.
+.deploy/
 
 twitter.db
 dump.rdb

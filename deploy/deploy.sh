@@ -30,9 +30,11 @@ source "$CONF"
 : "${REDIRECT_WWW:=true}"
 
 BACKEND="$APP_DIR/backend"
-DIST="$APP_DIR/frontend/dist"
+FRONTEND="$APP_DIR/frontend"
+DIST="$FRONTEND/dist"
 ENV_FILE="$BACKEND/.env"
 VENV="$BACKEND/.venv"
+STAMP_DIR="$APP_DIR/.deploy"
 
 # Note ${VAR:+...} would expand for the string "false" too, since it tests for
 # non-empty rather than truthy. Compute the suffixes explicitly.
@@ -129,9 +131,50 @@ chmod 600 "$ENV_FILE"
 log "installing backend dependencies"
 sudo -u "$APP_USER" env HOME="$APP_DIR" "$UV" sync --frozen --no-dev --project "$BACKEND"
 
-log "building frontend"
-sudo -u "$APP_USER" env HOME="$APP_DIR" VITE_API_BASE_URL="https://$DOMAIN/api/v1" \
-    sh -c "cd '$APP_DIR/frontend' && npm ci --no-audit --no-fund && npm run build"
+mkdir -p "$STAMP_DIR"
+chown "$APP_USER:$APP_USER" "$STAMP_DIR"
+
+# Content fingerprint of everything the bundle is built from. node_modules and
+# dist are excluded: one is an input we track via the lockfile, the other is the
+# output. DOMAIN is folded in because it becomes VITE_API_BASE_URL inside the
+# bundle, so changing the domain must force a rebuild.
+frontend_fingerprint() {
+    {
+        printf 'domain=%s\n' "$DOMAIN"
+        find "$FRONTEND" \
+            -path "$FRONTEND/node_modules" -prune -o \
+            -path "$FRONTEND/dist" -prune -o \
+            -type f -print0 | sort -z | xargs -0 sha256sum
+    } | sha256sum | cut -d' ' -f1
+}
+
+LOCK_FP="$(sha256sum "$FRONTEND/package.json" "$FRONTEND/package-lock.json" | sha256sum | cut -d' ' -f1)"
+BUILD_FP="$(frontend_fingerprint)"
+FORCE="${FORCE_BUILD:-0}"
+
+# `npm ci` deletes node_modules and reinstalls from scratch every time (~15s).
+# Only pay that when the lockfile actually moved.
+if [[ "$FORCE" == 1 || ! -d "$FRONTEND/node_modules" ||
+      "$LOCK_FP" != "$(cat "$STAMP_DIR/npm.stamp" 2>/dev/null || true)" ]]; then
+    log "installing frontend dependencies"
+    sudo -u "$APP_USER" env HOME="$APP_DIR" \
+        sh -c "cd '$FRONTEND' && npm ci --no-audit --no-fund --prefer-offline"
+    printf '%s' "$LOCK_FP" >"$STAMP_DIR/npm.stamp"
+else
+    log "frontend dependencies unchanged, skipping npm ci"
+fi
+
+if [[ "$FORCE" == 1 || ! -f "$DIST/index.html" ||
+      "$BUILD_FP" != "$(cat "$STAMP_DIR/build.stamp" 2>/dev/null || true)" ]]; then
+    log "building frontend"
+    sudo -u "$APP_USER" env HOME="$APP_DIR" VITE_API_BASE_URL="https://$DOMAIN/api/v1" \
+        sh -c "cd '$FRONTEND' && npm run build"
+    printf '%s' "$BUILD_FP" >"$STAMP_DIR/build.stamp"
+else
+    log "frontend unchanged, skipping build (FORCE_BUILD=1 to override)"
+fi
+
+chown "$APP_USER:$APP_USER" "$STAMP_DIR"/*.stamp 2>/dev/null || true
 
 if [[ ! -f "$BACKEND/twitter.db" ]]; then
     warn "no $BACKEND/twitter.db -- the app will create an empty one."

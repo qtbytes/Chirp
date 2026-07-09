@@ -118,8 +118,21 @@ exiting. `--password` exists for scripting; avoid it on a shared box.
 ssh root@vthe.shop 'cd /srv/chirp && git pull && ./deploy/deploy.sh'
 ```
 
-Idempotent. It rebuilds, restarts, and leaves `twitter.db`, `uploads/`, and the
+Idempotent. It restarts the services and leaves `twitter.db`, `uploads/`, and the
 existing `SESSION_SECRET_KEY` untouched.
+
+The two slow steps are cached, so a backend-only or docs-only deploy skips both:
+
+- **`npm ci`** runs only when `package.json` / `package-lock.json` change. (It
+  deletes `node_modules` and reinstalls from scratch, so it is never cheap.)
+- **`vite build`** runs only when a file under `frontend/` changes, or when
+  `DOMAIN` changes — the domain is baked into the bundle as `VITE_API_BASE_URL`.
+
+Fingerprints live in `/srv/chirp/.deploy/`. To rebuild regardless:
+
+```sh
+FORCE_BUILD=1 ./deploy/deploy.sh
+```
 
 ## Backups
 
