@@ -66,6 +66,30 @@ Run `prune_db.py` with no flags first for a dry-run report. Add
 `--reset-passwords` to blank the two password hashes — those hashes were public
 on GitHub, so unless you have rotated the passwords you want this.
 
+### Setting a password after `--reset-passwords`
+
+A blank hash rejects every password, and there is no reset endpoint, so the
+accounts cannot log in until you give them one. Do it on the staged database
+before shipping:
+
+```sh
+uv run --project backend python deploy/set_password.py --user dev
+uv run --project backend python deploy/set_password.py --user test
+```
+
+Or on the live database, after deploying:
+
+```sh
+cd /srv/chirp
+sudo -u chirp backend/.venv/bin/python deploy/set_password.py \
+    --db backend/twitter.db --user dev
+systemctl restart chirp-api      # only needed if the app is already running
+```
+
+It prompts for the password (so it stays out of your shell history), enforces the
+same 8–128 character rule the API does, and verifies the stored hash before
+exiting. `--password` exists for scripting; avoid it on a shared box.
+
 ## Redeploy
 
 ```sh
