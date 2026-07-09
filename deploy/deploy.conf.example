@@ -2,9 +2,13 @@
 # deploy.conf is gitignored, so `git pull` never overwrites it.
 
 # Public domain. Used for TLS certs, the CORS origin, and the frontend's API URL.
+# Must not already be served by another site in /etc/nginx/sites-enabled/ --
+# nginx keeps the first block for a name and silently ignores the rest, so
+# reusing a name would take the other site offline. deploy.sh refuses to do that;
+# disable the other site first.
 DOMAIN=vthe.shop
 
-# Also serve www.<domain> as a redirect to the bare domain.
+# Also serve www.<domain> as a redirect to the bare domain. Set false for a subdomain.
 REDIRECT_WWW=true
 
 # Where the repo is checked out on the VPS. deploy.sh runs the app from here,

@@ -10,7 +10,9 @@ uvicorn on loopback. Everything is same-origin.
 
 ```sh
 ssh root@vthe.shop
-git clone git@github.com:qtbytes/Chirp.git /srv/chirp
+# HTTPS, not git@github.com: the server only needs anonymous read access, and
+# SSH would require a key on the box. Use SSH only if the repo becomes private.
+git clone https://github.com/qtbytes/Chirp.git /srv/chirp
 cd /srv/chirp
 cp deploy/deploy.conf.example deploy/deploy.conf
 $EDITOR deploy/deploy.conf          # set DOMAIN, at minimum
@@ -28,6 +30,19 @@ Get a cert, then re-run to switch to HTTPS:
 apt install -y certbot python3-certbot-nginx
 certbot --nginx -d vthe.shop -d www.vthe.shop
 ./deploy/deploy.sh
+```
+
+`DOMAIN` must not already be served by another file in `/etc/nginx/sites-enabled/`.
+nginx keeps the first `server` block it loads for a given `server_name` and
+ignores later duplicates with only a warning, so reusing a name silently takes
+the *other* site offline. `deploy.sh` checks for this and refuses.
+
+To hand the domain to Chirp, disable the other site first. Removing the symlink
+leaves `sites-available/` intact, so it is one command to undo:
+
+```sh
+rm /etc/nginx/sites-enabled/<other-site>
+nginx -t && systemctl reload nginx
 ```
 
 > Until TLS is up the site is HTTP, and `SESSION_COOKIE_SECURE=true` means the

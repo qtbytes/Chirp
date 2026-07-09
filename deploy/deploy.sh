@@ -306,27 +306,59 @@ cat <<EOF
 EOF
 } >"$SITE"
 
+# Another enabled site claiming the same server_name would be silently ignored by
+# nginx (first block wins, later duplicates get a "conflicting server name"
+# warning) -- which means deploying Chirp could take a running site offline.
+# Refuse rather than hijack.
+shopt -s nullglob
+for other in /etc/nginx/sites-enabled/*; do
+    [[ "$(basename "$other")" == "chirp" ]] && continue
+    if grep -qE "^\s*server_name\b[^;]*(\s|^)${DOMAIN//./\\.}(\s|;)" "$other"; then
+        die "$(basename "$other") already serves '$DOMAIN'. Deploying here would take it
+    offline. Pick a different DOMAIN in deploy/deploy.conf (e.g. chirp.$DOMAIN),
+    or disable that site first: rm /etc/nginx/sites-enabled/$(basename "$other")"
+    fi
+done
+shopt -u nullglob
+
 ln -sfn "$SITE" /etc/nginx/sites-enabled/chirp
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
 
 # ---------------------------------------------------------------- start
+# Re-assert ownership: the database and uploads are copied in out-of-band (often
+# over scp as root), and the app cannot open a root-owned SQLite file for write.
+chown -R "$APP_USER:$APP_USER" "$BACKEND"
+
 log "restarting services"
 systemctl enable chirp-api chirp-worker >/dev/null
 systemctl restart chirp-api chirp-worker
 systemctl reload nginx
 
-sleep 2
-for unit in chirp-api chirp-worker; do
-    systemctl is-active --quiet "$unit" || {
-        journalctl -u "$unit" -n 30 --no-pager >&2
-        die "$unit failed to start"
-    }
+log "health check"
+# Type=exec marks the unit active as soon as execve() succeeds, not when uvicorn
+# is listening. Importing FastAPI + SQLAlchemy can take several seconds on a
+# small VPS, so poll instead of sleeping a fixed amount.
+code=000
+for _ in $(seq 1 30); do
+    if ! systemctl is-active --quiet chirp-api; then
+        journalctl -u chirp-api -n 40 --no-pager >&2
+        die "chirp-api died during startup"
+    fi
+    code="$(curl -s -o /dev/null -w '%{http_code}' "http://$BIND_HOST:$BIND_PORT/" || true)"
+    [[ "$code" == "200" ]] && break
+    sleep 1
 done
 
-log "health check"
-code="$(curl -s -o /dev/null -w '%{http_code}' "http://$BIND_HOST:$BIND_PORT/" || true)"
-[[ "$code" == "200" ]] || die "API did not answer on http://$BIND_HOST:$BIND_PORT/ (got $code)"
+if [[ "$code" != "200" ]]; then
+    journalctl -u chirp-api -n 40 --no-pager >&2
+    die "API did not answer on http://$BIND_HOST:$BIND_PORT/ after 30s (got $code)"
+fi
+
+systemctl is-active --quiet chirp-worker || {
+    journalctl -u chirp-worker -n 30 --no-pager >&2
+    die "chirp-worker failed to start"
+}
 
 # Must be 401: X-User-Id is not a credential.
 code="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-User-Id: 1' \
