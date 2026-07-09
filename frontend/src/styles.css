@@ -1150,8 +1150,10 @@ button.rail-link:disabled:hover {
 
 .detail-tweet > p {
   margin: 0 0 18px;
-  font-size: 26px;
-  line-height: 1.35;
+  /* Larger than the 16px timeline body so the focused post reads as the
+     subject of the page, but not so large that a short post wraps. */
+  font-size: 20px;
+  line-height: 1.4;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
