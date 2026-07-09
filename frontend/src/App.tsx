@@ -61,6 +61,7 @@ import {
   Avatar,
   CommentCard,
   ConfirmDialog,
+  CurrentUserProvider,
   MediaButton,
   MediaGallery,
   MediaPreview,
@@ -69,6 +70,7 @@ import {
   PostBody,
   QuoteComposer,
   QuotedPostCard,
+  ReplyComposer,
   TweetCard,
   formatCompactDate,
   getErrorMessage,
@@ -159,6 +161,7 @@ function App() {
   }
 
   return (
+    <CurrentUserProvider value={currentUser}>
     <Routes>
       <Route
         element={
@@ -186,6 +189,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </CurrentUserProvider>
   );
 }
 
@@ -906,11 +910,9 @@ function TweetDetail({
     }
   }
   const [comments, setComments] = useState<Comment[]>([]);
-  const [comment, setComment] = useState("");
-  const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(comment, setComment, 1000);
-  const media = useMediaAttachment();
+  const [replying, setReplying] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<"like" | "comment" | null>(null);
+  const [acting, setActing] = useState<"like" | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [error, setError] = useState("");
   const commentIdsKey = useMemo(
@@ -1021,25 +1023,11 @@ function TweetDetail({
     }
   }
 
-  async function submitDetailComment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if ((!comment.trim() && media.mediaUrls.length === 0) || media.uploading) {
-      return;
-    }
-
-    setActing("comment");
-    setError("");
-    try {
-      await createComment(tweet.id, comment.trim(), media.mediaUrls);
-      setComment("");
-      media.clear();
-      onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
-      await loadTweetComments();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
+  // Errors propagate to ReplyComposer, which shows them inside the modal.
+  async function submitDetailComment(content: string, mediaUrls: string[]) {
+    await createComment(tweet.id, content, mediaUrls);
+    onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
+    await loadTweetComments();
   }
 
   return (
@@ -1095,7 +1083,8 @@ function TweetDetail({
         <div className="tweet-actions detail-actions">
           <button
             className="tweet-action comment"
-            onClick={() => document.getElementById("detail-comment-input")?.focus()}
+            onClick={() => setReplying(true)}
+            aria-label="Reply"
           >
             <MessageCircle size={18} aria-hidden="true" />
             <span>{tweet.comment_count}</span>
@@ -1122,28 +1111,15 @@ function TweetDetail({
             <span>{tweet.like_count}</span>
           </button>
         </div>
-        <form className="comment-form detail-comment-form" onSubmit={submitDetailComment}>
-          <div className="composer-tools">
-            <EmojiPicker onSelect={insertEmoji} />
-            <MediaButton attachment={media} />
-          </div>
-          <input
-            {...fieldProps}
-            id="detail-comment-input"
-            value={comment}
-            maxLength={1000}
-            placeholder="Post your reply"
-            aria-label="Comment"
-          />
-          <button
-            className="primary-button compact"
-            disabled={acting === "comment" || (!comment.trim() && media.mediaUrls.length === 0) || media.uploading}
-          >
-            Reply
-          </button>
-          <MediaPreview attachment={media} />
-        </form>
       </article>
+
+      {replying ? (
+        <ReplyComposer
+          target={tweet}
+          onClose={() => setReplying(false)}
+          onSubmit={submitDetailComment}
+        />
+      ) : null}
 
       <section className="comment-list" aria-label="Comments">
         {loading ? (
@@ -1151,9 +1127,6 @@ function TweetDetail({
             <Loader2 className="spin" size={18} aria-hidden="true" />
             <span>Loading comments</span>
           </div>
-        ) : null}
-        {!loading && comments.length === 0 ? (
-          <div className="status-panel">No comments yet.</div>
         ) : null}
         {comments.map((item) => (
           <CommentCard

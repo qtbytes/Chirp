@@ -1,4 +1,13 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Heart,
@@ -39,6 +48,18 @@ import type {
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
 import { ACCEPTED_MEDIA, useMediaAttachment, type MediaAttachment } from "./useMediaAttachment";
+
+/**
+ * The signed-in user. Provided once by App so leaf components (the reply
+ * composer needs the avatar) don't have to be threaded through every card.
+ */
+const CurrentUserContext = createContext<UserSummary | null>(null);
+
+export const CurrentUserProvider = CurrentUserContext.Provider;
+
+export function useCurrentUser(): UserSummary | null {
+  return useContext(CurrentUserContext);
+}
 
 export function Avatar({
   user,
@@ -644,7 +665,16 @@ export function QuoteComposer({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        // The modal renders inside a clickable tweet card; without this a
+        // backdrop click would also navigate to that tweet.
+        event.stopPropagation();
+        onClose();
+      }}
+    >
       <div
         className="quote-composer"
         role="dialog"
@@ -694,6 +724,165 @@ export function QuoteComposer({
 }
 
 /** The generic Open Graph "unfurl" card (presentational — data comes from PostBody). */
+/** The subset of a Tweet/Comment the reply composer needs to show its target. */
+type ReplyTarget = {
+  id: number;
+  content: string;
+  media_urls: string[];
+  created_at: string;
+  author: UserSummary;
+};
+
+/**
+ * Twitter-style reply composer: the post being replied to sits above a thread
+ * connector, then "Replying to @handle", then the composer itself.
+ *
+ * `onSubmit` decides which endpoint runs — replying to a tweet creates a
+ * comment, replying to a comment creates a nested reply — so this component
+ * stays the same for both.
+ */
+export function ReplyComposer({
+  target,
+  onSubmit,
+  onClose,
+}: {
+  target: ReplyTarget;
+  onSubmit: (content: string, mediaUrls: string[]) => Promise<void>;
+  onClose: () => void;
+}) {
+  const currentUser = useCurrentUser();
+  const [content, setContent] = useState("");
+  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
+    content,
+    setContent,
+    1000,
+  );
+  const media = useMediaAttachment();
+  const [posting, setPosting] = useState(false);
+  const [error, setError] = useState("");
+
+  const empty = !content.trim() && media.mediaUrls.length === 0;
+
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (posting || empty || media.uploading) {
+      return;
+    }
+    setPosting(true);
+    setError("");
+    try {
+      await onSubmit(content.trim(), media.mediaUrls);
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setPosting(false);
+    }
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        // The modal renders inside a clickable tweet card; without this a
+        // backdrop click would also navigate to that tweet.
+        event.stopPropagation();
+        onClose();
+      }}
+    >
+      <div
+        className="reply-composer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Reply to @${target.author.username}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="reply-composer-head">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={20} aria-hidden="true" />
+          </button>
+        </div>
+
+        <form className="reply-composer-form" onSubmit={handleSubmit}>
+          {/* The post being replied to, with a thread line running into the composer. */}
+          <div className="reply-target">
+            <div className="reply-target-rail">
+              <Avatar user={target.author} />
+              <span className="reply-thread-line" aria-hidden="true" />
+            </div>
+            <div className="reply-target-body">
+              <header className="reply-target-head">
+                <strong>{displayName(target.author)}</strong>
+                <span className="reply-target-handle">@{target.author.username}</span>
+                <span className="reply-target-dot" aria-hidden="true">
+                  ·
+                </span>
+                <time dateTime={target.created_at}>
+                  {formatCompactDate(target.created_at)}
+                </time>
+              </header>
+              {target.content ? (
+                <p className="reply-target-content">
+                  <RichContent text={target.content} />
+                </p>
+              ) : null}
+              {target.media_urls.length > 0 ? (
+                <MediaGallery urls={target.media_urls} />
+              ) : null}
+              <p className="reply-target-replying">
+                Replying to <span className="reply-mention">@{target.author.username}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="reply-input-row">
+            {currentUser ? <Avatar user={currentUser} /> : null}
+            <div className="reply-input-body">
+              <textarea
+                {...fieldProps}
+                value={content}
+                maxLength={1000}
+                placeholder="Post your reply"
+                aria-label="Post your reply"
+                autoFocus
+              />
+              <MediaPreview attachment={media} />
+            </div>
+          </div>
+
+          {error ? <p className="form-error">{error}</p> : null}
+
+          <div className="reply-composer-actions">
+            <div className="composer-tools">
+              <MediaButton attachment={media} />
+              <EmojiPicker onSelect={insertEmoji} />
+            </div>
+            <button
+              className="primary-button compact"
+              disabled={posting || empty || media.uploading}
+            >
+              {posting ? "Replying…" : "Reply"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function LinkPreviewCard({ preview }: { preview: LinkPreview }) {
   const [imageFailed, setImageFailed] = useState(false);
   useEffect(() => setImageFailed(false), [preview.url]);
@@ -843,10 +1032,7 @@ export function TweetCard({
   }
 
   const [commentOpen, setCommentOpen] = useState(false);
-  const [comment, setComment] = useState("");
-  const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(comment, setComment, 1000);
-  const media = useMediaAttachment();
-  const [acting, setActing] = useState<"like" | "comment" | null>(null);
+  const [acting, setActing] = useState<"like" | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [error, setError] = useState("");
   const displayDate = useMemo(() => {
@@ -879,25 +1065,11 @@ export function TweetCard({
     }
   }
 
-  async function submitComment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if ((!comment.trim() && media.mediaUrls.length === 0) || media.uploading) {
-      return;
-    }
-
-    setActing("comment");
-    setError("");
-    try {
-      await createComment(tweet.id, comment.trim(), media.mediaUrls);
-      setComment("");
-      media.clear();
-      setCommentOpen(false);
-      onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
+  // Errors propagate to ReplyComposer, which owns the draft and shows them
+  // inline rather than on the card behind the modal.
+  async function submitComment(content: string, mediaUrls: string[]) {
+    await createComment(tweet.id, content, mediaUrls);
+    onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -968,9 +1140,9 @@ export function TweetCard({
             className="tweet-action comment"
             onClick={(event) => {
               event.stopPropagation();
-              setCommentOpen((open) => !open);
+              setCommentOpen(true);
             }}
-            aria-expanded={commentOpen}
+            aria-label="Reply"
           >
             <MessageCircle size={18} aria-hidden="true" />
             <span>{tweet.comment_count}</span>
@@ -999,33 +1171,14 @@ export function TweetCard({
             <span>{tweet.like_count}</span>
           </button>
         </footer>
-        {commentOpen ? (
-          <form
-            className="comment-form"
-            onClick={(event) => event.stopPropagation()}
-            onSubmit={submitComment}
-          >
-            <div className="composer-tools">
-              <EmojiPicker onSelect={insertEmoji} />
-              <MediaButton attachment={media} />
-            </div>
-            <input
-              {...fieldProps}
-              value={comment}
-              maxLength={1000}
-              placeholder="Post your reply"
-              aria-label="Comment"
-            />
-            <button
-              className="primary-button compact"
-              disabled={acting === "comment" || (!comment.trim() && media.mediaUrls.length === 0) || media.uploading}
-            >
-              Reply
-            </button>
-            <MediaPreview attachment={media} />
-          </form>
-        ) : null}
       </div>
+      {commentOpen ? (
+        <ReplyComposer
+          target={tweet}
+          onClose={() => setCommentOpen(false)}
+          onSubmit={submitComment}
+        />
+      ) : null}
       {confirmingDelete ? (
         <ConfirmDialog
           title="Delete Tweet?"
@@ -1061,11 +1214,8 @@ export function CommentCard({
   depth?: number;
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
-  const [reply, setReply] = useState("");
-  const { insertEmoji, fieldProps } = useEmojiField<HTMLInputElement>(reply, setReply, 1000);
-  const media = useMediaAttachment();
   const [localComment, setLocalComment] = useState(comment);
-  const [acting, setActing] = useState<"like" | "comment" | null>(null);
+  const [acting, setActing] = useState<"like" | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
@@ -1138,30 +1288,15 @@ export function CommentCard({
     }
   }
 
-  async function submitReply(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if ((!reply.trim() && media.mediaUrls.length === 0) || media.uploading) {
-      return;
-    }
-
-    setActing("comment");
-    setError("");
-    try {
-      await replyToComment(localComment.id, reply.trim(), media.mediaUrls);
-      setReply("");
-      media.clear();
-      setReplyOpen(false);
-      setLocalComment((value) => ({
-        ...value,
-        comment_count: value.comment_count + 1,
-      }));
-      onReplyCreated();
-      onChanged();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setActing(null);
-    }
+  // Errors propagate to ReplyComposer, which shows them inside the modal.
+  async function submitReply(content: string, mediaUrls: string[]) {
+    await replyToComment(localComment.id, content, mediaUrls);
+    setLocalComment((value) => ({
+      ...value,
+      comment_count: value.comment_count + 1,
+    }));
+    onReplyCreated();
+    onChanged();
   }
 
   return (
@@ -1221,8 +1356,8 @@ export function CommentCard({
         <footer className="tweet-actions comment-actions">
           <button
             className="tweet-action comment"
-            onClick={() => setReplyOpen((open) => !open)}
-            aria-expanded={replyOpen}
+            onClick={() => setReplyOpen(true)}
+            aria-label="Reply"
           >
             <MessageCircle size={16} aria-hidden="true" />
             <span>{localComment.comment_count}</span>
@@ -1249,29 +1384,14 @@ export function CommentCard({
             <span>{localComment.like_count}</span>
           </button>
         </footer>
-        {replyOpen ? (
-          <form className="comment-form comment-reply-form" onSubmit={submitReply}>
-            <div className="composer-tools">
-              <EmojiPicker onSelect={insertEmoji} />
-              <MediaButton attachment={media} />
-            </div>
-            <input
-              {...fieldProps}
-              value={reply}
-              maxLength={1000}
-              placeholder="Reply to this comment"
-              aria-label="Reply to comment"
-            />
-            <button
-              className="primary-button compact"
-              disabled={acting === "comment" || (!reply.trim() && media.mediaUrls.length === 0) || media.uploading}
-            >
-              Reply
-            </button>
-            <MediaPreview attachment={media} />
-          </form>
-        ) : null}
       </div>
+      {replyOpen ? (
+        <ReplyComposer
+          target={localComment}
+          onClose={() => setReplyOpen(false)}
+          onSubmit={submitReply}
+        />
+      ) : null}
       {confirmingDelete ? (
         <ConfirmDialog
           title="Delete comment?"

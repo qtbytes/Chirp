@@ -637,11 +637,6 @@ button.rail-link:disabled:hover {
   margin-top: 8px;
 }
 
-.comment-form .composer-media {
-  grid-column: 1 / -1;
-  margin: 2px 0 0;
-}
-
 .emoji-trigger {
   color: var(--accent);
 }
@@ -1108,18 +1103,6 @@ button.rail-link:disabled:hover {
   color: var(--like);
 }
 
-.comment-form {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.comment-form input {
-  height: 38px;
-}
-
 .tweet-detail {
   min-height: 100vh;
 }
@@ -1140,7 +1123,9 @@ button.rail-link:disabled:hover {
 }
 
 .detail-tweet {
-  padding: 18px;
+  /* Bottom padding matches .comment-card so the root tweet's action row does
+     not sit in a noticeably deeper well than the replies below it. */
+  padding: 18px 18px 14px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1173,12 +1158,7 @@ button.rail-link:disabled:hover {
 
 .detail-actions {
   max-width: none;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.detail-comment-form {
-  margin-top: 16px;
+  padding: 8px 0 0;
 }
 
 .comment-list {
@@ -1220,10 +1200,6 @@ button.rail-link:disabled:hover {
 .comment-actions {
   max-width: 320px;
   margin-top: 8px;
-}
-
-.comment-reply-form {
-  margin-top: 10px;
 }
 
 .status-panel,
@@ -1806,4 +1782,122 @@ a.tab {
 .danger-button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* ---------------------------------------------------------------- reply composer */
+
+.reply-composer {
+  background: var(--panel);
+  border-radius: 16px;
+  width: min(600px, calc(100vw - 32px));
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.reply-composer-head {
+  display: flex;
+  padding: 8px 10px;
+}
+
+.reply-composer-form {
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px 12px;
+}
+
+/* The post being replied to: avatar column on the left, content on the right,
+   with a thread line running from the avatar down into the composer below. */
+.reply-target {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.reply-target-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.reply-thread-line {
+  flex: 1;
+  width: 2px;
+  min-height: 20px;
+  background: var(--line);
+  border-radius: 1px;
+}
+
+.reply-target-body {
+  min-width: 0;
+  padding-bottom: 4px;
+}
+
+.reply-target-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  font-size: 15px;
+}
+
+.reply-target-handle,
+.reply-target-dot,
+.reply-target-head time {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.reply-target-content {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.reply-target-replying {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.reply-mention {
+  color: var(--accent);
+}
+
+.reply-input-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.reply-input-body {
+  min-width: 0;
+}
+
+.reply-input-body textarea {
+  width: 100%;
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 19px;
+  line-height: 1.4;
+  min-height: 88px;
+  padding: 8px 0;
+  outline: none;
+}
+
+.reply-input-body textarea::placeholder {
+  color: var(--muted);
+}
+
+.reply-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
