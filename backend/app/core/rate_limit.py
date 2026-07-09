@@ -5,7 +5,7 @@ from fastapi import HTTPException, Request, status
 from redis.exceptions import RedisError
 
 from app.core.config import settings
-from app.core.security import parse_session_cookie
+from app.core.session_store import SessionBackendUnavailable, resolve_session
 from app.db.redis_client import get_redis_client
 
 
@@ -50,9 +50,19 @@ def rate_limiter(bucket_name: str, max_requests: int, window_seconds: int) -> Ca
         # session cookie, and fall back to the peer address. Behind a reverse
         # proxy that address is only the real client when uvicorn runs with
         # --proxy-headers, otherwise every caller shares the proxy's bucket.
-        session = parse_session_cookie(request.cookies.get(settings.session_cookie_name))
-        if session is not None:
-            identity = f"user:{session.user_id}"
+        #
+        # refresh=False: rate limiting is a read-only observation and must not
+        # keep a session alive on its own.
+        try:
+            user_id = resolve_session(
+                request.cookies.get(settings.session_cookie_name),
+                refresh=False,
+            )
+        except SessionBackendUnavailable:
+            user_id = None
+
+        if user_id is not None:
+            identity = f"user:{user_id}"
         else:
             identity = f"ip:{request.client.host if request.client else 'unknown'}"
 

@@ -39,10 +39,16 @@ cause skipped or duplicated rows. Repositories fetch `limit + 1` rows to detect
 the next page without a second query, and engagement counts are aggregated in
 subqueries to avoid N+1.
 
-**Redis is optional.** It caches the first timeline page (short TTL), backs the
-rate limiter and the link-preview cache, and runs the fan-out queue. When it is
-unreachable every one of those degrades gracefully — fan-out falls back to inline
-execution, caches simply miss.
+**Redis holds sessions; caching is best-effort.** The timeline and link-preview
+caches degrade gracefully when Redis is unreachable — fan-out falls back to
+inline execution, caches simply miss. Sessions and rate limiting do not: both
+fail closed with a 503 rather than silently dropping their guarantees.
+
+**Sessions are server-side.** The cookie holds an opaque, HMAC-signed session id;
+Redis maps it to a user id under a sliding idle TTL. The signature is verified
+before the store is consulted, so a forged id never costs a round trip. Logout
+deletes the record, which means a captured cookie stops working the moment its
+owner logs out — the thing a self-contained token (JWT included) cannot do.
 
 **Link previews unfurl any URL.** One generic path — an oEmbed provider lookup,
 then Open Graph / Twitter Card / `<title>` scraping — covers GitHub, YouTube,

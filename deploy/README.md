@@ -72,8 +72,11 @@ tar czf /srv/chirp/uploads-$(date +%F).tar.gz -C /srv/chirp/backend uploads
 ## Things worth knowing
 
 **Redis is mandatory.** The timeline and link-preview caches degrade gracefully
-without it, but `rate_limit.py` returns **503**. If you stop Redis, also set
-`RATE_LIMIT_ENABLED=false` in `backend/.env`.
+without it, but sessions and rate limiting do not: auth returns **503** and the
+limiter returns **503** rather than failing open. Setting
+`RATE_LIMIT_ENABLED=false` removes the limiter's dependency; nothing removes the
+session store's, by design — silently falling back to per-worker in-process
+sessions would be worse than an outage.
 
 **One uvicorn worker, on purpose.** The API and the RQ worker already share a
 single SQLite file. WAL plus a 5s busy timeout (`app/db/database.py`) makes two
@@ -82,6 +85,11 @@ scaling — only `DATABASE_URL` and that pragma listener are SQLite-specific.
 
 **Stopping `chirp-worker` is safe.** Fan-out then runs inline in the request.
 
-**Sessions never expire.** The cookie carries a user id and an HMAC, no
-timestamp. A stolen cookie is valid forever; rotating `SESSION_SECRET_KEY` (then
-re-running the script) is the only way to invalidate every session at once.
+**Sessions live in Redis.** The cookie carries an opaque, HMAC-signed session id;
+Redis maps it to a user id with a sliding 14-day idle TTL (`SESSION_TTL_SECONDS`).
+Logout deletes the record, so a captured cookie stops working immediately, and
+`revoke_user_sessions(user_id)` logs a user out everywhere.
+
+The script enables Redis AOF persistence for this reason — without it, a Redis
+restart logs everyone out. Rotating `SESSION_SECRET_KEY` still invalidates every
+session at once; to drop one session, delete its `session:<id>` key.

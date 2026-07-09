@@ -52,9 +52,22 @@ apt-get update -qq
 apt-get install -y -qq nginx redis-server nodejs npm curl ca-certificates sqlite3
 
 # Redis must never be reachable from the internet.
+REDIS_CHANGED=false
 if ! grep -qE '^bind 127\.0\.0\.1' /etc/redis/redis.conf; then
     log "binding redis to loopback"
     sed -i 's/^bind .*/bind 127.0.0.1 -::1/' /etc/redis/redis.conf
+    REDIS_CHANGED=true
+fi
+
+# Sessions live in Redis. Without persistence, a redis restart logs everyone out.
+if ! grep -qE '^appendonly yes' /etc/redis/redis.conf; then
+    log "enabling redis AOF persistence (sessions survive a restart)"
+    sed -i 's/^appendonly .*/appendonly yes/' /etc/redis/redis.conf
+    grep -qE '^appendonly yes' /etc/redis/redis.conf || echo 'appendonly yes' >> /etc/redis/redis.conf
+    REDIS_CHANGED=true
+fi
+
+if [[ "$REDIS_CHANGED" == true ]]; then
     systemctl restart redis-server
 fi
 systemctl enable --now redis-server >/dev/null
@@ -92,8 +105,12 @@ DATABASE_URL=sqlite:///./twitter.db
 REDIS_URL=$REDIS_URL
 FRONTEND_ORIGIN=https://$DOMAIN
 
-# Rotating this invalidates every session. The cookie is base64(user_id)+HMAC.
+# Signs the opaque session id in the cookie. Rotating it invalidates every
+# session at once; to drop a single session, delete its Redis key instead.
 SESSION_SECRET_KEY=$SECRET
+
+# Idle timeout. The TTL slides forward on each authenticated request.
+SESSION_TTL_SECONDS=1209600
 
 # The app refuses to boot if either of these is wrong for a public deploy.
 SESSION_COOKIE_SECURE=true

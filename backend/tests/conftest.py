@@ -47,3 +47,18 @@ settings.rate_limit_enabled = False
 def reset_database() -> None:
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def isolated_sessions(monkeypatch) -> None:
+    """
+    Keep sessions in-process during tests.
+
+    Otherwise every test that logs in writes `session:*` keys into the
+    developer's real Redis, sharing a keyspace with their browser session.
+    Tests that want the real backend undo this (see test_sessions.py).
+    """
+    from app.core import session_store
+
+    monkeypatch.setattr(session_store, "get_redis_client", lambda: None)
+    session_store._memory_sessions.clear()

@@ -1,10 +1,13 @@
+from typing import Annotated
+
 from app.api.deps import get_current_user_id
 from app.core.config import settings
-from app.core.security import create_session_cookie, hash_password, verify_password
+from app.core.security import hash_password, verify_password
+from app.core.session_store import create_session, destroy_session
 from app.db.database import get_db
 from app.repositories import user_repository
 from app.schemas.user import UserCreate, UserLogin, UserSummary
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -50,7 +53,17 @@ def login(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(response: Response) -> None:
+def logout(
+    response: Response,
+    session_cookie: Annotated[
+        str | None,
+        Cookie(alias=settings.session_cookie_name),
+    ] = None,
+) -> None:
+    # Delete the server-side record first: clearing the browser's copy alone
+    # would leave a captured cookie value working until it expired.
+    destroy_session(session_cookie)
+
     # Browsers only drop the cookie when the clearing attributes match the
     # ones it was set with.
     response.delete_cookie(
@@ -79,7 +92,11 @@ def me(
 def _set_session_cookie(response: Response, user_id: int) -> None:
     response.set_cookie(
         settings.session_cookie_name,
-        create_session_cookie(user_id),
+        create_session(user_id),
+        # max_age mirrors the server-side TTL so the browser stops sending a
+        # cookie the store would reject anyway. The server remains the
+        # authority: a client that ignores max_age still gets a 401.
+        max_age=settings.session_ttl_seconds,
         httponly=True,
         samesite="lax",
         secure=settings.session_cookie_secure,
