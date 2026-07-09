@@ -1,3 +1,9 @@
+> **Archived.** These numbers were produced against the pre-refactor schema by
+> `scripts/benchmark_celebrity_fanout.py`, which has since been deleted — it
+> broke against the unified `Post` model. Kept for historical reference only;
+> reproducing these results would mean rewriting the benchmark. See the root
+> [`readme.md`](../../readme.md).
+
 ## Database Write
 
 ### 100000 followers, 10000 batch size
