@@ -52,15 +52,37 @@ nginx -t && systemctl reload nginx
 
 `twitter.db` and `uploads/` are gitignored, so they never travel through git.
 Build a pruned database locally — only the `dev` and `test` users — and copy it
-once:
+once.
+
+> **A SQLite database in WAL mode is three files, not one.** Copying `twitter.db`
+> on top of a running database leaves the old `twitter.db-wal` and
+> `twitter.db-shm` beside it. On the next open, SQLite replays that stale log
+> into the file you just copied and **silently overwrites it**. Always stop the
+> services and delete all three files first.
 
 ```sh
 # locally, from the repo root
-uv run --project backend python deploy/prune_db.py --apply --copy-uploads
+uv run --project backend python deploy/prune_db.py --apply --copy-uploads --reset-passwords
+
+# stop the app and clear the old database *and its WAL sidecars*
+ssh root@vthe.shop 'systemctl stop chirp-api chirp-worker &&
+    rm -f /srv/chirp/backend/twitter.db /srv/chirp/backend/twitter.db-wal \
+          /srv/chirp/backend/twitter.db-shm'
+
 scp deploy/out/twitter.db root@vthe.shop:/srv/chirp/backend/twitter.db
 scp -r deploy/out/uploads/. root@vthe.shop:/srv/chirp/backend/uploads/
-ssh root@vthe.shop 'chown -R chirp:chirp /srv/chirp/backend && systemctl restart chirp-api'
+
+ssh root@vthe.shop '
+    chown -R chirp:chirp /srv/chirp/backend
+    chmod -R a+rX /srv/chirp/backend/uploads   # nginx (www-data) must read these
+    sqlite3 /srv/chirp/backend/twitter.db "SELECT COUNT(*) || \" users\" FROM users"
+    systemctl start chirp-api chirp-worker
+'
 ```
+
+That `SELECT COUNT(*)` should print `2 users`. If it prints `0`, a stale WAL
+overwrote the copy — repeat with the services stopped and all three files removed.
+`deploy.sh` prints the same count after every deploy for this reason.
 
 Run `prune_db.py` with no flags first for a dry-run report. Add
 `--reset-passwords` to blank the two password hashes — those hashes were public

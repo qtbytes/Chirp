@@ -330,6 +330,11 @@ nginx -t
 # over scp as root), and the app cannot open a root-owned SQLite file for write.
 chown -R "$APP_USER:$APP_USER" "$BACKEND"
 
+# nginx (www-data) serves /uploads/ from disk. An scp -r can land the directory
+# as 0700, which turns every avatar and image into a 403. a+rX adds read for
+# everyone and traverse on directories, without marking files executable.
+chmod -R a+rX "$BACKEND/uploads"
+
 log "restarting services"
 systemctl enable chirp-api chirp-worker >/dev/null
 systemctl restart chirp-api chirp-worker
@@ -359,6 +364,16 @@ systemctl is-active --quiet chirp-worker || {
     journalctl -u chirp-worker -n 30 --no-pager >&2
     die "chirp-worker failed to start"
 }
+
+# Surface the row count: a database clobbered by a stale WAL replay looks like a
+# perfectly healthy empty site otherwise.
+USER_COUNT="$(sudo -u "$APP_USER" sqlite3 "$BACKEND/twitter.db" \
+    'SELECT COUNT(*) FROM users' 2>/dev/null || echo '?')"
+log "database: $USER_COUNT users"
+if [[ "$USER_COUNT" == "0" ]]; then
+    warn "the database has no users. If you expected the pruned dev/test data,"
+    warn "a stale twitter.db-wal probably overwrote it -- see deploy/README.md."
+fi
 
 # Must be 401: X-User-Id is not a credential.
 code="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-User-Id: 1' \
