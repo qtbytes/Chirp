@@ -1,0 +1,87 @@
+# Deploy
+
+One config file, one script. The repo is checked out on the VPS and the app runs
+from that checkout, so `git pull` *is* the file sync.
+
+nginx serves the built frontend and `/uploads/` from disk and proxies `/api/` to
+uvicorn on loopback. Everything is same-origin.
+
+## First deploy
+
+```sh
+ssh root@vthe.shop
+git clone git@github.com:qtbytes/Chirp.git /srv/chirp
+cd /srv/chirp
+cp deploy/deploy.conf.example deploy/deploy.conf
+$EDITOR deploy/deploy.conf          # set DOMAIN, at minimum
+./deploy/deploy.sh
+```
+
+The script installs nginx/redis/node/uv, creates the `chirp` user, generates
+`backend/.env` with a random `SESSION_SECRET_KEY`, builds the frontend, installs
+the systemd units, writes the nginx site, and health-checks the result.
+
+It has no TLS certificate on the first run, so it writes an HTTP-only site.
+Get a cert, then re-run to switch to HTTPS:
+
+```sh
+apt install -y certbot python3-certbot-nginx
+certbot --nginx -d vthe.shop -d www.vthe.shop
+./deploy/deploy.sh
+```
+
+> Until TLS is up the site is HTTP, and `SESSION_COOKIE_SECURE=true` means the
+> browser will refuse to store the login cookie. Log in only after certbot runs.
+
+## Bringing the dev/test data over
+
+`twitter.db` and `uploads/` are gitignored, so they never travel through git.
+Build a pruned database locally — only the `dev` and `test` users — and copy it
+once:
+
+```sh
+# locally, from the repo root
+uv run --project backend python deploy/prune_db.py --apply --copy-uploads
+scp deploy/out/twitter.db root@vthe.shop:/srv/chirp/backend/twitter.db
+scp -r deploy/out/uploads/. root@vthe.shop:/srv/chirp/backend/uploads/
+ssh root@vthe.shop 'chown -R chirp:chirp /srv/chirp/backend && systemctl restart chirp-api'
+```
+
+Run `prune_db.py` with no flags first for a dry-run report. Add
+`--reset-passwords` to blank the two password hashes — those hashes were public
+on GitHub, so unless you have rotated the passwords you want this.
+
+## Redeploy
+
+```sh
+ssh root@vthe.shop 'cd /srv/chirp && git pull && ./deploy/deploy.sh'
+```
+
+Idempotent. It rebuilds, restarts, and leaves `twitter.db`, `uploads/`, and the
+existing `SESSION_SECRET_KEY` untouched.
+
+## Backups
+
+SQLite runs in WAL mode, so copy it with the backup API, not `cp`:
+
+```sh
+sudo -u chirp sqlite3 /srv/chirp/backend/twitter.db ".backup '/srv/chirp/backup-$(date +%F).db'"
+tar czf /srv/chirp/uploads-$(date +%F).tar.gz -C /srv/chirp/backend uploads
+```
+
+## Things worth knowing
+
+**Redis is mandatory.** The timeline and link-preview caches degrade gracefully
+without it, but `rate_limit.py` returns **503**. If you stop Redis, also set
+`RATE_LIMIT_ENABLED=false` in `backend/.env`.
+
+**One uvicorn worker, on purpose.** The API and the RQ worker already share a
+single SQLite file. WAL plus a 5s busy timeout (`app/db/database.py`) makes two
+writers safe; more workers would only add contention. Move to Postgres before
+scaling — only `DATABASE_URL` and that pragma listener are SQLite-specific.
+
+**Stopping `chirp-worker` is safe.** Fan-out then runs inline in the request.
+
+**Sessions never expire.** The cookie carries a user id and an HMAC, no
+timestamp. A stolen cookie is valid forever; rotating `SESSION_SECRET_KEY` (then
+re-running the script) is the only way to invalidate every session at once.

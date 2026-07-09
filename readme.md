@@ -85,6 +85,10 @@ cd backend && uv run pytest -q     # API, timeline, link preview
 cd frontend && npm run typecheck   # tsc -b
 ```
 
+## Deploying
+
+`git pull && ./deploy/deploy.sh` on the server. See [`deploy/`](deploy/README.md).
+
 ## Layout
 
 ```

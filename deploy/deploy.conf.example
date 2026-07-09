@@ -1,0 +1,21 @@
+# Copy to deploy/deploy.conf on the VPS and edit. Sourced by deploy.sh.
+# deploy.conf is gitignored, so `git pull` never overwrites it.
+
+# Public domain. Used for TLS certs, the CORS origin, and the frontend's API URL.
+DOMAIN=vthe.shop
+
+# Also serve www.<domain> as a redirect to the bare domain.
+REDIRECT_WWW=true
+
+# Where the repo is checked out on the VPS. deploy.sh runs the app from here,
+# so `git pull && sudo ./deploy/deploy.sh` is the whole redeploy.
+APP_DIR=/srv/chirp
+
+# System user that owns the code and runs the services.
+APP_USER=chirp
+
+# uvicorn listens here; nginx proxies /api/ to it. Keep it on loopback.
+BIND_HOST=127.0.0.1
+BIND_PORT=8000
+
+REDIS_URL=redis://127.0.0.1:6379/0
