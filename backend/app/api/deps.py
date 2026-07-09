@@ -13,21 +13,21 @@ def get_current_user_id(
     ] = None,
 ) -> int:
     """
-    Interview-friendly auth shortcut.
+    Resolve the caller's user id from the signed session cookie.
 
-    Instead of wiring JWT/session auth first, use the X-User-Id header so you
-    can focus on timeline, feed, pagination, cache, and high-concurrency design.
-
-    Production note:
-    Replace this with real authentication middleware / dependency later.
+    ``X-User-Id`` is a plain request header, so trusting it means any client can
+    impersonate any user by sending one. It is therefore only honoured when
+    ``dev_allow_header_auth`` is explicitly enabled, which config.py refuses to
+    combine with a production (HTTPS) cookie setup.
     """
     session = parse_session_cookie(session_cookie)
     if session is not None:
         return session.user_id
 
-    if x_user_id is None or x_user_id <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid session.",
-        )
-    return x_user_id
+    if settings.dev_allow_header_auth and x_user_id is not None and x_user_id > 0:
+        return x_user_id
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Missing or invalid session.",
+    )

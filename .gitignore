@@ -2,6 +2,12 @@
 # hashes) — never commit them.
 *.db
 *.db.bak-*
+# WAL sidecars, created by the journal_mode=WAL pragma
+*.db-wal
+*.db-shm
+
+# Staged deploy payload: pruned production database + user uploads.
+deploy/out/
 
 twitter.db
 dump.rdb

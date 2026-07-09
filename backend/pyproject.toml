@@ -22,12 +22,10 @@ dev = [
     "pytest>=8.4.0",
 ]
 
-[project.scripts]
-run-rq-worker = "app.worker:main"
+# No [build-system]: this is a virtual project, so uv installs the dependencies
+# but not the project itself. A [project.scripts] entry point would never be
+# created in .venv/bin — run the worker with `python -m app.worker` instead.
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-
-[tool.setuptools.packages.find]
-include = ["app*"]

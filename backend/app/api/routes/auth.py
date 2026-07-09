@@ -51,7 +51,15 @@ def login(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(response: Response) -> None:
-    response.delete_cookie(settings.session_cookie_name, path="/")
+    # Browsers only drop the cookie when the clearing attributes match the
+    # ones it was set with.
+    response.delete_cookie(
+        settings.session_cookie_name,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=settings.session_cookie_secure,
+    )
 
 
 @router.get("/me", response_model=UserSummary)
@@ -74,6 +82,6 @@ def _set_session_cookie(response: Response, user_id: int) -> None:
         create_session_cookie(user_id),
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.session_cookie_secure,
         path="/",
     )

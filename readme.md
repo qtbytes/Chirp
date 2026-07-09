@@ -71,7 +71,7 @@ To exercise fan-out on write, start Redis and a worker alongside the API:
 
 ```sh
 cd backend
-uv run run-rq-worker
+uv run python -m app.worker
 ```
 
 Configuration is read from `backend/.env` (see `Settings` in

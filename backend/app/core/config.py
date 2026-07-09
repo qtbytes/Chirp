@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+DEFAULT_SESSION_SECRET = "dev-session-secret-change-me"
+
 
 def resolve_database_url(database_url: str) -> str:
     sqlite_prefix = "sqlite:///"
@@ -28,8 +30,15 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     frontend_origin: str = "http://localhost:5173"
     session_cookie_name: str = "twitter_session"
-    session_secret_key: str = "dev-session-secret-change-me"
+    session_secret_key: str = DEFAULT_SESSION_SECRET
+    # Must be True wherever the site is served over HTTPS, otherwise the
+    # session cookie is sent on plaintext requests too.
+    session_cookie_secure: bool = False
     dev_auto_sync_sqlite_schema: bool = True
+    # Honour the X-User-Id header as authentication. Local convenience only:
+    # the header is client-supplied, so enabling it lets anyone impersonate
+    # any user. Never enable on a network-reachable deployment.
+    dev_allow_header_auth: bool = False
     uploads_dir: str = str(PROJECT_ROOT / "uploads")
 
     timeline_cache_ttl_seconds: int = 30
@@ -70,3 +79,18 @@ class Settings(BaseSettings):
 
 settings = Settings()
 settings.database_url = resolve_database_url(settings.database_url)
+
+if settings.session_cookie_secure and settings.dev_allow_header_auth:
+    raise RuntimeError(
+        "DEV_ALLOW_HEADER_AUTH must be false in production: the X-User-Id "
+        "header is client-supplied and would let anyone impersonate any user."
+    )
+
+if settings.session_cookie_secure and settings.session_secret_key == DEFAULT_SESSION_SECRET:
+    # The session cookie is just base64(user_id) + HMAC(secret). With the
+    # published default secret anyone can forge a cookie for any user id.
+    raise RuntimeError(
+        "SESSION_SECRET_KEY is still the development default. Set a random "
+        "value (e.g. `python -c \"import secrets; print(secrets.token_urlsafe(48))\"`) "
+        "before serving over HTTPS."
+    )
