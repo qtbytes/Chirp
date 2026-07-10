@@ -119,7 +119,6 @@ SESSION_COOKIE_SECURE=true
 DEV_ALLOW_HEADER_AUTH=false
 
 RATE_LIMIT_ENABLED=true
-DEV_AUTO_SYNC_SQLITE_SCHEMA=true
 
 # Keeps the resolved-IP SSRF check on for link-preview fetches.
 LINK_PREVIEW_VERIFY_DNS=true
@@ -177,7 +176,7 @@ fi
 chown "$APP_USER:$APP_USER" "$STAMP_DIR"/*.stamp 2>/dev/null || true
 
 if [[ ! -f "$BACKEND/twitter.db" ]]; then
-    warn "no $BACKEND/twitter.db -- the app will create an empty one."
+    warn "no $BACKEND/twitter.db -- alembic will create an empty one below."
     warn "To keep the dev/test data, copy the pruned database over before starting:"
     warn "    scp deploy/out/twitter.db root@$DOMAIN:$BACKEND/twitter.db"
     warn "    scp -r deploy/out/uploads/ root@$DOMAIN:$BACKEND/"
@@ -377,6 +376,24 @@ chown -R "$APP_USER:$APP_USER" "$BACKEND"
 # as 0700, which turns every avatar and image into a 403. a+rX adds read for
 # everyone and traverse on directories, without marking files executable.
 chmod -R a+rX "$BACKEND/uploads"
+
+# ---------------------------------------------------------------- migrations
+# Runs before the restart so the new code never meets the old schema. Must run
+# after the chown above: alembic writes as $APP_USER and cannot open a
+# root-owned database. Creates twitter.db from scratch if it is missing, and
+# adopts a pre-Alembic database by stamping it (see backend/alembic/env.py).
+if [[ -f "$BACKEND/twitter.db" ]]; then
+    BACKUP="$BACKEND/twitter.db.bak-$(date +%Y%m%d-%H%M%S)"
+    log "backing up database to $(basename "$BACKUP")"
+    # .backup, not cp: WAL mode means the live database is three files, and the
+    # API may be mid-write. The backup API folds the WAL into one consistent
+    # single-file snapshot; cp would capture a torn one.
+    sudo -u "$APP_USER" sqlite3 "$BACKEND/twitter.db" ".backup '$BACKUP'"
+fi
+
+log "running database migrations"
+sudo -u "$APP_USER" env HOME="$APP_DIR" \
+    sh -c "cd '$BACKEND' && '$VENV/bin/alembic' upgrade head"
 
 log "restarting services"
 systemctl enable chirp-api chirp-worker >/dev/null

@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     # How long a session survives without activity. The TTL slides forward on
     # each authenticated request, so this is an idle timeout, not a hard cap.
     session_ttl_seconds: int = 14 * 24 * 60 * 60
-    dev_auto_sync_sqlite_schema: bool = True
     # Honour the X-User-Id header as authentication. Local convenience only:
     # the header is client-supplied, so enabling it lets anyone impersonate
     # any user. Never enable on a network-reachable deployment.

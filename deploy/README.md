@@ -118,8 +118,11 @@ exiting. `--password` exists for scripting; avoid it on a shared box.
 ssh root@vthe.shop 'cd /srv/chirp && git pull && ./deploy/deploy.sh'
 ```
 
-Idempotent. It restarts the services and leaves `twitter.db`, `uploads/`, and the
-existing `SESSION_SECRET_KEY` untouched.
+Idempotent. It leaves `uploads/` and the existing `SESSION_SECRET_KEY` untouched.
+Before restarting the services it snapshots `twitter.db` to
+`twitter.db.bak-<timestamp>` (through the backup API, which folds the WAL into one
+consistent file) and runs `alembic upgrade head` — migrations apply while the old
+code is still serving, then the new code starts against the new schema.
 
 The two slow steps are cached, so a backend-only or docs-only deploy skips both:
 
@@ -141,6 +144,52 @@ SQLite runs in WAL mode, so copy it with the backup API, not `cp`:
 ```sh
 sudo -u chirp sqlite3 /srv/chirp/backend/twitter.db ".backup '/srv/chirp/backup-$(date +%F).db'"
 tar czf /srv/chirp/uploads-$(date +%F).tar.gz -C /srv/chirp/backend uploads
+```
+
+## Schema migrations
+
+Alembic owns the schema. `deploy.sh` runs `alembic upgrade head` on every deploy,
+so there is normally nothing to do by hand. To inspect or drive it yourself:
+
+```sh
+cd /srv/chirp/backend
+sudo -u chirp .venv/bin/alembic current      # applied revision
+sudo -u chirp .venv/bin/alembic history      # what exists
+sudo -u chirp .venv/bin/alembic upgrade head
+```
+
+Run it from `backend/`: `alembic/env.py` reads `DATABASE_URL` out of `backend/.env`
+through the app's own `Settings`, so it can never target a different file than the
+API does.
+
+**A database created before Alembic is adopted, not rebuilt.** If `twitter.db` has
+tables but no `alembic_version`, `env.py` stamps it with the baseline revision
+rather than replaying it, then applies everything after. That is what makes
+`upgrade head` safe to run against the live database and against an empty one.
+
+**Stop the services for the deploy that first applies `0002`.** Migrations run
+while the old code is still serving, and `0002` rebuilds `posts`, `likes` and
+`notifications` (SQLite cannot `ALTER` a column type in place). At this data size
+the rebuild takes milliseconds and the API's 5s busy timeout would ride it out,
+but there is no reason to race it:
+
+```sh
+systemctl stop chirp-api chirp-worker && ./deploy/deploy.sh
+```
+
+Only that one deploy needs it — `0002` is a no-op once applied, and every later
+revision should be written to run online.
+
+If a migration fails, the deploy aborts before the services restart, and the
+snapshot it just took is sitting next to the database:
+
+```sh
+systemctl stop chirp-api chirp-worker
+cd /srv/chirp/backend
+rm -f twitter.db twitter.db-wal twitter.db-shm    # WAL sidecars, see above
+cp twitter.db.bak-<timestamp> twitter.db
+chown chirp:chirp twitter.db
+systemctl start chirp-api chirp-worker
 ```
 
 ## Things worth knowing

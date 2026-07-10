@@ -2,8 +2,6 @@ from pathlib import Path
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.db.database import Base, engine
-from app.db.dev_schema import sync_sqlite_dev_schema
 from app.models import (  # noqa: F401
     FeedItem,
     Follow,
@@ -16,10 +14,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-if settings.dev_auto_sync_sqlite_schema:
-    sync_sqlite_dev_schema(engine, Base.metadata)
-else:
-    Base.metadata.create_all(bind=engine)
+# The schema is owned by Alembic (`cd backend && uv run alembic upgrade head`),
+# not by this process. Importing the app used to run create_all() against
+# settings.database_url as a side effect, which meant even the test suite
+# reached into the real twitter.db just by importing `main`.
 
 app = FastAPI(
     title=settings.app_name,

@@ -1,0 +1,114 @@
+from logging.config import fileConfig
+
+from alembic import context
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy import Connection, create_engine, inspect
+
+from app.core.config import settings
+from app.db.database import Base, engine
+
+# Importing the models is what populates Base.metadata, which autogenerate
+# diffs against the live database. Without this every revision comes out empty.
+from app.models import (  # noqa: F401
+    FeedItem,
+    Follow,
+    Like,
+    Notification,
+    Post,
+    User,
+)
+
+config = context.config
+
+if config.config_file_name is not None:
+    # disable_existing_loggers would otherwise silence pytest's capture when the
+    # migration test invokes `command.upgrade` in-process.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
+
+target_metadata = Base.metadata
+
+# The first revision: a full CREATE of the schema as the models define it.
+BASELINE_REVISION = "0001"
+
+
+def _url_override() -> str | None:
+    """
+    A database URL supplied by the caller, if any.
+
+    alembic.ini deliberately leaves ``sqlalchemy.url`` unset, so this is normally
+    None and the app's own settings win. Setting it programmatically lets the
+    migration tests point at a scratch file rather than the developer's
+    twitter.db.
+    """
+    return config.get_main_option("sqlalchemy.url")
+
+
+def _adopt_pre_alembic_database(connection: Connection) -> None:
+    """
+    Stamp a database that predates Alembic rather than trying to recreate it.
+
+    The dev and production databases were built by ``create_all()`` plus the old
+    ``sync_sqlite_dev_schema`` helper, so their tables already exist while no
+    ``alembic_version`` row does. Running the baseline against them would fail on
+    its first ``CREATE TABLE``.
+
+    Recording the baseline as already applied keeps ``alembic upgrade head`` the
+    single safe command everywhere: a fresh database runs the baseline, an
+    adopted one skips straight to the revisions after it. Where the baseline and
+    an adopted schema actually disagree, revision 0002 reconciles them.
+    """
+    table_names = set(inspect(connection).get_table_names())
+
+    if "alembic_version" in table_names or "users" not in table_names:
+        return
+
+    MigrationContext.configure(connection).stamp(
+        ScriptDirectory.from_config(config), BASELINE_REVISION
+    )
+
+
+def run_migrations_offline() -> None:
+    """Emit SQL to stdout instead of running it (``alembic upgrade head --sql``)."""
+    context.configure(
+        url=_url_override() or settings.database_url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+        # SQLite cannot ALTER most things in place; batch mode rewrites the table
+        # instead. It is a no-op on backends that can, so both modes set it.
+        render_as_batch=True,
+        compare_type=True,
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    # Reuse the application engine so migrations connect exactly the way the API
+    # does: same URL, same SQLite pragmas (WAL, busy_timeout). An explicit
+    # sqlalchemy.url override means a caller wants a different database, so it
+    # gets its own engine.
+    override = _url_override()
+    connectable = create_engine(override) if override else engine
+
+    with connectable.connect() as connection:
+        _adopt_pre_alembic_database(connection)
+        connection.commit()
+
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            render_as_batch=True,
+            compare_type=True,
+        )
+
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
