@@ -1,4 +1,5 @@
 from app.api.deps import get_current_user_id
+from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.models.post import Post
 from app.repositories import engagement_repository, post_repository
@@ -45,7 +46,11 @@ def list_comment_stats(
     ]
 
 
-@router.post("/{comment_id}/likes", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{comment_id}/likes",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limiter("like"))],
+)
 def like_comment(
     comment_id: int,
     current_user_id: int = Depends(get_current_user_id),
@@ -70,7 +75,11 @@ def like_comment(
     }
 
 
-@router.delete("/{comment_id}/likes", status_code=status.HTTP_200_OK)
+@router.delete(
+    "/{comment_id}/likes",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limiter("like"))],
+)
 def unlike_comment(
     comment_id: int,
     current_user_id: int = Depends(get_current_user_id),
@@ -88,7 +97,11 @@ def unlike_comment(
     }
 
 
-@router.post("/{comment_id}/likes/toggle", status_code=status.HTTP_200_OK)
+@router.post(
+    "/{comment_id}/likes/toggle",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limiter("like"))],
+)
 def toggle_comment_like(
     comment_id: int,
     current_user_id: int = Depends(get_current_user_id),
@@ -130,6 +143,7 @@ def toggle_comment_like(
     "/{comment_id}/comments",
     response_model=CommentOut,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limiter("comment"))],
 )
 def reply_to_comment(
     comment_id: int,

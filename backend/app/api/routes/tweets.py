@@ -53,9 +53,7 @@ def list_tweet_stats(
     "",
     response_model=TweetOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[
-        Depends(rate_limiter("post_tweet", max_requests=10, window_seconds=60))
-    ],
+    dependencies=[Depends(rate_limiter("post_tweet"))],
 )
 def create_tweet(
     payload: TweetCreate,

@@ -2,6 +2,7 @@ from typing import Literal
 
 from app.api.deps import get_current_user_id
 from app.core.config import settings
+from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.schemas.tweet import TimelinePage
 from app.services.timeline_service import TimelineService
@@ -11,7 +12,11 @@ from sqlalchemy.orm import Session
 router = APIRouter(prefix="/timeline", tags=["timeline"])
 
 
-@router.get("/home", response_model=TimelinePage)
+@router.get(
+    "/home",
+    response_model=TimelinePage,
+    dependencies=[Depends(rate_limiter("timeline"))],
+)
 def get_home_timeline(
     limit: int = Query(default=settings.timeline_page_size, ge=1, le=50),
     cursor: str | None = None,
@@ -43,7 +48,11 @@ def get_home_timeline(
         ) from exc
 
 
-@router.get("/for-you", response_model=TimelinePage)
+@router.get(
+    "/for-you",
+    response_model=TimelinePage,
+    dependencies=[Depends(rate_limiter("timeline"))],
+)
 def get_for_you_timeline(
     limit: int = Query(default=settings.timeline_page_size, ge=1, le=50),
     cursor: str | None = None,

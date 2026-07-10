@@ -50,6 +50,24 @@ before the store is consulted, so a forged id never costs a round trip. Logout
 deletes the record, which means a captured cookie stops working the moment its
 owner logs out — the thing a self-contained token (JWT included) cannot do.
 
+**One rate-limit bucket per name, and the name is the config key.**
+`rate_limiter("like")` reads `rate_limit_like_{max_requests,window_seconds}` from
+`Settings` *on every request*, and refuses to build a dependency for a bucket that
+has no settings. Passing the numbers as arguments instead — as this once did —
+froze them at import, which is how three configured limits ended up wired to
+nothing. A test asserts the settings and the call sites still name the same
+buckets, in both directions.
+
+Writes bucket by user, so a limit follows the account rather than the network it
+dials in from. `/auth/login` and `/auth/register` bucket by IP: a caller guessing
+passwords may hold a valid session of their own, and keying on it would hand them
+a fresh allowance per guess. That throttles one host grinding a credential dump,
+not the same dump replayed from a botnet. Login is deliberately *not* throttled
+per username — a username bucket lets anyone lock a known account out on demand.
+
+A 429 carries `Retry-After`, computed from the oldest request still inside the
+sliding window rather than the window length, so it shrinks as the window slides.
+
 **Alembic owns the schema, and adopting it found real drift.** Before, importing
 the app ran `create_all()` plus a helper that bolted missing nullable columns
 onto SQLite at startup. That silently hid two things: `create_all()` skips a
@@ -78,8 +96,12 @@ fetches (see `link_preview_*` in `app/core/config.py`).
 
 ## Running it
 
-Requires Python 3.12+, [uv](https://docs.astral.sh/uv/), and Node. Redis is
-optional.
+Requires Python 3.12+, [uv](https://docs.astral.sh/uv/), and Node.
+
+Redis is optional only with `RATE_LIMIT_ENABLED=false` in `backend/.env`. The
+limiter fails closed, so with it on — the default — every limited endpoint,
+including the timeline and login, answers 503 without Redis. Sessions and the
+timeline cache do fall back on their own.
 
 ```sh
 # backend → http://localhost:8000  (docs at /docs)

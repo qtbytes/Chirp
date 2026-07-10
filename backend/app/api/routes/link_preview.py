@@ -11,9 +11,7 @@ router = APIRouter(prefix="/link-preview", tags=["link-preview"])
 @router.get(
     "",
     response_model=LinkPreviewOut,
-    dependencies=[
-        Depends(rate_limiter("link_preview", max_requests=30, window_seconds=60))
-    ],
+    dependencies=[Depends(rate_limiter("link_preview"))],
 )
 def get_link_preview(
     url: str = Query(..., min_length=1, max_length=2048),

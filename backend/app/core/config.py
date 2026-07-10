@@ -62,7 +62,15 @@ class Settings(BaseSettings):
     link_preview_http_proxy: str | None = None
     link_preview_verify_dns: bool = True
 
+    # One bucket per `rate_limiter("<name>")` call site. The names are the
+    # contract: rate_limiter looks up rate_limit_<name>_{max_requests,
+    # window_seconds} and refuses to build a dependency without them, and
+    # tests/test_rate_limit.py fails if a bucket here is never used.
+    #
+    # Turning this off removes the limiter's hard dependency on Redis. Leave it
+    # on anywhere reachable from the internet.
     rate_limit_enabled: bool = True
+
     rate_limit_post_tweet_max_requests: int = 10
     rate_limit_post_tweet_window_seconds: int = 60
     rate_limit_like_max_requests: int = 60
@@ -71,6 +79,17 @@ class Settings(BaseSettings):
     rate_limit_comment_window_seconds: int = 60
     rate_limit_timeline_max_requests: int = 120
     rate_limit_timeline_window_seconds: int = 60
+    rate_limit_link_preview_max_requests: int = 30
+    rate_limit_link_preview_window_seconds: int = 60
+
+    # Unauthenticated, so these bucket by IP. Login is the credential-stuffing
+    # surface: 10 tries per 5 minutes leaves room for a mistyped password and
+    # little else. Register is throttled because an open signup endpoint is a
+    # free way to fill the users table.
+    rate_limit_login_max_requests: int = 10
+    rate_limit_login_window_seconds: int = 300
+    rate_limit_register_max_requests: int = 5
+    rate_limit_register_window_seconds: int = 3600
 
     model_config = SettingsConfigDict(
         env_file=".env",

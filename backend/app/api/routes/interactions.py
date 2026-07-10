@@ -1,4 +1,5 @@
 from app.api.deps import get_current_user_id
+from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.repositories import engagement_repository
 from app.schemas.comment import CommentCreate, CommentOut
@@ -9,7 +10,11 @@ from sqlalchemy.orm import Session
 router = APIRouter(prefix="/tweets", tags=["interactions"])
 
 
-@router.post("/{tweet_id}/likes", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{tweet_id}/likes",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limiter("like"))],
+)
 def like_tweet(
     tweet_id: int,
     current_user_id: int = Depends(get_current_user_id),
@@ -42,7 +47,11 @@ def like_tweet(
     }
 
 
-@router.delete("/{tweet_id}/likes", status_code=status.HTTP_200_OK)
+@router.delete(
+    "/{tweet_id}/likes",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limiter("like"))],
+)
 def unlike_tweet(
     tweet_id: int,
     current_user_id: int = Depends(get_current_user_id),
@@ -66,7 +75,11 @@ def unlike_tweet(
     }
 
 
-@router.post("/{tweet_id}/likes/toggle", status_code=status.HTTP_200_OK)
+@router.post(
+    "/{tweet_id}/likes/toggle",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limiter("like"))],
+)
 def toggle_tweet_like(
     tweet_id: int,
     current_user_id: int = Depends(get_current_user_id),
@@ -108,6 +121,7 @@ def toggle_tweet_like(
     "/{tweet_id}/comments",
     response_model=CommentOut,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limiter("comment"))],
 )
 def create_comment(
     tweet_id: int,
