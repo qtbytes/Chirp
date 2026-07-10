@@ -23,6 +23,7 @@ import {
   getErrorMessage,
   parseBackendDate,
 } from "./components";
+import { ChangePasswordModal } from "./ChangePasswordModal";
 import { EditProfileModal } from "./EditProfileModal";
 
 export function ProfileView({
@@ -44,6 +45,7 @@ export function ProfileView({
   const [profileError, setProfileError] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const [tweets, setTweets] = useState<Tweet[]>([]);
   const [tweetsCursor, setTweetsCursor] = useState<string | null>(null);
@@ -213,9 +215,14 @@ export function ProfileView({
         <div className="profile-header-top">
           <Avatar user={profile} size="large" />
           {profile.is_current_user ? (
-            <button className="outline-button" onClick={() => setEditing(true)}>
-              Edit profile
-            </button>
+            <div className="profile-actions">
+              <button className="outline-button" onClick={() => setChangingPassword(true)}>
+                Change password
+              </button>
+              <button className="outline-button" onClick={() => setEditing(true)}>
+                Edit profile
+              </button>
+            </div>
           ) : (
             <button
               className={profile.is_following ? "outline-button following" : "primary-button compact"}
@@ -356,6 +363,10 @@ export function ProfileView({
             }
           }}
         />
+      ) : null}
+
+      {changingPassword && profile.is_current_user ? (
+        <ChangePasswordModal onClose={() => setChangingPassword(false)} />
       ) : null}
     </section>
   );

@@ -256,6 +256,12 @@ textarea:focus {
   font-size: 14px;
 }
 
+.form-hint {
+  color: var(--muted);
+  margin: 0;
+  font-size: 13px;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -1452,6 +1458,14 @@ button.rail-link:disabled:hover {
 
 .profile-header-top .avatar.large {
   border: 4px solid var(--panel);
+}
+
+/* The header is space-between, so the owner's two buttons need to travel as one
+   unit rather than pushing the avatar around. */
+.profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .profile-name {

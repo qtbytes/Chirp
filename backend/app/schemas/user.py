@@ -2,6 +2,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# One definition, so registration, login, password change, and
+# deploy/set_password.py cannot drift apart on what counts as a valid password.
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_MAX_LENGTH = 128
+
 # Usernames double as top-level profile URLs (e.g. /alice), so they must not
 # collide with existing or likely-future app routes.
 RESERVED_USERNAMES = frozenset(
@@ -25,7 +30,7 @@ RESERVED_USERNAMES = frozenset(
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=50)
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
 
     @field_validator("username")
     @classmethod
@@ -47,7 +52,17 @@ class UserSummary(BaseModel):
 
 class UserLogin(BaseModel):
     username: str = Field(min_length=3, max_length=50)
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+
+
+class PasswordChange(BaseModel):
+    # No minimum on the current password. Bounding it would answer a short wrong
+    # guess with 422 and a long wrong guess with 403, which tells an attacker
+    # holding a stolen session something about the password they are guessing.
+    current_password: str = Field(max_length=PASSWORD_MAX_LENGTH)
+    new_password: str = Field(
+        min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH
+    )
 
 
 class UserDiscoveryOut(UserSummary):

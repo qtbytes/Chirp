@@ -4,10 +4,15 @@ from app.api.deps import get_current_user_id
 from app.core.config import settings
 from app.core.rate_limit import rate_limiter
 from app.core.security import hash_password, verify_password
-from app.core.session_store import create_session, destroy_session
+from app.core.session_store import (
+    SessionBackendUnavailable,
+    create_session,
+    destroy_session,
+    revoke_user_sessions,
+)
 from app.db.database import get_db
 from app.repositories import user_repository
-from app.schemas.user import UserCreate, UserLogin, UserSummary
+from app.schemas.user import PasswordChange, UserCreate, UserLogin, UserSummary
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
@@ -96,6 +101,69 @@ def logout(
         samesite="lax",
         secure=settings.session_cookie_secure,
     )
+
+
+@router.post(
+    "/change-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limiter("change_password"))],
+)
+def change_password(
+    payload: PasswordChange,
+    response: Response,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Change the caller's password, logging every other device out.
+
+    Changing a password is what you do when you think it leaked, so every
+    session minted with the old one has to die -- that is the whole point of
+    keeping sessions server-side. The caller's own device is then handed a fresh
+    session rather than being bounced to the login screen.
+
+    There is no reset counterpart: with no email on ``User`` there is nothing to
+    send a token to, so a forgotten password stays an operator job (see
+    ``deploy/set_password.py``).
+    """
+    user = user_repository.get_user(db, current_user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="session user not found",
+        )
+
+    # A stolen cookie must not be enough to take the account over: proving
+    # knowledge of the current password is what separates the two.
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="current password is incorrect",
+        )
+
+    if verify_password(payload.new_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="new password must differ from the current one",
+        )
+
+    # Revoke before writing the new hash, not after. If the revoke fails we have
+    # changed nothing and can fail the request; if the write succeeded first and
+    # the revoke then failed, sessions opened with the leaked password would
+    # survive a change made specifically to kill them.
+    try:
+        revoke_user_sessions(user.id)
+    except SessionBackendUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Session storage is unavailable.",
+        ) from exc
+
+    user_repository.update_user_password(db, user.id, hash_password(payload.new_password))
+
+    # revoke_user_sessions killed this request's session too. Mint a new one so
+    # the device that changed the password stays signed in.
+    _set_session_cookie(response, user.id)
 
 
 @router.get("/me", response_model=UserSummary)

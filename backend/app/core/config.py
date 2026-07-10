@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     rate_limit_register_max_requests: int = 5
     rate_limit_register_window_seconds: int = 3600
 
+    # Authenticated, so this buckets by user. It throttles guessing the *current*
+    # password from a stolen session -- the one place an attacker who already has
+    # a cookie can brute-force something.
+    rate_limit_change_password_max_requests: int = 5
+    rate_limit_change_password_window_seconds: int = 900
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -110,6 +110,23 @@ export function logout(): Promise<void> {
   return request<void>("/auth/logout", { method: "POST" });
 }
 
+/**
+ * Rotate the password. Signs every *other* device out; the session cookie this
+ * call gets back keeps the current one signed in.
+ */
+export function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  return request<void>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+}
+
 export function getCurrentUser(): Promise<UserSummary> {
   return request<UserSummary>("/auth/me");
 }

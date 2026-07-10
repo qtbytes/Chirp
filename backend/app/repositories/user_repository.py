@@ -73,6 +73,17 @@ def update_user_profile(db: Session, user_id: int, fields: dict) -> User:
     return user
 
 
+def update_user_password(db: Session, user_id: int, password_hash: str) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise ValueError("user not found")
+
+    user.password_hash = password_hash
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def update_user_avatar(db: Session, user_id: int, avatar_url: str) -> User:
     user = db.get(User, user_id)
     if user is None:

@@ -11,8 +11,8 @@ work — with a real UI on top rather than a toy script.
 ## Features
 
 Posting with images and video, threaded comments and replies, likes, quote
-tweets, follows, profiles with editable bio and avatar, notifications, emoji
-picker, and Open Graph link preview cards.
+tweets, follows, profiles with editable bio and avatar, password change,
+notifications, emoji picker, and Open Graph link preview cards.
 
 ## Design notes
 
@@ -49,6 +49,17 @@ Redis maps it to a user id under a sliding idle TTL. The signature is verified
 before the store is consulted, so a forged id never costs a round trip. Logout
 deletes the record, which means a captured cookie stops working the moment its
 owner logs out — the thing a self-contained token (JWT included) cannot do.
+
+`POST /auth/change-password` is where that pays off: you change a password
+because the old one leaked, so every session minted with it is revoked and the
+caller's own device is handed a fresh one. Sessions are revoked *before* the new
+hash is written — if the store is unreachable the request fails having changed
+nothing, where the other order would leave the new password in place and the
+leaked sessions alive. Proving knowledge of the current password is required, so
+a stolen cookie alone cannot take the account over.
+
+There is **no password reset**. `User` carries no email, so there is nowhere to
+send a token; a forgotten password stays an operator job (`deploy/set_password.py`).
 
 **One rate-limit bucket per name, and the name is the config key.**
 `rate_limiter("like")` reads `rate_limit_like_{max_requests,window_seconds}` from

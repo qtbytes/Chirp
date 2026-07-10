@@ -1,9 +1,12 @@
 """
 Set a user's password directly in a Chirp database.
 
-There is no password-reset endpoint, so after ``prune_db.py --reset-passwords``
-the kept accounts have a blank hash and cannot log in at all. This script gives
-them a new one, using the same ``pbkdf2_sha256`` hashing the app uses.
+There is no password-*reset* endpoint -- ``User`` carries no email, so there is
+nowhere to send a token, and a forgotten password stays an operator job. (A
+signed-in user can rotate their own via ``POST /auth/change-password``.) After
+``prune_db.py --reset-passwords`` the kept accounts have a blank hash and cannot
+log in at all; this script gives them a new one, using the same
+``pbkdf2_sha256`` hashing the app uses.
 
 Run it against the staged database before shipping:
 
@@ -30,14 +33,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND = REPO_ROOT / "backend"
 DEFAULT_DB = REPO_ROOT / "deploy" / "out" / "twitter.db"
 
-# Import the app's own hashing so the stored format can never drift from
-# what verify_password() expects.
+# Import the app's own hashing and password rules so neither the stored format
+# nor the accepted length can drift from what the API does.
 sys.path.insert(0, str(BACKEND))
 from app.core.security import hash_password, verify_password  # noqa: E402
-
-# Mirrors UserCreate/UserLogin in app/schemas/user.py.
-MIN_PASSWORD_LENGTH = 8
-MAX_PASSWORD_LENGTH = 128
+from app.schemas.user import (  # noqa: E402
+    PASSWORD_MAX_LENGTH as MAX_PASSWORD_LENGTH,
+    PASSWORD_MIN_LENGTH as MIN_PASSWORD_LENGTH,
+)
 
 
 def main() -> int:
