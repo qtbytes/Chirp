@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from app.api.deps import get_current_user_id
@@ -10,13 +11,56 @@ from app.core.session_store import (
     destroy_session,
     revoke_user_sessions,
 )
+from app.core.tokens import (
+    TokenBackendUnavailable,
+    TokenPurpose,
+    issue_token,
+    redeem_token,
+    revoke_tokens,
+)
 from app.db.database import get_db
+from app.models.user import User
 from app.repositories import user_repository
-from app.schemas.user import PasswordChange, UserCreate, UserLogin, UserSummary
+from app.schemas.user import (
+    EmailChange,
+    EmailVerification,
+    ForgotPassword,
+    PasswordChange,
+    PasswordReset,
+    UserCreate,
+    UserLogin,
+    UserSummary,
+)
+from app.services import mailer
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _unavailable(exc: Exception, what: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=f"{what} is unavailable.",
+    )
+
+
+def _send_verification(user: User) -> None:
+    """Mint a confirmation link for the address the user has claimed."""
+    if user.pending_email is None:
+        return
+
+    # One live confirmation link per account: re-claiming an address must not
+    # leave the previous link able to confirm the previous address.
+    revoke_tokens(TokenPurpose.EMAIL_VERIFICATION, user.id)
+    token = issue_token(
+        TokenPurpose.EMAIL_VERIFICATION,
+        user.id,
+        settings.email_verification_token_ttl_seconds,
+    )
+    mailer.send_email_verification(user.pending_email, user.username, token)
 
 
 @router.post(
@@ -30,10 +74,18 @@ def register(
     response: Response,
     db: Session = Depends(get_db),
 ) -> UserSummary:
+    """
+    Create an account and mail a confirmation link.
+
+    The address lands in ``pending_email``; nothing but a redeemed token
+    promotes it. Until then the account works normally and simply cannot reset
+    its password.
+    """
     try:
         user = user_repository.create_user(
             db,
             username=payload.username,
+            email=payload.email,
             password_hash=hash_password(payload.password),
         )
     except ValueError as exc:
@@ -41,6 +93,14 @@ def register(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+
+    # The account exists; a mail server that is down must not undo that. The
+    # user can ask for another link from their profile. Loud in the log, quiet
+    # in the response.
+    try:
+        _send_verification(user)
+    except (mailer.MailerUnavailable, TokenBackendUnavailable):
+        logger.exception("could not send a verification email to user %s", user.id)
 
     _set_session_cookie(response, user.id)
     return UserSummary.model_validate(user)
@@ -153,17 +213,247 @@ def change_password(
     # survive a change made specifically to kill them.
     try:
         revoke_user_sessions(user.id)
+        # An attacker who requested a reset link before being locked out must not
+        # be able to redeem it afterwards.
+        revoke_tokens(TokenPurpose.PASSWORD_RESET, user.id)
     except SessionBackendUnavailable as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Session storage is unavailable.",
         ) from exc
+    except TokenBackendUnavailable as exc:
+        raise _unavailable(exc, "Token storage") from exc
 
     user_repository.update_user_password(db, user.id, hash_password(payload.new_password))
 
     # revoke_user_sessions killed this request's session too. Mint a new one so
     # the device that changed the password stays signed in.
     _set_session_cookie(response, user.id)
+
+
+@router.post(
+    "/change-email",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(rate_limiter("change_email"))],
+)
+def change_email(
+    payload: EmailChange,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Claim a new address. The confirmed one does not move until a link is clicked.
+
+    The current password is required, and that requirement is the whole reason
+    this is not a field on ``PATCH /users/me``. Reset mail goes to the confirmed
+    address; if a stolen cookie could repoint it, the thief would simply set
+    their own address, request a reset, and own the account -- walking straight
+    around change-password's current-password check.
+
+    Because the confirmed address only moves on confirmation, even a thief who
+    *does* know the password cannot silently divert reset mail: the old address
+    keeps working until the new one is proven.
+    """
+    user = user_repository.get_user(db, current_user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="session user not found",
+        )
+
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="current password is incorrect",
+        )
+
+    if user.email == payload.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="that is already your confirmed address",
+        )
+
+    if user_repository.get_user_by_email(db, payload.email) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="email already registered",
+        )
+
+    user = user_repository.set_pending_email(db, user.id, payload.email)
+
+    try:
+        _send_verification(user)
+    except mailer.MailerUnavailable as exc:
+        raise _unavailable(exc, "Email delivery") from exc
+    except TokenBackendUnavailable as exc:
+        raise _unavailable(exc, "Token storage") from exc
+
+    return {"pending_email": payload.email}
+
+
+@router.post(
+    "/resend-verification",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(rate_limiter("resend_verification"))],
+)
+def resend_verification(
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Mail a fresh confirmation link, invalidating the previous one."""
+    user = user_repository.get_user(db, current_user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="session user not found",
+        )
+
+    if user.pending_email is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="no email address is awaiting confirmation",
+        )
+
+    try:
+        _send_verification(user)
+    except mailer.MailerUnavailable as exc:
+        raise _unavailable(exc, "Email delivery") from exc
+    except TokenBackendUnavailable as exc:
+        raise _unavailable(exc, "Token storage") from exc
+
+    return {"pending_email": user.pending_email}
+
+
+@router.post(
+    "/verify-email",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limiter("verify_email", identity="ip"))],
+)
+def verify_email(
+    payload: EmailVerification,
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Redeem a confirmation link. Unauthenticated: the link arrives by mail, and
+    the recipient may well be reading it in a browser that has never logged in.
+    """
+    try:
+        user_id = redeem_token(TokenPurpose.EMAIL_VERIFICATION, payload.token)
+    except TokenBackendUnavailable as exc:
+        raise _unavailable(exc, "Token storage") from exc
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="this confirmation link is invalid or has expired",
+        )
+
+    try:
+        user_repository.confirm_pending_email(db, user_id)
+    except ValueError as exc:
+        # 409 only for a genuine conflict -- somebody else confirmed the address
+        # first. "Nothing to confirm" is a spent link, which is a 400 like any
+        # other, and must read the same to the caller.
+        conflict = "already registered" in str(exc)
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT if conflict else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=str(exc) if conflict else "this confirmation link is invalid or has expired",
+        ) from exc
+
+
+@router.post(
+    "/forgot-password",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(rate_limiter("forgot_password", identity="ip"))],
+)
+def forgot_password(
+    payload: ForgotPassword,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Mail a reset link, if the address belongs to a confirmed account.
+
+    Always 202, whatever happens. Answering 404 for an unknown address would
+    turn this endpoint into an oracle for "does this person have an account",
+    which for a social network is a real disclosure.
+
+    That is also why a failure to send is logged rather than raised: the only
+    requests that reach the mailer are the ones where an account exists, so a
+    503 here would answer the very question the 202 exists to hide. An operator
+    watching the log sees the failure; an attacker watching the response sees
+    nothing.
+    """
+    accepted = {"status": "accepted"}
+
+    user = user_repository.get_user_by_email(db, payload.email)
+    if user is None:
+        return accepted
+
+    try:
+        # One live reset link at a time. A second request invalidates the first,
+        # so a link phished out of an inbox goes stale as soon as the real owner
+        # asks for their own.
+        revoke_tokens(TokenPurpose.PASSWORD_RESET, user.id)
+        token = issue_token(
+            TokenPurpose.PASSWORD_RESET,
+            user.id,
+            settings.password_reset_token_ttl_seconds,
+        )
+        mailer.send_password_reset(user.email, user.username, token)
+    except (mailer.MailerUnavailable, TokenBackendUnavailable):
+        logger.exception("could not send a password reset email to user %s", user.id)
+
+    return accepted
+
+
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limiter("reset_password", identity="ip"))],
+)
+def reset_password(
+    payload: PasswordReset,
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Redeem a reset link and set a new password.
+
+    Deliberately does not sign the caller in. Whoever holds the link may be
+    whoever read the mailbox; make them prove they know the password they just
+    set. Every existing session dies for the same reason ``change-password``
+    kills them -- the old password is presumed lost.
+    """
+    try:
+        user_id = redeem_token(TokenPurpose.PASSWORD_RESET, payload.token)
+    except TokenBackendUnavailable as exc:
+        raise _unavailable(exc, "Token storage") from exc
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="this reset link is invalid or has expired",
+        )
+
+    user = user_repository.get_user(db, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="this reset link is invalid or has expired",
+        )
+
+    # Same ordering rule as change-password: revoke first, write second. If the
+    # session store is unreachable we have changed nothing.
+    try:
+        revoke_user_sessions(user.id)
+        revoke_tokens(TokenPurpose.PASSWORD_RESET, user.id)
+    except SessionBackendUnavailable as exc:
+        raise _unavailable(exc, "Session storage") from exc
+    except TokenBackendUnavailable as exc:
+        raise _unavailable(exc, "Token storage") from exc
+
+    user_repository.update_user_password(db, user.id, hash_password(payload.new_password))
 
 
 @router.get("/me", response_model=UserSummary)

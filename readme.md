@@ -11,8 +11,9 @@ work — with a real UI on top rather than a toy script.
 ## Features
 
 Posting with images and video, threaded comments and replies, likes, quote
-tweets, follows, profiles with editable bio and avatar, password change,
-notifications, emoji picker, and Open Graph link preview cards.
+tweets, follows, profiles with editable bio and avatar, email confirmation,
+password change and reset, notifications, emoji picker, and Open Graph link
+preview cards.
 
 ## Design notes
 
@@ -58,8 +59,47 @@ nothing, where the other order would leave the new password in place and the
 leaked sessions alive. Proving knowledge of the current password is required, so
 a stolen cookie alone cannot take the account over.
 
-There is **no password reset**. `User` carries no email, so there is nowhere to
-send a token; a forgotten password stays an operator job (`deploy/set_password.py`).
+**A claimed address is not a confirmed one.** `users.email` is the address a
+user has *proven* they control; `users.pending_email` is one they have merely
+claimed. Registration and email changes write the claim, and only a redeemed
+token promotes it. Just `email` is uniquely indexed and just `email` is matched
+by password reset — so two people may both claim an address, whichever confirms
+it wins, and the loser's claim never promotes. Keeping the claim out of the
+unique index is what stops an address being squatted by someone who cannot
+receive its mail.
+
+Changing the address needs the current password, and that requirement is the
+whole reason it is not a field on `PATCH /users/me`. Reset mail goes to the
+confirmed address; if a stolen cookie could repoint it, the thief would set
+their own address, click "forgot password", and own the account — walking
+straight around change-password's current-password check. The confirmed address
+also does not move until the *new* one is confirmed, so even a thief who knows
+the password cannot silently divert reset mail.
+
+**`forgot-password` always answers 202.** For a real account, an unknown
+address, and a merely-claimed one alike. Anything else turns the endpoint into
+an oracle for "does this person have an account here", which on a social network
+is a disclosure in itself. It is also why a mailer failure is logged rather than
+raised: the only requests that reach the mailer are the ones where an account
+exists, so a 503 there would answer the very question the uniform 202 exists to
+hide.
+
+**Mailed tokens are stored hashed, single-use, and revocable.** Redis holds
+`sha256(token)`, never the token — a reset link is a bearer credential for the
+half hour it lives, and a keyspace dump should yield nothing redeemable.
+Redemption is a `GETDEL`, so two requests racing one mailed link cannot both
+win. Each purpose keeps a per-user index, so asking for a new link kills the
+previous one, and changing or resetting a password kills every link outstanding
+— including one an attacker requested.
+
+Resetting revokes every session, for the same reason changing does, and
+deliberately does *not* sign the caller in: whoever holds the link may be
+whoever read the mailbox. As with change-password, sessions are revoked
+**before** the new hash is written.
+
+Accounts predating the email column have neither address. They log in normally
+and cannot reset until they add one; `deploy/set_password.py` remains the
+operator's way in.
 
 **One rate-limit bucket per name, and the name is the config key.**
 `rate_limiter("like")` reads `rate_limit_like_{max_requests,window_seconds}` from
@@ -111,8 +151,14 @@ Requires Python 3.12+, [uv](https://docs.astral.sh/uv/), and Node.
 
 Redis is optional only with `RATE_LIMIT_ENABLED=false` in `backend/.env`. The
 limiter fails closed, so with it on — the default — every limited endpoint,
-including the timeline and login, answers 503 without Redis. Sessions and the
-timeline cache do fall back on their own.
+including the timeline and login, answers 503 without Redis. Sessions, mailed
+tokens, and the timeline cache do fall back on their own.
+
+SMTP is optional locally: with no `SMTP_HOST`, confirmation and reset mail is
+printed to the API log instead of sent, so you can follow the link without
+running a mail server. That console sender is refused in a production
+configuration, where a reset token in `journalctl` would be a credential lying
+around.
 
 ```sh
 # backend → http://localhost:8000  (docs at /docs)

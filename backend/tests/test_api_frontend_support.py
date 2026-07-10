@@ -8,7 +8,7 @@ def test_register_login_me_and_logout() -> None:
 
     response = client.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     assert response.status_code == 201
     assert response.json()["username"] == "alice"
@@ -36,7 +36,7 @@ def test_register_rejects_reserved_username() -> None:
     client = TestClient(app)
     response = client.post(
         "/api/v1/auth/register",
-        json={"username": "search", "password": "password123"},
+        json={"username": "search", "email": "search@example.com", "password": "password123"},
     )
     assert response.status_code == 422
 
@@ -45,7 +45,7 @@ def test_login_rejects_bad_password() -> None:
     client = TestClient(app)
     client.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     client.post("/api/v1/auth/logout")
 
@@ -62,11 +62,11 @@ def test_user_discovery_includes_follow_state() -> None:
     bob = TestClient(app)
     alice.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     bob_response = bob.post(
         "/api/v1/auth/register",
-        json={"username": "bob", "password": "password123"},
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
     )
     bob_id = bob_response.json()["id"]
 
@@ -86,15 +86,15 @@ def test_for_you_lists_latest_first_then_score() -> None:
     carol = TestClient(app)
     alice.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     bob.post(
         "/api/v1/auth/register",
-        json={"username": "bob", "password": "password123"},
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
     )
     carol.post(
         "/api/v1/auth/register",
-        json={"username": "carol", "password": "password123"},
+        json={"username": "carol", "email": "carol@example.com", "password": "password123"},
     )
 
     first_tweet = alice.post("/api/v1/tweets", json={"content": "first"}).json()
@@ -119,15 +119,15 @@ def test_for_you_uses_score_when_created_at_ties() -> None:
     carol = TestClient(app)
     alice.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     bob.post(
         "/api/v1/auth/register",
-        json={"username": "bob", "password": "password123"},
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
     )
     carol.post(
         "/api/v1/auth/register",
-        json={"username": "carol", "password": "password123"},
+        json={"username": "carol", "email": "carol@example.com", "password": "password123"},
     )
 
     low_score = alice.post("/api/v1/tweets", json={"content": "low"}).json()
@@ -151,7 +151,7 @@ def test_session_can_create_tweet() -> None:
     client = TestClient(app)
     client.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
 
     response = client.post("/api/v1/tweets", json={"content": "hello"})
@@ -165,11 +165,11 @@ def test_quote_tweet_embeds_original_and_updates_retweet_count() -> None:
     bob = TestClient(app)
     alice.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     bob.post(
         "/api/v1/auth/register",
-        json={"username": "bob", "password": "password123"},
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
     )
 
     tweet = alice.post("/api/v1/tweets", json={"content": "quote me"}).json()
@@ -205,7 +205,7 @@ def test_quote_of_missing_post_returns_404() -> None:
     client = TestClient(app)
     client.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     response = client.post(
         "/api/v1/tweets", json={"content": "hi", "quoted_post_id": 999999}
@@ -218,11 +218,11 @@ def test_tweet_like_toggle_updates_state_and_count() -> None:
     bob = TestClient(app)
     alice.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     bob.post(
         "/api/v1/auth/register",
-        json={"username": "bob", "password": "password123"},
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
     )
     tweet = alice.post("/api/v1/tweets", json={"content": "like me"}).json()
 
@@ -242,11 +242,11 @@ def test_tweet_stats_endpoint_returns_counts_and_current_user_state() -> None:
     bob = TestClient(app)
     alice.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     bob.post(
         "/api/v1/auth/register",
-        json={"username": "bob", "password": "password123"},
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
     )
     tweet = alice.post("/api/v1/tweets", json={"content": "stats"}).json()
 
@@ -276,11 +276,11 @@ def test_comment_stats_endpoint_returns_counts_and_current_user_state() -> None:
     bob = TestClient(app)
     alice.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     bob.post(
         "/api/v1/auth/register",
-        json={"username": "bob", "password": "password123"},
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
     )
     tweet = alice.post("/api/v1/tweets", json={"content": "comments"}).json()
     comment = bob.post(
@@ -313,7 +313,7 @@ def test_thread_comments_are_nested_in_preorder() -> None:
     client = TestClient(app)
     client.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     tweet = client.post("/api/v1/tweets", json={"content": "root"}).json()
 
@@ -341,11 +341,11 @@ def test_comment_interactions_update_comment_counts() -> None:
     bob = TestClient(app)
     alice.post(
         "/api/v1/auth/register",
-        json={"username": "alice", "password": "password123"},
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
     bob.post(
         "/api/v1/auth/register",
-        json={"username": "bob", "password": "password123"},
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
     )
 
     tweet = alice.post("/api/v1/tweets", json={"content": "thread"}).json()

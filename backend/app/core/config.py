@@ -97,6 +97,41 @@ class Settings(BaseSettings):
     rate_limit_change_password_max_requests: int = 5
     rate_limit_change_password_window_seconds: int = 900
 
+    # Unauthenticated. forgot_password sends mail to somebody else's address, so
+    # a loose limit is a spam cannon aimed at a third party. The two redeem
+    # endpoints are throttled because a token is a 256-bit secret that a patient
+    # attacker would otherwise be free to guess.
+    rate_limit_forgot_password_max_requests: int = 5
+    rate_limit_forgot_password_window_seconds: int = 900
+    rate_limit_reset_password_max_requests: int = 10
+    rate_limit_reset_password_window_seconds: int = 900
+    rate_limit_verify_email_max_requests: int = 10
+    rate_limit_verify_email_window_seconds: int = 900
+
+    # Authenticated, so these bucket by user.
+    rate_limit_change_email_max_requests: int = 5
+    rate_limit_change_email_window_seconds: int = 900
+    rate_limit_resend_verification_max_requests: int = 3
+    rate_limit_resend_verification_window_seconds: int = 900
+
+    # Outbound mail. Without smtp_host the app uses a console sender that prints
+    # the message instead of delivering it -- fine locally, refused in a
+    # production configuration (see app/services/mailer.py), where the reset and
+    # verification endpoints answer 503 rather than pretend to have sent mail.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str = "Chirp <no-reply@localhost>"
+    smtp_starttls: bool = True
+    smtp_timeout_seconds: int = 10
+
+    # A reset token is a bearer credential for as long as it lives, so it lives
+    # briefly. Confirming an address is not a credential, so that link may sit in
+    # an inbox for a day.
+    password_reset_token_ttl_seconds: int = 30 * 60
+    email_verification_token_ttl_seconds: int = 24 * 60 * 60
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

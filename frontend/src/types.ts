@@ -105,6 +105,10 @@ export type UserProfile = {
   tweet_count: number;
   is_following: boolean;
   is_current_user: boolean;
+  /** Confirmed address. Null on anyone else's profile, and until confirmed. */
+  email: string | null;
+  /** Claimed but unconfirmed. Null on anyone else's profile. */
+  pending_email: string | null;
 };
 
 export type ProfileTweetsPage = {

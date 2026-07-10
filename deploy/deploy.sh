@@ -123,6 +123,26 @@ RATE_LIMIT_ENABLED=true
 # Keeps the resolved-IP SSRF check on for link-preview fetches.
 LINK_PREVIEW_VERIFY_DNS=true
 EOF
+
+# Outbound mail is optional. Without SMTP_HOST the app cannot send confirmation
+# or reset links -- and, because SESSION_COOKIE_SECURE is on, it refuses to fall
+# back to printing them to the log, where a reset token would sit in journalctl
+# for anyone with read access.
+if [[ -n "${SMTP_HOST:-}" ]]; then
+    log "configuring outbound mail via $SMTP_HOST"
+    {
+        printf '\nSMTP_HOST=%s\n' "$SMTP_HOST"
+        printf 'SMTP_PORT=%s\n' "${SMTP_PORT:-587}"
+        printf 'SMTP_STARTTLS=%s\n' "${SMTP_STARTTLS:-true}"
+        [[ -n "${SMTP_USERNAME:-}" ]] && printf 'SMTP_USERNAME=%s\n' "$SMTP_USERNAME"
+        [[ -n "${SMTP_PASSWORD:-}" ]] && printf 'SMTP_PASSWORD=%s\n' "$SMTP_PASSWORD"
+        printf 'SMTP_FROM=%s\n' "${SMTP_FROM:-Chirp <no-reply@$DOMAIN>}"
+    } >>"$ENV_FILE"
+else
+    warn "SMTP_HOST is not set in deploy.conf: email confirmation and password"
+    warn "reset will not work. Everything else does. See deploy/README.md."
+fi
+
 chown "$APP_USER:$APP_USER" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 

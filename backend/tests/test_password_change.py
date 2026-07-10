@@ -26,7 +26,7 @@ def _client() -> TestClient:
 def _register(client: TestClient, username: str = "changer") -> None:
     response = client.post(
         "/api/v1/auth/register",
-        json={"username": username, "password": OLD_PASSWORD},
+        json={"username": username, "email": f"{username}@example.com", "password": OLD_PASSWORD},
     )
     assert response.status_code == 201, response.text
 

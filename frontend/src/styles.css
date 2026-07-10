@@ -250,6 +250,13 @@ textarea:focus {
   font-weight: 700;
 }
 
+/* Sits inside a line of prose rather than stacked under a form. */
+.text-button.inline {
+  margin-top: 0;
+  font-size: inherit;
+  cursor: pointer;
+}
+
 .form-error {
   color: var(--danger);
   margin: 0;

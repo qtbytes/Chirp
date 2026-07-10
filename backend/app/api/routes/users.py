@@ -3,7 +3,6 @@ from pathlib import Path
 
 from app.api.deps import get_current_user_id
 from app.core.config import settings
-from app.core.security import hash_password
 from app.db.database import get_db
 from app.models.user import User
 from app.repositories import (
@@ -15,7 +14,6 @@ from app.repositories import (
 from app.schemas.comment import CommentOut, ProfileRepliesPage, ReplyWithParentOut
 from app.schemas.tweet import ProfileTweetsPage, TweetOut
 from app.schemas.user import (
-    UserCreate,
     UserDiscoveryOut,
     UserProfileOut,
     UserSummary,
@@ -29,28 +27,11 @@ from sqlalchemy.orm import Session
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.post("", response_model=UserSummary, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserSummary:
-    """
-    Create a user.
-
-    Why keep this route simple?
-    - The interview focus for this project is timeline/feed design.
-    - A lightweight user route lets you create test users quickly.
-    """
-    try:
-        user = user_repository.create_user(
-            db,
-            username=payload.username,
-            password_hash=hash_password(payload.password),
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
-
-    return UserSummary.model_validate(user)
+# There is deliberately no POST /users. It used to exist as a "lightweight route
+# to create test users quickly", which made it an unauthenticated, unthrottled
+# duplicate of POST /auth/register -- a way around that endpoint's rate limit,
+# and now a way to create accounts that never receive a verification mail.
+# Register through /auth/register.
 
 
 @router.get("", response_model=list[UserDiscoveryOut])
@@ -81,6 +62,8 @@ def list_users(
 
 
 def _build_profile(db: Session, user: User, current_user_id: int) -> UserProfileOut:
+    is_current_user = user.id == current_user_id
+
     return UserProfileOut(
         id=user.id,
         username=user.username,
@@ -92,7 +75,10 @@ def _build_profile(db: Session, user: User, current_user_id: int) -> UserProfile
         following_count=follow_repository.count_following(db, user.id),
         tweet_count=tweet_repository.count_tweets_by_author(db, user.id),
         is_following=follow_repository.is_following(db, current_user_id, user.id),
-        is_current_user=user.id == current_user_id,
+        is_current_user=is_current_user,
+        # Profiles are world-readable; an address is the owner's business alone.
+        email=user.email if is_current_user else None,
+        pending_email=user.pending_email if is_current_user else None,
     )
 
 

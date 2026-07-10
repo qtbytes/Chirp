@@ -23,3 +23,19 @@ BIND_HOST=127.0.0.1
 BIND_PORT=8000
 
 REDIS_URL=redis://127.0.0.1:6379/0
+
+# Outbound mail, for email confirmation and password reset. Leave SMTP_HOST unset
+# and both features are simply unavailable: registration still works, the
+# confirmation mail is never sent, and "forgot password" answers 202 without
+# sending anything (it must answer the same for every address, or it becomes a
+# way to ask whether an account exists). The failure is loud in the API log.
+#
+# The app refuses to print mail to the log in a production configuration, so
+# reset tokens can never leak into journalctl.
+#
+# SMTP_HOST=smtp.example.com
+# SMTP_PORT=587
+# SMTP_STARTTLS=true
+# SMTP_USERNAME=chirp@example.com
+# SMTP_PASSWORD=an-app-password
+# SMTP_FROM=Chirp <no-reply@example.com>

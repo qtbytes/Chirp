@@ -52,13 +52,16 @@ def reset_database() -> None:
 @pytest.fixture(autouse=True)
 def isolated_sessions(monkeypatch) -> None:
     """
-    Keep sessions in-process during tests.
+    Keep sessions and mailed tokens in-process during tests.
 
     Otherwise every test that logs in writes `session:*` keys into the
     developer's real Redis, sharing a keyspace with their browser session.
     Tests that want the real backend undo this (see test_sessions.py).
     """
-    from app.core import session_store
+    from app.core import session_store, tokens
 
     monkeypatch.setattr(session_store, "get_redis_client", lambda: None)
     session_store._memory_sessions.clear()
+
+    monkeypatch.setattr(tokens, "get_redis_client", lambda: None)
+    tokens._memory_tokens.clear()

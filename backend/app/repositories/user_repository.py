@@ -5,12 +5,18 @@ from app.models.follow import Follow
 from app.models.user import User
 
 
-def create_user(db: Session, username: str, password_hash: str) -> User:
-    existing = db.scalar(select(User).where(User.username == username))
-    if existing:
+def create_user(
+    db: Session, username: str, password_hash: str, email: str | None = None
+) -> User:
+    if db.scalar(select(User).where(User.username == username)):
         raise ValueError("username already exists")
 
-    user = User(username=username, password_hash=password_hash)
+    # The address arrives unconfirmed: it goes to pending_email, and only a
+    # redeemed verification token promotes it.
+    if email is not None and get_user_by_email(db, email):
+        raise ValueError("email already registered")
+
+    user = User(username=username, password_hash=password_hash, pending_email=email)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -23,6 +29,47 @@ def get_user(db: Session, user_id: int) -> User | None:
 
 def get_user_by_username(db: Session, username: str) -> User | None:
     return db.scalar(select(User).where(User.username == username))
+
+
+def get_user_by_email(db: Session, email: str) -> User | None:
+    """Match only *confirmed* addresses. A mere claim must not receive mail."""
+    return db.scalar(select(User).where(User.email == email))
+
+
+def set_pending_email(db: Session, user_id: int, email: str) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise ValueError("user not found")
+
+    user.pending_email = email
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def confirm_pending_email(db: Session, user_id: int) -> User:
+    """
+    Promote a claimed address to the confirmed one.
+
+    The uniqueness check happens here, not when the claim was made: two users may
+    both claim an address, and whoever confirms first owns it. The loser's claim
+    then fails rather than colliding with the unique index.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise ValueError("user not found")
+    if user.pending_email is None:
+        raise ValueError("no pending email to confirm")
+
+    owner = get_user_by_email(db, user.pending_email)
+    if owner is not None and owner.id != user_id:
+        raise ValueError("email already registered")
+
+    user.email = user.pending_email
+    user.pending_email = None
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def list_users(

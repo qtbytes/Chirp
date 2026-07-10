@@ -15,6 +15,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from app.db.database import Base
 from app.models import (  # noqa: F401  -- populates Base.metadata
     FeedItem,
@@ -103,13 +104,49 @@ def test_upgrade_adopts_a_pre_alembic_database(tmp_path: Path) -> None:
 
     legacy = sa.create_engine(url)
     with legacy.begin() as connection:
-        # These three matched the models already; create_all() is how they got there.
-        Base.metadata.create_all(
-            bind=connection,
-            tables=[
-                Base.metadata.tables[name]
-                for name in ("users", "follows", "feed_items")
-            ],
+        # Spelled out rather than built from Base.metadata. This fixture has to
+        # describe the database as it stood *before* Alembic, and the models keep
+        # moving: sourcing it from today's metadata made `users` sprout the email
+        # columns, so revision 0003 then failed adding a column that was already
+        # there. A frozen schema is the whole point of the test.
+        connection.execute(
+            sa.text(
+                "CREATE TABLE users ("
+                " id INTEGER NOT NULL,"
+                " username VARCHAR(50) NOT NULL,"
+                " password_hash VARCHAR(255) NOT NULL,"
+                " created_at DATETIME NOT NULL,"
+                " bio VARCHAR(160),"
+                " avatar_url VARCHAR(255),"
+                " display_name VARCHAR(50),"
+                " PRIMARY KEY (id))"
+            )
+        )
+        connection.execute(
+            sa.text(
+                "CREATE TABLE follows ("
+                " follower_id INTEGER NOT NULL,"
+                " followee_id INTEGER NOT NULL,"
+                " created_at DATETIME NOT NULL,"
+                " CONSTRAINT pk_follows PRIMARY KEY (follower_id, followee_id),"
+                " FOREIGN KEY(follower_id) REFERENCES users (id),"
+                " FOREIGN KEY(followee_id) REFERENCES users (id))"
+            )
+        )
+        connection.execute(
+            sa.text(
+                "CREATE TABLE feed_items ("
+                " id INTEGER NOT NULL,"
+                " owner_id INTEGER NOT NULL,"
+                " post_id INTEGER NOT NULL,"
+                " actor_id INTEGER NOT NULL,"
+                " created_at DATETIME NOT NULL,"
+                " PRIMARY KEY (id),"
+                " CONSTRAINT uq_feed_owner_post UNIQUE (owner_id, post_id),"
+                " FOREIGN KEY(owner_id) REFERENCES users (id),"
+                " FOREIGN KEY(post_id) REFERENCES posts (id),"
+                " FOREIGN KEY(actor_id) REFERENCES users (id))"
+            )
         )
         connection.execute(
             sa.text(
@@ -147,6 +184,10 @@ def test_upgrade_adopts_a_pre_alembic_database(tmp_path: Path) -> None:
             )
         )
         for statement in (
+            "CREATE UNIQUE INDEX ix_users_username ON users (username)",
+            "CREATE INDEX ix_follows_followee_created ON follows (followee_id, created_at)",
+            "CREATE INDEX ix_feed_items_owner_id ON feed_items (owner_id)",
+            "CREATE INDEX ix_feed_owner_created_id ON feed_items (owner_id, created_at, id)",
             "CREATE INDEX ix_notifications_created_at ON notifications (created_at)",
             "CREATE INDEX ix_notifications_user_created ON notifications (user_id, created_at)",
             "CREATE INDEX ix_notifications_user_id ON notifications (user_id)",
@@ -206,7 +247,9 @@ def test_upgrade_adopts_a_pre_alembic_database(tmp_path: Path) -> None:
 
     assert content == "survives the migration", "the rebuild dropped existing rows"
     assert likes == 1, "the likes rebuild dropped existing rows"
-    assert version == "0002"
+    # Asked of Alembic rather than hardcoded, so adding a revision does not
+    # require editing this assertion.
+    assert version == ScriptDirectory.from_config(_alembic_config(url)).get_current_head()
     assert "retweets" not in table_names, "the vestigial table should be gone"
     assert {"ix_posts_created_at", "ix_posts_user_id"} <= post_indexes
     assert difference == [], f"adopted database still differs from the models: {difference}"

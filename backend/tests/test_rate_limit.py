@@ -198,7 +198,7 @@ def test_login_buckets_by_ip_even_when_the_caller_holds_a_session(
 
     client.post(
         "/api/v1/auth/register",
-        json={"username": "attacker", "password": "supersecret1"},
+        json={"username": "attacker", "email": "attacker@example.com", "password": "supersecret1"},
     )
     assert client.cookies.get(settings.session_cookie_name), "expected a session cookie"
 
@@ -214,7 +214,7 @@ def test_authenticated_buckets_key_on_the_user_not_the_address(
 ) -> None:
     client.post(
         "/api/v1/auth/register",
-        json={"username": "liker", "password": "supersecret1"},
+        json={"username": "liker", "email": "liker@example.com", "password": "supersecret1"},
     )
     tweet = client.post("/api/v1/tweets", json={"content": "hello"})
     assert tweet.status_code == 201, tweet.text

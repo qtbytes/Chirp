@@ -15,7 +15,7 @@ PNG_BYTES = bytes.fromhex(
 def _register(client: TestClient, username: str) -> None:
     response = client.post(
         "/api/v1/auth/register",
-        json={"username": username, "password": "password123"},
+        json={"username": username, "email": f"{username}@example.com", "password": "password123"},
     )
     assert response.status_code == 201
 

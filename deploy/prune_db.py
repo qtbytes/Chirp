@@ -3,9 +3,11 @@ Build a production SQLite database from the local dev database, keeping only
 the rows that belong to a chosen set of users.
 
 The dev database accumulates throwaway accounts from manual testing. Shipping
-it as-is would publish those accounts (and their password hashes) on the public
-site. This script copies the database and deletes everything that does not
-belong to the users named with ``--keep``.
+it as-is would publish those accounts (and their password hashes, and their
+email addresses) on the public site. This script copies the database and deletes
+everything that does not belong to the users named with ``--keep``. It also
+clears every ``email`` and ``pending_email``, and refuses to write a database
+where one survived.
 
 It also drops the legacy ``retweets`` table, which the quote-tweet refactor made
 dead but which still lingers in older database files.
@@ -120,6 +122,13 @@ def prune(conn: sqlite3.Connection, keep_ids: set[int], reset_passwords: bool) -
     for table in LEGACY_TABLES:
         conn.execute(f"DROP TABLE IF EXISTS {table}")
 
+    # Email addresses are personal data, and the surviving rows are dev/test
+    # accounts whose addresses belong to whoever was testing. Shipping them would
+    # publish those addresses and, worse, point password-reset mail at them from
+    # the live site. The kept accounts get their passwords set by hand
+    # (deploy/set_password.py); they do not need to reset anything.
+    conn.execute("UPDATE users SET email = NULL, pending_email = NULL")
+
     if reset_passwords:
         # An empty hash cannot be produced by hash_password(), and
         # verify_password() returns False for it -- so login fails closed.
@@ -166,6 +175,12 @@ def verify(conn: sqlite3.Connection) -> list[str]:
         ).fetchone()
         if row:
             problems.append(f"legacy table {table!r} still present")
+
+    leaked = conn.execute(
+        "SELECT COUNT(*) FROM users WHERE email IS NOT NULL OR pending_email IS NOT NULL"
+    ).fetchone()[0]
+    if leaked:
+        problems.append(f"{leaked} users still carry an email address")
 
     return problems
 
@@ -227,8 +242,22 @@ def main() -> int:
         return 0
 
     args.dest.parent.mkdir(parents=True, exist_ok=True)
-    # Copy the file rather than mutating the source: the dev database keeps working.
-    shutil.copyfile(args.source, args.dest)
+
+    # Copy rather than mutate the source, so the dev database keeps working --
+    # but copy with the backup API, not shutil.copyfile.
+    #
+    # The dev database runs in WAL mode (see app/db/database.py), which means it
+    # is three files and the newest rows live in twitter.db-wal until a
+    # checkpoint. copyfile() takes only twitter.db, so it silently produced a
+    # stale snapshot: the schema and rows written since the last checkpoint --
+    # migrations included -- simply were not there. .backup() folds the WAL in.
+    args.dest.unlink(missing_ok=True)
+    source_conn = sqlite3.connect(args.source)
+    dest_conn = sqlite3.connect(args.dest)
+    with dest_conn:
+        source_conn.backup(dest_conn)
+    dest_conn.close()
+    source_conn.close()
 
     with connect(args.dest) as dest:
         dest.execute("PRAGMA foreign_keys=OFF")

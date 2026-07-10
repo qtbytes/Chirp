@@ -92,10 +92,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function register(username: string, password: string): Promise<UserSummary> {
+export function register(
+  username: string,
+  email: string,
+  password: string,
+): Promise<UserSummary> {
   return request<UserSummary>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, email, password }),
   });
 }
 
@@ -124,6 +128,48 @@ export function changePassword(
       current_password: currentPassword,
       new_password: newPassword,
     }),
+  });
+}
+
+/** Claim a new address. The confirmed one does not move until the link is clicked. */
+export function changeEmail(
+  currentPassword: string,
+  email: string,
+): Promise<{ pending_email: string }> {
+  return request<{ pending_email: string }>("/auth/change-email", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, email }),
+  });
+}
+
+export function resendVerification(): Promise<{ pending_email: string }> {
+  return request<{ pending_email: string }>("/auth/resend-verification", {
+    method: "POST",
+  });
+}
+
+export function verifyEmail(token: string): Promise<void> {
+  return request<void>("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+/**
+ * Always resolves, for any address. The server answers 202 whether or not an
+ * account exists, so the UI must not imply it learned anything either.
+ */
+export function forgotPassword(email: string): Promise<void> {
+  return request<void>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(token: string, newPassword: string): Promise<void> {
+  return request<void>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
   });
 }
 

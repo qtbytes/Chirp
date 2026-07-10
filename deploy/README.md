@@ -59,6 +59,11 @@ once.
 > `twitter.db-shm` beside it. On the next open, SQLite replays that stale log
 > into the file you just copied and **silently overwrites it**. Always stop the
 > services and delete all three files first.
+>
+> The same trap bit `prune_db.py`, which used `shutil.copyfile` to snapshot the
+> dev database and so shipped a build missing every row — and every migration —
+> still sitting in the WAL. It now uses SQLite's backup API, which folds the WAL
+> in. `deploy.sh` takes its pre-migration backup the same way.
 
 ```sh
 # locally, from the repo root
@@ -192,7 +197,37 @@ chown chirp:chirp twitter.db
 systemctl start chirp-api chirp-worker
 ```
 
+## Outbound mail
+
+Email confirmation and password reset need SMTP. Set `SMTP_HOST` (and usually
+`SMTP_USERNAME` / `SMTP_PASSWORD`) in `deploy/deploy.conf`; `deploy.sh` copies
+them into `backend/.env`. See `deploy.conf.example`.
+
+Leave `SMTP_HOST` unset and the site still works — people register, log in, post.
+They just never receive a confirmation link, so nobody can reset a forgotten
+password, and `deploy.sh` warns about it on every run.
+
+**The app will not print mail to the log in production.** With
+`SESSION_COOKIE_SECURE=true` and no `SMTP_HOST`, `send_email` raises rather than
+fall back to the console sender it uses locally — a reset token in `journalctl`
+is a credential sitting in a file half the box can read. `POST /auth/change-email`
+and `/auth/resend-verification` then answer 503.
+
+`POST /auth/forgot-password` is the exception: it answers **202 regardless**,
+even when the mailer is down, and logs the failure instead. It only ever reaches
+the mailer for an address that exists, so a 503 would tell an attacker exactly
+what the uniform 202 exists to hide. Watch the log, not the status code:
+
+```sh
+journalctl -u chirp-api | grep 'could not send'
+```
+
 ## Things worth knowing
+
+**Emails never reach production.** `prune_db.py` clears `email` and
+`pending_email` on every surviving row, and refuses to write the database if one
+survives. The dev/test accounts' addresses belong to whoever was testing, and
+shipping them would point live reset mail at real inboxes.
 
 **Redis is mandatory.** The timeline and link-preview caches degrade gracefully
 without it, but sessions and rate limiting do not: auth returns **503** and the

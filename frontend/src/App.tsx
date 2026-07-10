@@ -79,6 +79,8 @@ import {
   parseBackendDate,
 } from "./components";
 import { ProfileView } from "./ProfileView";
+import { ResetPasswordView, VerifyEmailView } from "./AuthTokenViews";
+import { ForgotPasswordModal } from "./ForgotPasswordModal";
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
 import { useMediaAttachment } from "./useMediaAttachment";
@@ -150,19 +152,39 @@ function App() {
     );
   }
 
+  // Reachable signed out: a reset link is opened by someone who cannot log in,
+  // and a confirmation link often lands in a browser that never has.
+  const tokenRoutes = (
+    <>
+      <Route path="/reset-password" element={<ResetPasswordView />} />
+      <Route path="/verify-email" element={<VerifyEmailView />} />
+    </>
+  );
+
   if (!currentUser) {
     return (
-      <AuthScreen
-        onAuthenticated={setCurrentUser}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-      />
+      <Routes>
+        {tokenRoutes}
+        <Route
+          path="*"
+          element={
+            <AuthScreen
+              onAuthenticated={setCurrentUser}
+              theme={theme}
+              onToggleTheme={toggleTheme}
+            />
+          }
+        />
+      </Routes>
     );
   }
 
   return (
     <CurrentUserProvider value={currentUser}>
     <Routes>
+      {/* Also here: a signed-in user clicking their own confirmation link must
+          land on the page, not on /:username. */}
+      {tokenRoutes}
       <Route
         element={
           <AppLayout
@@ -204,9 +226,11 @@ function AuthScreen({
 }) {
   const [mode, setMode] = useState<AuthMode>("login");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -217,7 +241,7 @@ function AuthScreen({
       const user =
         mode === "login"
           ? await login(username.trim(), password)
-          : await register(username.trim(), password);
+          : await register(username.trim(), email.trim(), password);
       onAuthenticated(user);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -246,6 +270,19 @@ function AuthScreen({
               required
             />
           </label>
+          {mode === "register" ? (
+            <label>
+              <span>Email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                maxLength={254}
+                autoComplete="email"
+                required
+              />
+            </label>
+          ) : null}
           <label>
             <span>Password</span>
             <input
@@ -258,11 +295,22 @@ function AuthScreen({
               required
             />
           </label>
+          {mode === "register" ? (
+            <p className="form-hint">
+              We'll send a link to confirm it. Without a confirmed address you
+              cannot reset a forgotten password.
+            </p>
+          ) : null}
           {error ? <p className="form-error">{error}</p> : null}
           <button className="primary-button" disabled={submitting}>
             {submitting ? "Working..." : mode === "login" ? "Log in" : "Create account"}
           </button>
         </form>
+        {mode === "login" ? (
+          <button className="text-button" onClick={() => setForgotOpen(true)}>
+            Forgot password?
+          </button>
+        ) : null}
         <button
           className="text-button"
           onClick={() => {
@@ -273,6 +321,7 @@ function AuthScreen({
           {mode === "login" ? "Create account" : "Use existing account"}
         </button>
       </section>
+      {forgotOpen ? <ForgotPasswordModal onClose={() => setForgotOpen(false)} /> : null}
     </main>
   );
 }
