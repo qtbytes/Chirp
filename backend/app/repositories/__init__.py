@@ -4,6 +4,7 @@ from app.repositories import (
     follow_repository,
     mute_repository,
     notification_repository,
+    report_repository,
     tweet_repository,
     user_repository,
 )
@@ -18,4 +19,5 @@ __all__ = [
     "notification_repository",
     "block_repository",
     "mute_repository",
+    "report_repository",
 ]

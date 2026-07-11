@@ -2032,6 +2032,75 @@ a.tab {
   cursor: default;
 }
 
+/* ------------------------------------------------------------------- report modal */
+
+.report-modal {
+  max-width: 420px;
+  padding: 22px;
+}
+
+.report-modal h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.report-modal p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.report-modal-intro {
+  margin: 0 0 12px !important;
+  color: var(--ink) !important;
+  font-weight: 600;
+}
+
+.report-reasons {
+  border: 0;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.report-reason {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.report-reason:hover {
+  background: var(--hover);
+}
+
+.report-reason input {
+  accent-color: var(--accent);
+  width: 18px;
+  height: 18px;
+}
+
+.report-details {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+
+.report-details:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* ---------------------------------------------------------------- reply composer */
 
 .reply-composer {

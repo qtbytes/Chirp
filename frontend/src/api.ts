@@ -9,6 +9,8 @@ import type {
   MuteListPage,
   Notification,
   NotificationPage,
+  Report,
+  ReportReason,
   ProfileRepliesPage,
   ProfileTweetsPage,
   Session,
@@ -378,6 +380,18 @@ export function muteUser(userId: number): Promise<{ is_muted: boolean }> {
 
 export function unmuteUser(userId: number): Promise<{ is_muted: boolean }> {
   return request<{ is_muted: boolean }>(`/mutes/${userId}`, { method: "DELETE" });
+}
+
+/** Report a post (tweet or comment) for a moderator to review. */
+export function reportPost(
+  postId: number,
+  reason: ReportReason,
+  details?: string,
+): Promise<Report> {
+  return request<Report>(`/reports/posts/${postId}`, {
+    method: "POST",
+    body: JSON.stringify({ reason, details: details?.trim() || null }),
+  });
 }
 
 /** The accounts you have muted, most recent first. */

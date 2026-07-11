@@ -8,6 +8,7 @@ from app.api.routes import (
     media,
     mutes,
     notifications,
+    reports,
     timeline,
     tweets,
     users,
@@ -18,6 +19,7 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth.router)
 api_router.include_router(blocks.router)
 api_router.include_router(mutes.router)
+api_router.include_router(reports.router)
 api_router.include_router(comments.router)
 api_router.include_router(users.router)
 api_router.include_router(follows.router)

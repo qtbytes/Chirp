@@ -129,6 +129,22 @@ export type BlockListPage = {
   next_cursor: string | null;
 };
 
+export type ReportReason =
+  | "spam"
+  | "abuse"
+  | "hate"
+  | "violence"
+  | "sensitive"
+  | "misinformation"
+  | "other";
+
+export type Report = {
+  id: number;
+  post_id: number;
+  reason: ReportReason;
+  created_at: string;
+};
+
 export type MutedUser = UserSummary & {
   muted_at: string;
 };

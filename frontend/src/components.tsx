@@ -11,6 +11,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import {
   Ban,
+  Flag,
   Heart,
   Image as ImageIcon,
   Loader2,
@@ -35,6 +36,7 @@ import {
   editTweet,
   isVideoUrl,
   replyToComment,
+  reportPost,
   resolveMediaUrl,
   toggleCommentLike,
   toggleTweetLike,
@@ -45,6 +47,7 @@ import type {
   CommentStats,
   LinkPreview,
   QuotedPost,
+  ReportReason,
   Tweet,
   TweetStats,
   UserSummary,
@@ -404,12 +407,14 @@ export function PostMenu({
   authorUsername,
   onMute,
   onBlock,
+  onReport,
 }: {
   onEdit?: () => void;
   onDelete?: () => void;
   authorUsername?: string;
   onMute?: () => void;
   onBlock?: () => void;
+  onReport?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -483,8 +488,144 @@ export function PostMenu({
               <span>Block{authorUsername ? ` @${authorUsername}` : ""}</span>
             </button>
           ) : null}
+          {onReport ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="danger"
+              onClick={() => choose(onReport)}
+            >
+              <Flag size={16} aria-hidden="true" />
+              <span>Report post</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// The reasons offered when reporting a post; the values match the backend's
+// ReportReason literal.
+const REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: "spam", label: "It's spam" },
+  { value: "abuse", label: "Abuse or harassment" },
+  { value: "hate", label: "Hateful speech or symbols" },
+  { value: "violence", label: "Violent speech or threats" },
+  { value: "sensitive", label: "Sensitive or disturbing media" },
+  { value: "misinformation", label: "Misleading information" },
+  { value: "other", label: "Something else" },
+];
+
+// Modal for reporting a post: pick a reason, add optional detail, submit. On
+// success it swaps to a confirmation -- a report is a moderation signal, so it
+// deliberately does not hide the post from the reporter afterwards.
+export function ReportModal({
+  postId,
+  authorUsername,
+  onClose,
+}: {
+  postId: number;
+  authorUsername: string;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState<ReportReason | null>(null);
+  const [details, setDetails] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  async function submit() {
+    if (!reason) {
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      await reportPost(postId, reason, details);
+      setDone(true);
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClose();
+      }}
+    >
+      <section
+        className="modal report-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Report @${authorUsername}'s post`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {done ? (
+          <>
+            <h2>Thanks for reporting</h2>
+            <p>
+              We use reports like yours to understand what&apos;s happening and
+              keep the community safe. You won&apos;t be notified of the outcome.
+            </p>
+            <div className="confirm-actions">
+              <button className="primary-button" onClick={onClose}>
+                Done
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2>Report post</h2>
+            <p className="report-modal-intro">
+              Why are you reporting @{authorUsername}&apos;s post?
+            </p>
+            <fieldset className="report-reasons">
+              {REPORT_REASONS.map((option) => (
+                <label className="report-reason" key={option.value}>
+                  <input
+                    type="radio"
+                    name="report-reason"
+                    value={option.value}
+                    checked={reason === option.value}
+                    onChange={() => setReason(option.value)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </fieldset>
+            <textarea
+              className="report-details"
+              placeholder="Add anything that would help a reviewer (optional)"
+              maxLength={280}
+              value={details}
+              onChange={(event) => setDetails(event.target.value)}
+            />
+            {error ? <p className="form-error">{error}</p> : null}
+            <div className="confirm-actions">
+              <button
+                className="outline-button"
+                onClick={onClose}
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                onClick={() => void submit()}
+                disabled={!reason || submitting}
+              >
+                {submitting ? "Reporting…" : "Report"}
+              </button>
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }
@@ -1046,6 +1187,7 @@ export function TweetCard({
   const [deleting, setDeleting] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [moderating, setModerating] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const isOwn = tweet.author.id === currentUserId;
 
   async function muteAuthor() {
@@ -1186,6 +1328,7 @@ export function TweetCard({
           authorUsername={tweet.author.username}
           onMute={() => void muteAuthor()}
           onBlock={() => setConfirmingBlock(true)}
+          onReport={() => setReporting(true)}
         />
       )}
       <div className="tweet-body">
@@ -1287,6 +1430,13 @@ export function TweetCard({
           busy={moderating}
           onConfirm={() => void confirmBlock()}
           onCancel={() => setConfirmingBlock(false)}
+        />
+      ) : null}
+      {reporting ? (
+        <ReportModal
+          postId={tweet.id}
+          authorUsername={tweet.author.username}
+          onClose={() => setReporting(false)}
         />
       ) : null}
     </article>
