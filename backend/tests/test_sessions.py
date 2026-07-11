@@ -286,3 +286,23 @@ def test_redis_backend_roundtrip(monkeypatch) -> None:
     assert resolve_session(drop) is None
     assert resolve_session(keep) == 4244
     revoke_user_sessions(4244)
+
+    # A pre-hash session (the old `session:<sid> -> user_id` string) must not
+    # 503 the new code: it resolves to nothing, and the listing skips and prunes
+    # it instead of choking on WRONGTYPE.
+    client = get_redis_client()
+    legacy_sid = "legacy-sid-for-test"
+    client.set(f"session:{legacy_sid}", "4245")
+    client.sadd("session_user:4245", legacy_sid)
+    legacy_cookie = f"{legacy_sid}.{sign_payload(legacy_sid)}"
+    try:
+        assert resolve_session(legacy_cookie) is None, "legacy session must not 503"
+
+        modern = create_session(user_id=4245, ttl_seconds=60, ip="4.4.4.4")
+        listed = list_user_sessions(4245)
+        assert [s.ip for s in listed] == ["4.4.4.4"], "legacy row skipped, modern kept"
+        assert not client.sismember("session_user:4245", legacy_sid), "legacy pruned"
+        assert resolve_session(modern) == 4245
+    finally:
+        client.delete(f"session:{legacy_sid}")
+        revoke_user_sessions(4245)

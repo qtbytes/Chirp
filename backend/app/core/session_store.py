@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from app.core.config import settings
 from app.core.security import sign_payload
 from app.db.redis_client import get_redis_client
-from redis.exceptions import RedisError
+from redis.exceptions import RedisError, ResponseError
 
 _SESSION_PREFIX = "session:"
 _USER_INDEX_PREFIX = "session_user:"
@@ -90,6 +90,20 @@ def _user_index_key(user_id: int) -> str:
 
 def _dec(value) -> str:
     return value.decode() if isinstance(value, bytes) else value
+
+
+def _is_wrong_type(exc: RedisError) -> bool:
+    """
+    True for Redis's WRONGTYPE error.
+
+    A session used to be a plain string ``session:<sid> -> user_id``; it is now a
+    hash. A hash command against a leftover string key raises WRONGTYPE. Rather
+    than 503 every session minted before this change, such a key is treated as an
+    unreadable legacy session: the holder is asked to log in again (which mints a
+    hash), and the stale key is pruned. A real outage is a different RedisError
+    and still fails closed.
+    """
+    return isinstance(exc, ResponseError) and "WRONGTYPE" in str(exc)
 
 
 def session_handle(sid: str) -> str:
@@ -233,6 +247,9 @@ def resolve_session(raw_cookie: str | None, refresh: bool = True) -> int | None:
             pipeline.execute()
         return user_id
     except RedisError as exc:
+        if _is_wrong_type(exc):
+            # A pre-hash session cookie. Invalid under the new format -> re-login.
+            return None
         raise SessionBackendUnavailable("failed to read session") from exc
     except (TypeError, ValueError):
         return None
@@ -251,7 +268,12 @@ def destroy_session(raw_cookie: str | None) -> None:
         return
 
     try:
-        raw = client.hget(_session_key(sid), "uid")
+        try:
+            raw = client.hget(_session_key(sid), "uid")
+        except ResponseError:
+            # Legacy string session: we cannot read its uid, but deleting the key
+            # is what matters. Its index entry is pruned by the next listing.
+            raw = None
         client.delete(_session_key(sid))
         if raw is not None:
             client.srem(_user_index_key(int(raw)), sid)
@@ -286,7 +308,15 @@ def list_user_sessions(user_id: int) -> list[SessionInfo]:
         infos: list[SessionInfo] = []
         stale: list[str] = []
         for sid in sids:
-            data = client.hgetall(_session_key(sid))
+            try:
+                data = client.hgetall(_session_key(sid))
+            except ResponseError as exc:
+                if not _is_wrong_type(exc):
+                    raise
+                # A legacy string session lingering in the index. Unreadable
+                # here; drop it rather than fail the whole listing.
+                stale.append(sid)
+                continue
             if not data:
                 # The session expired but its id lingers in the index; drop it.
                 stale.append(sid)
