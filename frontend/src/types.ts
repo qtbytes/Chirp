@@ -11,6 +11,11 @@ export type UserDiscovery = UserSummary & {
   is_current_user: boolean;
 };
 
+export type FollowListPage = {
+  items: UserDiscovery[];
+  next_cursor: string | null;
+};
+
 export type QuotedPost = {
   id: number;
   content: string;

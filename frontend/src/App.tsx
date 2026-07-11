@@ -80,6 +80,7 @@ import {
   parseBackendDate,
 } from "./components";
 import { ProfileView } from "./ProfileView";
+import { FollowListView } from "./FollowListView";
 import { AccountView } from "./AccountView";
 import { ResetPasswordView, VerifyEmailView } from "./AuthTokenViews";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
@@ -211,6 +212,8 @@ function App() {
           path="/:username/replies"
           element={<ProfileView currentUser={currentUser} onCurrentUserChange={setCurrentUser} />}
         />
+        <Route path="/:username/followers" element={<FollowListView />} />
+        <Route path="/:username/following" element={<FollowListView />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

@@ -12,6 +12,7 @@ from app.repositories import (
     user_repository,
 )
 from app.schemas.comment import CommentOut, ProfileRepliesPage, ReplyWithParentOut
+from app.schemas.follow import FollowListPage
 from app.schemas.tweet import ProfileTweetsPage, TweetOut
 from app.schemas.user import (
     UserDiscoveryOut,
@@ -251,6 +252,88 @@ def list_user_replies(
         )
 
     return ProfileRepliesPage(items=items, next_cursor=next_cursor)
+
+
+def _follow_list_page(
+    db: Session,
+    username: str,
+    lister,
+    limit: int,
+    cursor: str | None,
+    current_user_id: int,
+) -> FollowListPage:
+    """Shared body for the followers and following lists; only ``lister`` differs."""
+    user = user_repository.get_user_by_username(db, username)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+
+    cursor_created_at, cursor_id = decode_cursor(cursor)
+    if cursor and (cursor_created_at is None or cursor_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid cursor",
+        )
+
+    rows = lister(
+        db,
+        user_id=user.id,
+        current_user_id=current_user_id,
+        limit=limit,
+        cursor_created_at=cursor_created_at,
+        cursor_id=cursor_id,
+    )
+
+    has_next = len(rows) > limit
+    page_rows = rows[:limit]
+
+    items = [
+        UserDiscoveryOut(
+            id=row["user"].id,
+            username=row["user"].username,
+            display_name=row["user"].display_name,
+            avatar_url=row["user"].avatar_url,
+            created_at=row["user"].created_at,
+            is_following=row["is_following"],
+            is_current_user=row["user"].id == current_user_id,
+        )
+        for row in page_rows
+    ]
+
+    next_cursor = None
+    if has_next and page_rows:
+        last = page_rows[-1]
+        next_cursor = encode_cursor(last["follow_created_at"], last["user"].id)
+
+    return FollowListPage(items=items, next_cursor=next_cursor)
+
+
+@router.get("/{username}/followers", response_model=FollowListPage)
+def list_user_followers(
+    username: str,
+    limit: int = Query(default=20, ge=1, le=50),
+    cursor: str | None = None,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> FollowListPage:
+    return _follow_list_page(
+        db, username, follow_repository.list_followers, limit, cursor, current_user_id
+    )
+
+
+@router.get("/{username}/following", response_model=FollowListPage)
+def list_user_following(
+    username: str,
+    limit: int = Query(default=20, ge=1, le=50),
+    cursor: str | None = None,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> FollowListPage:
+    return _follow_list_page(
+        db, username, follow_repository.list_following, limit, cursor, current_user_id
+    )
 
 
 @router.patch("/me", response_model=UserProfileOut)

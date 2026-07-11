@@ -11,9 +11,9 @@ work — with a real UI on top rather than a toy script.
 ## Features
 
 Posting with images and video, threaded comments and replies, likes, quote
-tweets, follows, profiles with editable bio and avatar, email confirmation,
-password change and reset, active session management, notifications, emoji
-picker, and Open Graph link preview cards.
+tweets, follows with followers/following lists, profiles with editable bio and
+avatar, email confirmation, password change and reset, active session
+management, notifications, emoji picker, and Open Graph link preview cards.
 
 ## Design notes
 

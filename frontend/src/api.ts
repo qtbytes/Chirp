@@ -2,6 +2,7 @@ import type {
   Comment,
   CommentLikeToggleResult,
   CommentStats,
+  FollowListPage,
   LikeToggleResult,
   LinkPreview,
   Notification,
@@ -317,6 +318,32 @@ export function listUsers(query: string): Promise<UserDiscovery[]> {
     params.set("query", query.trim());
   }
   return request<UserDiscovery[]>(`/users?${params.toString()}`);
+}
+
+export function getFollowers(
+  username: string,
+  cursor?: string | null,
+): Promise<FollowListPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<FollowListPage>(
+    `/users/${encodeURIComponent(username)}/followers?${params.toString()}`,
+  );
+}
+
+export function getFollowing(
+  username: string,
+  cursor?: string | null,
+): Promise<FollowListPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<FollowListPage>(
+    `/users/${encodeURIComponent(username)}/following?${params.toString()}`,
+  );
 }
 
 export function followUser(userId: number): Promise<void> {

@@ -236,12 +236,12 @@ export function ProfileView({
           <span>Joined {joinedDate}</span>
         </p>
         <p className="profile-stats">
-          <span>
+          <Link to={`/${encodeURIComponent(username)}/following`}>
             <strong>{profile.following_count}</strong> Following
-          </span>
-          <span>
+          </Link>
+          <Link to={`/${encodeURIComponent(username)}/followers`}>
             <strong>{profile.follower_count}</strong> Followers
-          </span>
+          </Link>
         </p>
         {profileError ? <p className="form-error">{profileError}</p> : null}
       </header>

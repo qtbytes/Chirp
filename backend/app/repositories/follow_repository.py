@@ -1,7 +1,10 @@
-from sqlalchemy import delete, func, select
-from sqlalchemy.orm import Session
+from datetime import datetime
+
+from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.models.follow import Follow
+from app.models.user import User
 from app.repositories.notification_repository import add_notification
 
 
@@ -97,6 +100,113 @@ def count_following(db: Session, user_id: int) -> int:
             .where(Follow.follower_id == user_id)
         )
         or 0
+    )
+
+
+def _followed_subset(
+    db: Session, current_user_id: int, user_ids: list[int]
+) -> set[int]:
+    """Which of ``user_ids`` the current user already follows, in one query."""
+    if not user_ids:
+        return set()
+    return {
+        followee_id
+        for (followee_id,) in db.execute(
+            select(Follow.followee_id).where(
+                Follow.follower_id == current_user_id,
+                Follow.followee_id.in_(user_ids),
+            )
+        ).all()
+    }
+
+
+def _list_follow_edge(
+    db: Session,
+    *,
+    pivot_column: InstrumentedAttribute,
+    pivot_value: int,
+    listed_column: InstrumentedAttribute,
+    current_user_id: int,
+    limit: int,
+    cursor_created_at: datetime | None,
+    cursor_id: int | None,
+) -> list[dict]:
+    """
+    One side of the follow graph, newest edge first.
+
+    ``pivot_column`` is the fixed end of the edge (the profile being viewed) and
+    ``listed_column`` is the end joined to ``User`` and returned. Followers and
+    following are the same query with those two swapped.
+
+    Fetches ``limit + 1`` to let the caller detect a next page, and paginates by
+    ``(Follow.created_at, User.id)`` -- a stable, unique key, so an unfollow
+    landing mid-scroll cannot skip or duplicate a row the way an offset would.
+    """
+    stmt = (
+        select(User, Follow.created_at)
+        .join(Follow, listed_column == User.id)
+        .where(pivot_column == pivot_value)
+    )
+    if cursor_created_at is not None and cursor_id is not None:
+        stmt = stmt.where(
+            or_(
+                Follow.created_at < cursor_created_at,
+                and_(Follow.created_at == cursor_created_at, User.id < cursor_id),
+            )
+        )
+    stmt = stmt.order_by(Follow.created_at.desc(), User.id.desc()).limit(limit + 1)
+
+    rows = db.execute(stmt).all()
+    followed = _followed_subset(db, current_user_id, [user.id for user, _ in rows])
+    return [
+        {
+            "user": user,
+            "follow_created_at": created_at,
+            "is_following": user.id in followed,
+        }
+        for user, created_at in rows
+    ]
+
+
+def list_followers(
+    db: Session,
+    user_id: int,
+    current_user_id: int,
+    limit: int,
+    cursor_created_at: datetime | None = None,
+    cursor_id: int | None = None,
+) -> list[dict]:
+    """Users who follow ``user_id``, most recently followed first."""
+    return _list_follow_edge(
+        db,
+        pivot_column=Follow.followee_id,
+        pivot_value=user_id,
+        listed_column=Follow.follower_id,
+        current_user_id=current_user_id,
+        limit=limit,
+        cursor_created_at=cursor_created_at,
+        cursor_id=cursor_id,
+    )
+
+
+def list_following(
+    db: Session,
+    user_id: int,
+    current_user_id: int,
+    limit: int,
+    cursor_created_at: datetime | None = None,
+    cursor_id: int | None = None,
+) -> list[dict]:
+    """Users ``user_id`` follows, most recently followed first."""
+    return _list_follow_edge(
+        db,
+        pivot_column=Follow.follower_id,
+        pivot_value=user_id,
+        listed_column=Follow.followee_id,
+        current_user_id=current_user_id,
+        limit=limit,
+        cursor_created_at=cursor_created_at,
+        cursor_id=cursor_id,
     )
 
 
