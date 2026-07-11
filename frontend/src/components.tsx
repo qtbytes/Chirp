@@ -1465,11 +1465,39 @@ export function CommentCard({
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
+  const [moderating, setModerating] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const isOwn = localComment.author.id === currentUserId;
 
   useEffect(() => {
     setLocalComment(comment);
   }, [comment]);
+
+  // Muting or blocking the author removes their comments from the thread; a
+  // reload re-fetches it with them filtered out server-side.
+  async function muteAuthor() {
+    setError("");
+    try {
+      await muteUser(localComment.author.id);
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  async function confirmBlock() {
+    setModerating(true);
+    setError("");
+    try {
+      await blockUser(localComment.author.id);
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setModerating(false);
+      setConfirmingBlock(false);
+    }
+  }
 
   async function saveEdit(content: string) {
     setSaving(true);
@@ -1561,7 +1589,14 @@ export function CommentCard({
           onEdit={() => setEditing(true)}
           onDelete={() => setConfirmingDelete(true)}
         />
-      ) : null}
+      ) : (
+        <PostMenu
+          authorUsername={localComment.author.username}
+          onMute={() => void muteAuthor()}
+          onBlock={() => setConfirmingBlock(true)}
+          onReport={() => setReporting(true)}
+        />
+      )}
       <div className="comment-body">
         <header>
           <Link
@@ -1651,6 +1686,24 @@ export function CommentCard({
           quoted={localComment}
           onClose={() => setQuoting(false)}
           onQuoted={handleQuoted}
+        />
+      ) : null}
+      {confirmingBlock ? (
+        <ConfirmDialog
+          title={`Block @${localComment.author.username}?`}
+          message="They won't be able to follow you or see your Tweets, and you won't see theirs. Any follow between you is removed."
+          confirmLabel="Block"
+          busyLabel="Blocking…"
+          busy={moderating}
+          onConfirm={() => void confirmBlock()}
+          onCancel={() => setConfirmingBlock(false)}
+        />
+      ) : null}
+      {reporting ? (
+        <ReportModal
+          postId={localComment.id}
+          authorUsername={localComment.author.username}
+          onClose={() => setReporting(false)}
         />
       ) : null}
     </article>
