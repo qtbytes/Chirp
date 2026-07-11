@@ -1,4 +1,5 @@
 import type {
+  BlockListPage,
   Comment,
   CommentLikeToggleResult,
   CommentStats,
@@ -349,6 +350,24 @@ export function getFollowing(
 
 export function followUser(userId: number): Promise<void> {
   return request<void>(`/follows/${userId}`, { method: "POST" });
+}
+
+/** Block a user. Severs any follow between you and hides you from each other. */
+export function blockUser(userId: number): Promise<{ is_blocked: boolean }> {
+  return request<{ is_blocked: boolean }>(`/blocks/${userId}`, { method: "POST" });
+}
+
+export function unblockUser(userId: number): Promise<{ is_blocked: boolean }> {
+  return request<{ is_blocked: boolean }>(`/blocks/${userId}`, { method: "DELETE" });
+}
+
+/** The accounts you have blocked, most recent first. */
+export function listBlocked(cursor?: string | null): Promise<BlockListPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<BlockListPage>(`/blocks?${params.toString()}`);
 }
 
 export function unfollowUser(userId: number): Promise<void> {

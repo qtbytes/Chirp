@@ -111,6 +111,7 @@ def list_notifications(
     limit: int = 30,
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
+    exclude_actor_ids: set[int] | None = None,
 ) -> list[dict]:
     """
     Return the recipient's most recent notifications, each joined with its actor
@@ -131,6 +132,10 @@ def list_notifications(
         .join(User, User.id == Notification.actor_id)
         .where(Notification.user_id == user_id)
     )
+    # Hide notifications from a now-blocked actor (e.g. a like from before the
+    # block). New ones can't be produced -- interactions are blocked at source.
+    if exclude_actor_ids:
+        stmt = stmt.where(Notification.actor_id.not_in(exclude_actor_ids))
     if cursor_created_at is not None and cursor_id is not None:
         stmt = stmt.where(
             or_(

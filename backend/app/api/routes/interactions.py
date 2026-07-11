@@ -1,7 +1,7 @@
 from app.api.deps import get_current_user_id
 from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
-from app.repositories import engagement_repository
+from app.repositories import block_repository, engagement_repository
 from app.schemas.comment import CommentCreate, CommentOut
 from app.schemas.user import UserSummary
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -190,6 +190,7 @@ def list_comments(
             tweet_id=tweet_id,
             limit=limit,
             current_user_id=current_user_id,
+            exclude_author_ids=block_repository.hidden_user_ids(db, current_user_id),
         )
     except ValueError as exc:
         raise HTTPException(

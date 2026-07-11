@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.database import SessionLocal
 from app.db.redis_client import get_redis_client
-from app.repositories import feed_repository, follow_repository, tweet_repository
+from app.repositories import (
+    block_repository,
+    feed_repository,
+    follow_repository,
+    tweet_repository,
+)
 from app.schemas.tweet import TimelinePage, TweetOut
 from app.schemas.user import UserSummary
 from app.services.ranking import score_tweet, weights_from_settings
@@ -122,6 +127,8 @@ class TimelineService:
             if cached is not None:
                 return cached
 
+        hidden = block_repository.hidden_user_ids(self.db, user_id)
+
         if strategy == "write":
             rows = feed_repository.list_feed_tweets(
                 self.db,
@@ -129,6 +136,7 @@ class TimelineService:
                 limit=limit,
                 cursor_created_at=cursor_created_at,
                 cursor_id=cursor_id,
+                exclude_author_ids=hidden,
             )
         else:
             followee_ids = follow_repository.list_followee_ids(
@@ -144,6 +152,7 @@ class TimelineService:
                 current_user_id=user_id,
                 cursor_created_at=cursor_created_at,
                 cursor_id=cursor_id,
+                exclude_author_ids=hidden,
             )
 
         page = self._build_page(rows=rows, limit=limit, strategy=strategy)
@@ -181,10 +190,16 @@ class TimelineService:
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
 
+        hidden = (
+            block_repository.hidden_user_ids(self.db, user_id)
+            if user_id is not None
+            else set()
+        )
         candidates = tweet_repository.fetch_for_you_candidates(
             self.db,
             limit=settings.ranking_candidate_pool_size,
             current_user_id=user_id,
+            exclude_author_ids=hidden,
         )
 
         weights = weights_from_settings()

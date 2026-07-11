@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { KeyRound, Loader2, Mail, Monitor, Smartphone } from "lucide-react";
 import {
+  displayName,
   getUserProfile,
+  listBlocked,
   listSessions,
   logoutOtherSessions,
   revokeSession,
+  unblockUser,
 } from "./api";
-import type { Session, UserProfile, UserSummary } from "./types";
-import { formatCompactDate, getErrorMessage } from "./components";
+import type { BlockedUser, Session, UserProfile, UserSummary } from "./types";
+import { Avatar, formatCompactDate, getErrorMessage } from "./components";
 import { ChangeEmailModal } from "./ChangeEmailModal";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 
@@ -91,6 +95,8 @@ export function AccountView({ currentUser }: { currentUser: UserSummary }) {
       ) : null}
 
       <SessionsSection />
+
+      <BlockedSection />
 
       {changingEmail && profile ? (
         <ChangeEmailModal
@@ -254,6 +260,96 @@ function SessionsSection() {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+function BlockedSection() {
+  const [items, setItems] = useState<BlockedUser[] | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const load = useCallback(async (nextCursor?: string | null, append = false) => {
+    setError("");
+    try {
+      const page = await listBlocked(nextCursor);
+      setItems((current) =>
+        append && current ? [...current, ...page.items] : page.items,
+      );
+      setCursor(page.next_cursor);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function unblock(user: BlockedUser) {
+    setBusyId(user.id);
+    setError("");
+    try {
+      await unblockUser(user.id);
+      setItems((current) => current?.filter((u) => u.id !== user.id) ?? null);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="settings-section" aria-labelledby="blocked-heading">
+      <div className="settings-section-head">
+        <h2 id="blocked-heading">Blocked accounts</h2>
+      </div>
+      <p className="form-hint settings-section-intro">
+        Blocked accounts can&apos;t see your Tweets or interact with you, and you
+        won&apos;t see theirs.
+      </p>
+
+      {error ? <p className="form-error">{error}</p> : null}
+
+      {items === null ? (
+        <div className="loading-row">
+          <Loader2 className="spin" size={18} aria-hidden="true" />
+          <span>Loading</span>
+        </div>
+      ) : items.length === 0 ? (
+        <p className="form-hint">You haven&apos;t blocked anyone.</p>
+      ) : (
+        <div className="user-list">
+          {items.map((user) => (
+            <div className="user-row" key={user.id}>
+              <Link
+                to={`/${encodeURIComponent(user.username)}`}
+                className="author-link user-row-link"
+              >
+                <Avatar user={user} size="small" />
+                <div className="user-copy">
+                  <strong>{displayName(user)}</strong>
+                  <span>@{user.username}</span>
+                </div>
+              </Link>
+              <button
+                className="outline-button"
+                onClick={() => void unblock(user)}
+                disabled={busyId === user.id}
+              >
+                {busyId === user.id ? "…" : "Unblock"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {cursor ? (
+        <button className="load-more" onClick={() => void load(cursor, true)}>
+          Load more
+        </button>
+      ) : null}
     </section>
   );
 }

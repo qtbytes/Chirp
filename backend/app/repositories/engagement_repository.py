@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, aliased
 from app.models.like import Like
 from app.models.post import Post
 from app.models.user import User
+from app.repositories.block_repository import blocks_between
 from app.repositories.notification_repository import add_notification
 from app.repositories.tweet_repository import _quote_counts_subquery
 
@@ -21,6 +22,11 @@ from app.repositories.tweet_repository import _quote_counts_subquery
 def _like_post(db: Session, user_id: int, post_id: int) -> bool:
     post = db.get(Post, post_id)
     if post is None:
+        raise ValueError("post not found")
+
+    # A blocked user must not be able to like the blocker's post, nor vice versa.
+    # Report it as "not found" so a block is not disclosed by a distinct error.
+    if blocks_between(db, user_id, post.user_id):
         raise ValueError("post not found")
 
     existing = db.scalar(
@@ -128,6 +134,11 @@ def create_comment(
     if tweet is None or tweet.reply_to_id is not None:
         raise ValueError("tweet not found")
 
+    # No commenting across a block, in either direction -- reported as a missing
+    # thread rather than a distinct "blocked" error.
+    if blocks_between(db, user_id, tweet.user_id):
+        raise ValueError("tweet not found")
+
     author = db.get(User, user_id)
     if author is None:
         raise ValueError("user not found")
@@ -137,6 +148,9 @@ def create_comment(
     if parent_comment_id is not None:
         parent_comment = db.get(Post, parent_comment_id)
         if parent_comment is None or parent_comment.root_id != tweet_id:
+            raise ValueError("parent comment not found")
+        # Also honour a block against the specific comment's author.
+        if blocks_between(db, user_id, parent_comment.user_id):
             raise ValueError("parent comment not found")
         reply_to_id = parent_comment_id
 
@@ -190,6 +204,7 @@ def list_comments_by_tweet(
     tweet_id: int,
     limit: int = 20,
     current_user_id: int | None = None,
+    exclude_author_ids: set[int] | None = None,
 ) -> list[tuple[Post, User, int, int, int, bool]]:
     """
     Return a tweet's whole-thread comments as a nested thread.
@@ -198,6 +213,11 @@ def list_comments_by_tweet(
     the comment it replies to, and siblings stay in creation order. This lets the
     UI indent each comment under its parent instead of showing a flat, purely
     chronological list.
+
+    ``exclude_author_ids`` removes comments by blocked (or blocking) authors. A
+    hidden author's comment is dropped *with its subtree*: the pre-order walk
+    starts from the tweet's replies, so a reply whose parent was removed is never
+    reached, which is the desired "hide the whole sub-conversation" behaviour.
     """
     tweet = db.get(Post, tweet_id)
     if tweet is None or tweet.reply_to_id is not None:
@@ -233,6 +253,8 @@ def list_comments_by_tweet(
         .where(Post.root_id == tweet_id, Post.id != tweet_id)
         .order_by(Post.created_at.asc(), Post.id.asc())
     )
+    if exclude_author_ids:
+        stmt = stmt.where(Post.user_id.not_in(exclude_author_ids))
     rows = db.execute(stmt).all()
 
     # Group each comment under its parent (reply_to_id); a top-level comment's

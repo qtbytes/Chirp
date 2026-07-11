@@ -1,7 +1,7 @@
 from app.api.deps import get_current_user_id
 from app.db.database import get_db
 from app.db.redis_client import get_redis_client
-from app.repositories import notification_repository
+from app.repositories import block_repository, notification_repository
 from app.schemas.notification import NotificationOut, NotificationPage, UnreadCountOut
 from app.services import events
 from app.services.timeline_service import decode_cursor, encode_cursor
@@ -32,6 +32,7 @@ def list_notifications(
         limit=limit,
         cursor_created_at=cursor_created_at,
         cursor_id=cursor_id,
+        exclude_actor_ids=block_repository.hidden_user_ids(db, current_user_id),
     )
 
     has_next = len(rows) > limit

@@ -5,6 +5,7 @@ from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.models.follow import Follow
 from app.models.user import User
+from app.repositories.block_repository import blocks_between
 from app.repositories.notification_repository import add_notification
 
 
@@ -19,6 +20,11 @@ def follow_user(db: Session, follower_id: int, followee_id: int) -> Follow:
     """
     if follower_id == followee_id:
         raise ValueError("users cannot follow themselves")
+
+    # A block, in either direction, forbids the follow. Checked here so every
+    # follow path is covered, not just the HTTP route.
+    if blocks_between(db, follower_id, followee_id):
+        raise ValueError("cannot follow this user")
 
     existing = db.scalar(
         select(Follow).where(
@@ -130,6 +136,7 @@ def _list_follow_edge(
     limit: int,
     cursor_created_at: datetime | None,
     cursor_id: int | None,
+    exclude_user_ids: set[int] | None = None,
 ) -> list[dict]:
     """
     One side of the follow graph, newest edge first.
@@ -147,6 +154,9 @@ def _list_follow_edge(
         .join(Follow, listed_column == User.id)
         .where(pivot_column == pivot_value)
     )
+    # Blocked (and blocking) users are omitted from follower/following lists.
+    if exclude_user_ids:
+        stmt = stmt.where(User.id.not_in(exclude_user_ids))
     if cursor_created_at is not None and cursor_id is not None:
         stmt = stmt.where(
             or_(
@@ -175,6 +185,7 @@ def list_followers(
     limit: int,
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
+    exclude_user_ids: set[int] | None = None,
 ) -> list[dict]:
     """Users who follow ``user_id``, most recently followed first."""
     return _list_follow_edge(
@@ -186,6 +197,7 @@ def list_followers(
         limit=limit,
         cursor_created_at=cursor_created_at,
         cursor_id=cursor_id,
+        exclude_user_ids=exclude_user_ids,
     )
 
 
@@ -196,6 +208,7 @@ def list_following(
     limit: int,
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
+    exclude_user_ids: set[int] | None = None,
 ) -> list[dict]:
     """Users ``user_id`` follows, most recently followed first."""
     return _list_follow_edge(
@@ -207,6 +220,7 @@ def list_following(
         limit=limit,
         cursor_created_at=cursor_created_at,
         cursor_id=cursor_id,
+        exclude_user_ids=exclude_user_ids,
     )
 
 

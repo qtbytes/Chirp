@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.db.database import get_db
 from app.models.user import User
 from app.repositories import (
+    block_repository,
     engagement_repository,
     follow_repository,
     tweet_repository,
@@ -47,6 +48,7 @@ def list_users(
         current_user_id=current_user_id,
         query=query,
         limit=limit,
+        exclude_user_ids=block_repository.hidden_user_ids(db, current_user_id),
     )
     return [
         UserDiscoveryOut(
@@ -77,6 +79,10 @@ def _build_profile(db: Session, user: User, current_user_id: int) -> UserProfile
         tweet_count=tweet_repository.count_tweets_by_author(db, user.id),
         is_following=follow_repository.is_following(db, current_user_id, user.id),
         is_current_user=is_current_user,
+        # Whether *you* have blocked them, so the UI can offer "Unblock". Their
+        # having blocked you is deliberately not surfaced as a flag -- its effect
+        # (their content simply isn't there) is the only signal.
+        is_blocked=block_repository.is_blocking(db, current_user_id, user.id),
         # Profiles are world-readable; an address is the owner's business alone.
         email=user.email if is_current_user else None,
         pending_email=user.pending_email if is_current_user else None,
@@ -119,6 +125,11 @@ def list_user_tweets(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid cursor",
         )
+
+    # A block hides the profile's posts in both directions: you cannot read the
+    # tweets of someone you blocked, nor of someone who blocked you.
+    if block_repository.blocks_between(db, current_user_id, user.id):
+        return ProfileTweetsPage(items=[], next_cursor=None)
 
     rows = tweet_repository.list_feed_with_retweets(
         db,
@@ -166,6 +177,9 @@ def list_user_replies(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid cursor",
         )
+
+    if block_repository.blocks_between(db, current_user_id, user.id):
+        return ProfileRepliesPage(items=[], next_cursor=None)
 
     rows = engagement_repository.list_replies_by_user(
         db,
@@ -284,6 +298,7 @@ def _follow_list_page(
         limit=limit,
         cursor_created_at=cursor_created_at,
         cursor_id=cursor_id,
+        exclude_user_ids=block_repository.hidden_user_ids(db, current_user_id),
     )
 
     has_next = len(rows) > limit

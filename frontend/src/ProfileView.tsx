@@ -3,11 +3,13 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Calendar, Loader2 } from "lucide-react";
 import {
   ApiError,
+  blockUser,
   displayName,
   followUser,
   getUserProfile,
   getUserReplies,
   getUserTweets,
+  unblockUser,
   unfollowUser,
 } from "./api";
 import type {
@@ -19,6 +21,7 @@ import type {
 import {
   Avatar,
   CommentCard,
+  ConfirmDialog,
   TweetCard,
   getErrorMessage,
   parseBackendDate,
@@ -43,6 +46,8 @@ export function ProfileView({
   const [notFound, setNotFound] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
+  const [blockBusy, setBlockBusy] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [editing, setEditing] = useState(false);
 
   const [tweets, setTweets] = useState<Tweet[]>([]);
@@ -165,6 +170,35 @@ export function ProfileView({
     }
   }
 
+  async function toggleBlock() {
+    if (!profile || blockBusy) {
+      return;
+    }
+    setBlockBusy(true);
+    setProfileError("");
+    try {
+      if (profile.is_blocked) {
+        await unblockUser(profile.id);
+      } else {
+        await blockUser(profile.id);
+      }
+      // Visibility changed in both directions; refetch the profile (counts,
+      // is_following, is_blocked) and the feed, which is now empty or restored.
+      const updated = await getUserProfile(username);
+      setProfile(updated);
+      if (activeTab === "tweets") {
+        void loadTweets();
+      } else {
+        void loadReplies();
+      }
+    } catch (err) {
+      setProfileError(getErrorMessage(err));
+    } finally {
+      setBlockBusy(false);
+      setConfirmingBlock(false);
+    }
+  }
+
   if (notFound) {
     return (
       <section className="profile-view">
@@ -218,14 +252,33 @@ export function ProfileView({
                 Edit profile
               </button>
             </div>
+          ) : profile.is_blocked ? (
+            <div className="profile-actions">
+              <button
+                className="outline-button"
+                onClick={() => void toggleBlock()}
+                disabled={blockBusy}
+              >
+                Blocked
+              </button>
+            </div>
           ) : (
-            <button
-              className={profile.is_following ? "outline-button following" : "primary-button compact"}
-              onClick={() => void toggleFollow()}
-              disabled={followBusy}
-            >
-              {profile.is_following ? "Following" : "Follow"}
-            </button>
+            <div className="profile-actions">
+              <button
+                className="outline-button"
+                onClick={() => setConfirmingBlock(true)}
+                disabled={blockBusy}
+              >
+                Block
+              </button>
+              <button
+                className={profile.is_following ? "outline-button following" : "primary-button compact"}
+                onClick={() => void toggleFollow()}
+                disabled={followBusy}
+              >
+                {profile.is_following ? "Following" : "Follow"}
+              </button>
+            </div>
           )}
         </div>
         <h1 className="profile-name">{displayName(profile)}</h1>
@@ -267,7 +320,22 @@ export function ProfileView({
 
       {feedError ? <div className="status-panel error">{feedError}</div> : null}
 
-      {activeTab === "tweets" ? (
+      {profile.is_blocked ? (
+        <div className="status-panel">
+          <strong>@{profile.username} is blocked</strong>
+          <p>
+            You can&apos;t see their Tweets, and they can&apos;t see yours or
+            interact with you.
+          </p>
+          <button
+            className="outline-button"
+            onClick={() => void toggleBlock()}
+            disabled={blockBusy}
+          >
+            Unblock
+          </button>
+        </div>
+      ) : activeTab === "tweets" ? (
         <>
           {!loadingFeed && tweets.length === 0 && !feedError ? (
             <div className="status-panel">No tweets yet.</div>
@@ -336,11 +404,22 @@ export function ProfileView({
         </>
       )}
 
-      {loadingFeed ? (
+      {!profile.is_blocked && loadingFeed ? (
         <div className="loading-row">
           <Loader2 className="spin" size={18} aria-hidden="true" />
           <span>Loading</span>
         </div>
+      ) : null}
+
+      {confirmingBlock ? (
+        <ConfirmDialog
+          title={`Block @${profile.username}?`}
+          message="They won't be able to follow you or see your Tweets, and you won't see theirs. Any follow between you is removed."
+          confirmLabel="Block"
+          busy={blockBusy}
+          onConfirm={() => void toggleBlock()}
+          onCancel={() => setConfirmingBlock(false)}
+        />
       ) : null}
 
       {editing && profile.is_current_user ? (

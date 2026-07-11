@@ -12,7 +12,7 @@ work — with a real UI on top rather than a toy script.
 
 Posting with images and video, threaded comments and replies, likes, quote
 tweets, follows with followers/following lists, profiles with editable bio and
-avatar, email confirmation, password change and reset, active session
+avatar, blocking, email confirmation, password change and reset, active session
 management, live notifications over SSE, emoji picker, and Open Graph link
 preview cards.
 
@@ -211,6 +211,27 @@ Steam and the long tail without per-site adapters. Because the server fetches
 user-supplied URLs, it is SSRF-guarded: scheme allowlist, IP-literal and internal
 hostname blocking always on, plus an optional resolved-IP check for direct
 fetches (see `link_preview_*` in `app/core/config.py`).
+
+**Blocking is one read filter and one write guard, and it is symmetric.** A block
+makes two accounts mutually invisible — neither the blocker nor the blocked can
+see the other's tweets, replies, or notifications, and neither may follow, like,
+comment on, or quote the other. That symmetry is the whole point: if a block only
+hid the blocked user's content from the blocker, the blocker would still surface
+in the blocked user's timeline and mentions, which is exactly the contact the
+block exists to sever. `block_user` deletes any `Follow` in *both* directions and
+is idempotent.
+
+The read side is one function: `block_repository.hidden_user_ids(viewer)` returns
+`{accounts the viewer blocked} ∪ {accounts that blocked the viewer}`, and every
+list path threads it in as an `exclude_*_ids` filter — home and "for you"
+timelines, profile tweets and replies, the reply tree, notifications, and user
+discovery. The write side is one guard: `blocks_between(a, b)` checks either
+direction, and the repository layer raises before a follow, like, comment, or
+quote can be written, so a route added later inherits the rule for free. A
+blocked interaction is reported as **404, never 403** — a 403 would confirm the
+block exists, and "they blocked you" is never surfaced. One known gap: a quoted
+post embedded in someone else's tweet is not yet filtered by the viewer's block,
+because the embed is serialised without the viewer's hidden set.
 
 ## Running it
 

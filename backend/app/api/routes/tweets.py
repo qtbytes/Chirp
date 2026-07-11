@@ -5,7 +5,12 @@ from app.api.deps import get_current_user_id
 from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.models.post import Post
-from app.repositories import post_repository, tweet_repository, user_repository
+from app.repositories import (
+    block_repository,
+    post_repository,
+    tweet_repository,
+    user_repository,
+)
 from app.schemas.tweet import TweetCreate, TweetOut, TweetStatsOut
 from app.schemas.user import UserSummary
 from app.services.serializers import serialize_quoted_post
@@ -115,6 +120,14 @@ def get_tweet(
 ) -> TweetOut:
     tweet = tweet_repository.get_tweet(db, tweet_id)
     if tweet is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="tweet not found",
+        )
+
+    # A blocked (or blocking) author's tweet is not viewable -- 404, not 403, so
+    # the block is not disclosed.
+    if block_repository.blocks_between(db, current_user_id, tweet.author.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="tweet not found",

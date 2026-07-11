@@ -1,3 +1,4 @@
+from app.models.block import Block
 from app.models.feed import FeedItem
 from app.models.follow import Follow
 from app.models.like import Like
@@ -12,4 +13,5 @@ __all__ = [
     "Like",
     "FeedItem",
     "Notification",
+    "Block",
 ]

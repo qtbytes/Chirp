@@ -110,10 +110,21 @@ export type UserProfile = {
   tweet_count: number;
   is_following: boolean;
   is_current_user: boolean;
+  /** Whether you have blocked this account. */
+  is_blocked: boolean;
   /** Confirmed address. Null on anyone else's profile, and until confirmed. */
   email: string | null;
   /** Claimed but unconfirmed. Null on anyone else's profile. */
   pending_email: string | null;
+};
+
+export type BlockedUser = UserSummary & {
+  blocked_at: string;
+};
+
+export type BlockListPage = {
+  items: BlockedUser[];
+  next_cursor: string | null;
 };
 
 export type Session = {

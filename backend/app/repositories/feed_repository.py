@@ -75,6 +75,7 @@ def list_feed_tweets(
     limit: int,
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
+    exclude_author_ids: set[int] | None = None,
 ) -> list[dict]:
     """
     Read precomputed home timeline rows for fan-out on write.
@@ -114,6 +115,12 @@ def list_feed_tweets(
         .order_by(FeedItem.created_at.desc(), FeedItem.id.desc())
         .limit(limit + 1)
     )
+
+    # A precomputed feed row can outlive the follow that created it -- e.g. a
+    # post fanned out before the owner blocked its author. Filter blocked
+    # authors here at read time so those stale rows never surface.
+    if exclude_author_ids:
+        stmt = stmt.where(Post.user_id.not_in(exclude_author_ids))
 
     if cursor_created_at is not None and cursor_id is not None:
         stmt = stmt.where(

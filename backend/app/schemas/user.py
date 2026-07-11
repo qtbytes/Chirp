@@ -156,6 +156,8 @@ class UserProfileOut(BaseModel):
     tweet_count: int
     is_following: bool
     is_current_user: bool
+    # Whether the viewer has blocked this profile's owner.
+    is_blocked: bool = False
 
     # Populated only when is_current_user. Every profile is world-readable, so
     # these stay None for anyone else -- and email is deliberately absent from

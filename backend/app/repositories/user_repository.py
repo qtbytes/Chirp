@@ -77,10 +77,14 @@ def list_users(
     current_user_id: int,
     query: str | None,
     limit: int,
+    exclude_user_ids: set[int] | None = None,
 ) -> list[tuple[User, bool]]:
     stmt = select(User)
     if query:
         stmt = stmt.where(User.username.ilike(f"%{query}%"))
+    # Blocked (and blocking) users do not surface in discovery.
+    if exclude_user_ids:
+        stmt = stmt.where(User.id.not_in(exclude_user_ids))
 
     users = list(db.scalars(stmt.order_by(User.created_at.desc(), User.id.desc()).limit(limit)).all())
     if not users:

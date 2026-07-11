@@ -3,6 +3,7 @@ from pathlib import Path
 from app.api.router import api_router
 from app.core.config import settings
 from app.models import (  # noqa: F401
+    Block,
     FeedItem,
     Follow,
     Like,

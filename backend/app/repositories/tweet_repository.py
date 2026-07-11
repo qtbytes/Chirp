@@ -7,6 +7,7 @@ from app.models.follow import Follow
 from app.models.like import Like
 from app.models.post import Post
 from app.models.user import User
+from app.repositories.block_repository import blocks_between
 from app.repositories.notification_repository import add_notification
 
 
@@ -47,6 +48,9 @@ def create_tweet(
     if quoted_post_id is not None:
         quoted = db.get(Post, quoted_post_id)
         if quoted is None:
+            raise ValueError("quoted post not found")
+        # You cannot quote across a block; hidden the same way a missing post is.
+        if blocks_between(db, author_id, quoted.user_id):
             raise ValueError("quoted post not found")
 
     post = Post(
@@ -220,6 +224,7 @@ def list_feed_with_retweets(
     current_user_id: int | None = None,
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
+    exclude_author_ids: set[int] | None = None,
 ) -> list[dict]:
     """
     Return the given authors' top-level posts newest-first.
@@ -227,6 +232,10 @@ def list_feed_with_retweets(
     Quotes (Twitter-style reposts) are ordinary top-level posts now, so they
     surface here naturally by their own ``created_at`` — no separate retweet
     join is needed.
+
+    ``exclude_author_ids`` drops posts from blocked (or blocking) authors. A
+    block already removes the follow, so a followed-author feed rarely needs it;
+    it is defence in depth against a stale edge.
     """
     if not author_ids:
         return []
@@ -237,6 +246,8 @@ def list_feed_with_retweets(
         .order_by(Post.created_at.desc(), Post.id.desc())
         .limit(limit + 1)
     )
+    if exclude_author_ids:
+        ident_stmt = ident_stmt.where(Post.user_id.not_in(exclude_author_ids))
     if cursor_created_at is not None and cursor_id is not None:
         ident_stmt = ident_stmt.where(
             or_(
@@ -272,6 +283,7 @@ def fetch_for_you_candidates(
     db: Session,
     limit: int,
     current_user_id: int | None = None,
+    exclude_author_ids: set[int] | None = None,
 ) -> list[dict]:
     """
     A bounded pool of recent top-level posts, with the engagement and
@@ -313,9 +325,12 @@ def fetch_for_you_candidates(
         .outerjoin(comment_counts, comment_counts.c.post_id == Post.id)
         .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
         .where(Post.reply_to_id.is_(None))
-        .order_by(Post.created_at.desc(), Post.id.desc())
-        .limit(limit)
     )
+    # Filter hidden authors out of the pool *before* the limit, so a blocked
+    # author cannot consume candidate slots the viewer should have seen.
+    if exclude_author_ids:
+        stmt = stmt.where(Post.user_id.not_in(exclude_author_ids))
+    stmt = stmt.order_by(Post.created_at.desc(), Post.id.desc()).limit(limit)
 
     rows = db.execute(stmt).all()
     posts = [post for post, *_ in rows]
