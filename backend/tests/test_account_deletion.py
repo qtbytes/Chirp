@@ -30,6 +30,10 @@ def _post(client: TestClient, content: str) -> int:
     return client.post("/api/v1/tweets", json={"content": content}).json()["id"]
 
 
+def _for_you_ids(client: TestClient) -> list[int]:
+    return [item["id"] for item in client.get("/api/v1/timeline/for-you").json()["items"]]
+
+
 def _delete(client: TestClient, password: str = "password123"):
     return client.request(
         "DELETE", "/api/v1/auth/account", json={"password": password}
@@ -183,3 +187,61 @@ def test_profile_reports_is_deleted() -> None:
     profile = bob.get(f"/api/v1/users/deleted_{alice_id}/profile")
     assert profile.status_code == 200
     assert profile.json()["is_deleted"] is True
+
+
+# ------------------------------------------------------------- feeds vs. profile
+
+
+def test_deleted_authors_posts_leave_the_for_you_feed() -> None:
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    alice_tweet = _post(alice, "from alice")
+
+    assert alice_tweet in _for_you_ids(bob), "precondition: bob sees alice"
+    _delete(alice)
+    assert alice_tweet not in _for_you_ids(bob), "deleted author's post left the feed"
+
+
+def test_deleted_authors_posts_still_show_on_their_own_profile() -> None:
+    """The tombstone keeps its posts: only the *feeds* filter them, not the profile."""
+    alice, alice_id = register("alice")
+    bob, _ = register("bob")
+    _post(alice, "still here")
+
+    _delete(alice)
+
+    items = bob.get(f"/api/v1/users/deleted_{alice_id}/tweets").json()["items"]
+    assert len(items) == 1
+    assert items[0]["author"]["is_deleted"] is True
+
+
+def test_write_timeline_excludes_a_deleted_author_from_precomputed_feed() -> None:
+    from conftest import TestingSessionLocal
+    from app.repositories import feed_repository, tweet_repository, user_repository
+
+    with TestingSessionLocal() as db:
+        viewer = user_repository.create_user(db, username="viewer", password_hash="x")
+        author = user_repository.create_user(db, username="author", password_hash="x")
+        tweet = tweet_repository.create_tweet(db, author_id=author.id, content="hi")
+        feed_repository.bulk_insert_feed_items(
+            db,
+            owner_ids=[viewer.id],
+            post_id=tweet.id,
+            actor_id=author.id,
+            created_at=tweet.created_at,
+        )
+
+        before = feed_repository.list_feed_tweets(
+            db, owner_id=viewer.id, limit=10, exclude_deleted_authors=True
+        )
+        assert any(row["tweet"].id == tweet.id for row in before)
+
+        user_repository.soft_delete_user(db, author.id, scrubbed_password_hash="x")
+        after = feed_repository.list_feed_tweets(
+            db, owner_id=viewer.id, limit=10, exclude_deleted_authors=True
+        )
+        assert all(
+            row["tweet"].id != tweet.id for row in after
+        ), "the deleted author's stale feed row is hidden"
+
+

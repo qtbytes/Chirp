@@ -6,7 +6,10 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.feed import FeedItem
 from app.models.like import Like
 from app.models.post import Post
-from app.repositories.tweet_repository import _quote_counts_subquery
+from app.repositories.tweet_repository import (
+    _quote_counts_subquery,
+    deleted_author_ids,
+)
 
 
 def bulk_insert_feed_items(
@@ -76,6 +79,7 @@ def list_feed_tweets(
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
     exclude_author_ids: set[int] | None = None,
+    exclude_deleted_authors: bool = False,
 ) -> list[dict]:
     """
     Read precomputed home timeline rows for fan-out on write.
@@ -121,6 +125,10 @@ def list_feed_tweets(
     # authors here at read time so those stale rows never surface.
     if exclude_author_ids:
         stmt = stmt.where(Post.user_id.not_in(exclude_author_ids))
+    # A stale feed row can also outlive its author's account; a deleted account's
+    # posts should leave the timeline even though the rows linger.
+    if exclude_deleted_authors:
+        stmt = stmt.where(Post.user_id.not_in(deleted_author_ids()))
 
     if cursor_created_at is not None and cursor_id is not None:
         stmt = stmt.where(

@@ -137,6 +137,7 @@ class TimelineService:
                 cursor_created_at=cursor_created_at,
                 cursor_id=cursor_id,
                 exclude_author_ids=hidden,
+                exclude_deleted_authors=True,
             )
         else:
             followee_ids = follow_repository.list_followee_ids(
@@ -153,6 +154,7 @@ class TimelineService:
                 cursor_created_at=cursor_created_at,
                 cursor_id=cursor_id,
                 exclude_author_ids=hidden,
+                exclude_deleted_authors=True,
             )
 
         page = self._build_page(rows=rows, limit=limit, strategy=strategy)
@@ -200,6 +202,7 @@ class TimelineService:
             limit=settings.ranking_candidate_pool_size,
             current_user_id=user_id,
             exclude_author_ids=hidden,
+            exclude_deleted_authors=True,
         )
 
         weights = weights_from_settings()

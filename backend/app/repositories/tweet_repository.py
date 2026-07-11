@@ -11,6 +11,16 @@ from app.repositories.block_repository import blocks_between
 from app.repositories.notification_repository import add_notification
 
 
+def deleted_author_ids():
+    """
+    A subquery of the ids of deleted (tombstoned) accounts, for use with
+    ``Post.user_id.not_in(...)``. Feeds filter these out so a deleted account's
+    posts stop surfacing in timelines and discovery -- but a profile still shows
+    them, because that path deliberately does not apply this filter.
+    """
+    return select(User.id).where(User.deleted_at.is_not(None))
+
+
 def _quote_counts_subquery(post_ids: list[int] | None = None):
     """
     Subquery counting how many quote posts reference each post.
@@ -225,6 +235,7 @@ def list_feed_with_retweets(
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
     exclude_author_ids: set[int] | None = None,
+    exclude_deleted_authors: bool = False,
 ) -> list[dict]:
     """
     Return the given authors' top-level posts newest-first.
@@ -236,6 +247,10 @@ def list_feed_with_retweets(
     ``exclude_author_ids`` drops posts from blocked (or blocking) authors. A
     block already removes the follow, so a followed-author feed rarely needs it;
     it is defence in depth against a stale edge.
+
+    ``exclude_deleted_authors`` drops posts by tombstoned accounts. It is off by
+    default so a profile still lists its owner's posts even once deleted; the
+    timeline turns it on.
     """
     if not author_ids:
         return []
@@ -248,6 +263,8 @@ def list_feed_with_retweets(
     )
     if exclude_author_ids:
         ident_stmt = ident_stmt.where(Post.user_id.not_in(exclude_author_ids))
+    if exclude_deleted_authors:
+        ident_stmt = ident_stmt.where(Post.user_id.not_in(deleted_author_ids()))
     if cursor_created_at is not None and cursor_id is not None:
         ident_stmt = ident_stmt.where(
             or_(
@@ -284,6 +301,7 @@ def fetch_for_you_candidates(
     limit: int,
     current_user_id: int | None = None,
     exclude_author_ids: set[int] | None = None,
+    exclude_deleted_authors: bool = False,
 ) -> list[dict]:
     """
     A bounded pool of recent top-level posts, with the engagement and
@@ -327,9 +345,12 @@ def fetch_for_you_candidates(
         .where(Post.reply_to_id.is_(None))
     )
     # Filter hidden authors out of the pool *before* the limit, so a blocked
-    # author cannot consume candidate slots the viewer should have seen.
+    # (or deleted) author cannot consume candidate slots the viewer should have
+    # seen.
     if exclude_author_ids:
         stmt = stmt.where(Post.user_id.not_in(exclude_author_ids))
+    if exclude_deleted_authors:
+        stmt = stmt.where(Post.user_id.not_in(deleted_author_ids()))
     stmt = stmt.order_by(Post.created_at.desc(), Post.id.desc()).limit(limit)
 
     rows = db.execute(stmt).all()
