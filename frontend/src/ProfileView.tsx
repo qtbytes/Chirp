@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Calendar, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  Loader2,
+  MoreHorizontal,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import {
   ApiError,
   blockUser,
@@ -9,8 +16,10 @@ import {
   getUserProfile,
   getUserReplies,
   getUserTweets,
+  muteUser,
   unblockUser,
   unfollowUser,
+  unmuteUser,
 } from "./api";
 import type {
   ReplyWithParent,
@@ -47,6 +56,7 @@ export function ProfileView({
   const [profileError, setProfileError] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
   const [blockBusy, setBlockBusy] = useState(false);
+  const [muteBusy, setMuteBusy] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [editing, setEditing] = useState(false);
 
@@ -199,6 +209,28 @@ export function ProfileView({
     }
   }
 
+  async function toggleMute() {
+    if (!profile || muteBusy) {
+      return;
+    }
+    setMuteBusy(true);
+    setProfileError("");
+    try {
+      if (profile.is_muted) {
+        await unmuteUser(profile.id);
+      } else {
+        await muteUser(profile.id);
+      }
+      // A mute only changes what's hidden elsewhere (timeline, notifications);
+      // this profile's own tweets stay visible, so just flip the flag.
+      setProfile({ ...profile, is_muted: !profile.is_muted });
+    } catch (err) {
+      setProfileError(getErrorMessage(err));
+    } finally {
+      setMuteBusy(false);
+    }
+  }
+
   if (notFound) {
     return (
       <section className="profile-view">
@@ -266,6 +298,11 @@ export function ProfileView({
             </div>
           ) : (
             <div className="profile-actions">
+              <ProfileOverflowMenu
+                isMuted={profile.is_muted}
+                busy={muteBusy}
+                onToggleMute={() => void toggleMute()}
+              />
               <button
                 className="outline-button"
                 onClick={() => setConfirmingBlock(true)}
@@ -440,5 +477,69 @@ export function ProfileView({
       ) : null}
 
     </section>
+  );
+}
+
+// The "..." menu beside Follow, holding the mute toggle -- mute is a quieter,
+// one-directional action than block, so like Twitter it lives here rather than
+// as its own button.
+function ProfileOverflowMenu({
+  isMuted,
+  busy,
+  onToggleMute,
+}: {
+  isMuted: boolean;
+  busy: boolean;
+  onToggleMute: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function onDocMouseDown(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [open]);
+
+  return (
+    <div className="profile-menu" ref={ref}>
+      <button
+        type="button"
+        className="outline-icon-button"
+        onClick={() => setOpen((value) => !value)}
+        aria-label="More options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={busy}
+      >
+        <MoreHorizontal size={18} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="post-menu-dropdown" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onToggleMute();
+            }}
+          >
+            {isMuted ? (
+              <Volume2 size={16} aria-hidden="true" />
+            ) : (
+              <VolumeX size={16} aria-hidden="true" />
+            )}
+            <span>{isMuted ? "Unmute" : "Mute"}</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }

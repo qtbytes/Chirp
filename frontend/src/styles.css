@@ -1724,6 +1724,34 @@ button.rail-link:disabled:hover {
   color: var(--danger);
 }
 
+/* The "..." overflow menu in the profile action row: a bordered circular button
+   matching the neighbouring outline buttons, anchoring a dropdown below it. */
+.profile-menu {
+  position: relative;
+  z-index: 5;
+}
+
+.outline-icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.outline-icon-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.outline-icon-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Profile "Replies" tab: each entry stacks the real parent post (a clickable
    tweet card) directly above the user's reply (a comment card). Their own
    bottom borders provide the divider between and after the pair. The reply is

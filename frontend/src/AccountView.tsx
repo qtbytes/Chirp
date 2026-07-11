@@ -5,12 +5,20 @@ import {
   displayName,
   getUserProfile,
   listBlocked,
+  listMuted,
   listSessions,
   logoutOtherSessions,
   revokeSession,
   unblockUser,
+  unmuteUser,
 } from "./api";
-import type { BlockedUser, Session, UserProfile, UserSummary } from "./types";
+import type {
+  BlockedUser,
+  MutedUser,
+  Session,
+  UserProfile,
+  UserSummary,
+} from "./types";
 import { Avatar, formatCompactDate, getErrorMessage } from "./components";
 import { ChangeEmailModal } from "./ChangeEmailModal";
 import { ChangePasswordModal } from "./ChangePasswordModal";
@@ -97,6 +105,7 @@ export function AccountView({ currentUser }: { currentUser: UserSummary }) {
       <SessionsSection />
 
       <BlockedSection />
+      <MutedSection />
 
       {changingEmail && profile ? (
         <ChangeEmailModal
@@ -339,6 +348,96 @@ function BlockedSection() {
                 disabled={busyId === user.id}
               >
                 {busyId === user.id ? "…" : "Unblock"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {cursor ? (
+        <button className="load-more" onClick={() => void load(cursor, true)}>
+          Load more
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+function MutedSection() {
+  const [items, setItems] = useState<MutedUser[] | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const load = useCallback(async (nextCursor?: string | null, append = false) => {
+    setError("");
+    try {
+      const page = await listMuted(nextCursor);
+      setItems((current) =>
+        append && current ? [...current, ...page.items] : page.items,
+      );
+      setCursor(page.next_cursor);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function unmute(user: MutedUser) {
+    setBusyId(user.id);
+    setError("");
+    try {
+      await unmuteUser(user.id);
+      setItems((current) => current?.filter((u) => u.id !== user.id) ?? null);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="settings-section" aria-labelledby="muted-heading">
+      <div className="settings-section-head">
+        <h2 id="muted-heading">Muted accounts</h2>
+      </div>
+      <p className="form-hint settings-section-intro">
+        You won&apos;t see muted accounts in your timeline or notifications. They
+        can still follow you and see your Tweets, and they aren&apos;t told.
+      </p>
+
+      {error ? <p className="form-error">{error}</p> : null}
+
+      {items === null ? (
+        <div className="loading-row">
+          <Loader2 className="spin" size={18} aria-hidden="true" />
+          <span>Loading</span>
+        </div>
+      ) : items.length === 0 ? (
+        <p className="form-hint">You haven&apos;t muted anyone.</p>
+      ) : (
+        <div className="user-list">
+          {items.map((user) => (
+            <div className="user-row" key={user.id}>
+              <Link
+                to={`/${encodeURIComponent(user.username)}`}
+                className="author-link user-row-link"
+              >
+                <Avatar user={user} size="small" />
+                <div className="user-copy">
+                  <strong>{displayName(user)}</strong>
+                  <span>@{user.username}</span>
+                </div>
+              </Link>
+              <button
+                className="outline-button"
+                onClick={() => void unmute(user)}
+                disabled={busyId === user.id}
+              >
+                {busyId === user.id ? "…" : "Unmute"}
               </button>
             </div>
           ))}

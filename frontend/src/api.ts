@@ -6,6 +6,7 @@ import type {
   FollowListPage,
   LikeToggleResult,
   LinkPreview,
+  MuteListPage,
   Notification,
   NotificationPage,
   ProfileRepliesPage,
@@ -368,6 +369,24 @@ export function listBlocked(cursor?: string | null): Promise<BlockListPage> {
     params.set("cursor", cursor);
   }
   return request<BlockListPage>(`/blocks?${params.toString()}`);
+}
+
+/** Mute a user. Hides their content from you only; follows and replies stay. */
+export function muteUser(userId: number): Promise<{ is_muted: boolean }> {
+  return request<{ is_muted: boolean }>(`/mutes/${userId}`, { method: "POST" });
+}
+
+export function unmuteUser(userId: number): Promise<{ is_muted: boolean }> {
+  return request<{ is_muted: boolean }>(`/mutes/${userId}`, { method: "DELETE" });
+}
+
+/** The accounts you have muted, most recent first. */
+export function listMuted(cursor?: string | null): Promise<MuteListPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<MuteListPage>(`/mutes?${params.toString()}`);
 }
 
 export function unfollowUser(userId: number): Promise<void> {

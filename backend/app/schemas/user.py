@@ -158,6 +158,9 @@ class UserProfileOut(BaseModel):
     is_current_user: bool
     # Whether the viewer has blocked this profile's owner.
     is_blocked: bool = False
+    # Whether the viewer has muted this profile's owner. Like is_blocked, this is
+    # the viewer's own state; the muted user is never told.
+    is_muted: bool = False
 
     # Populated only when is_current_user. Every profile is world-readable, so
     # these stay None for anyone else -- and email is deliberately absent from

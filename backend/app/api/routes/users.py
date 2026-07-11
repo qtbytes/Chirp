@@ -9,6 +9,7 @@ from app.repositories import (
     block_repository,
     engagement_repository,
     follow_repository,
+    mute_repository,
     tweet_repository,
     user_repository,
 )
@@ -83,6 +84,7 @@ def _build_profile(db: Session, user: User, current_user_id: int) -> UserProfile
         # having blocked you is deliberately not surfaced as a flag -- its effect
         # (their content simply isn't there) is the only signal.
         is_blocked=block_repository.is_blocking(db, current_user_id, user.id),
+        is_muted=mute_repository.is_muting(db, current_user_id, user.id),
         # Profiles are world-readable; an address is the owner's business alone.
         email=user.email if is_current_user else None,
         pending_email=user.pending_email if is_current_user else None,

@@ -6,6 +6,7 @@ from sqlalchemy.orm import InstrumentedAttribute, Session
 from app.models.block import Block
 from app.models.follow import Follow
 from app.models.user import User
+from app.repositories import mute_repository
 
 
 def block_user(db: Session, blocker_id: int, blocked_id: int) -> Block:
@@ -97,12 +98,21 @@ def blocks_between(db: Session, a_id: int, b_id: int) -> bool:
 def hidden_user_ids(db: Session, viewer_id: int) -> set[int]:
     """
     Every user hidden from ``viewer_id``: those they blocked, unioned with those
-    who blocked them. This is the single set the read paths filter authors by.
+    who blocked them, unioned with those they muted. This is the single set the
+    read paths filter authors by.
+
+    Blocks contribute in both directions (a block hides each party from the
+    other); mutes contribute in one (a mute only hides the muted user from the
+    muter, never the reverse). Because mutes ride this same set, every read path
+    that already excludes blocked authors -- timeline, for-you, thread comments,
+    notifications, discovery -- excludes muted authors for free.
     """
     stmt = select(Block.blocked_id).where(Block.blocker_id == viewer_id).union(
         select(Block.blocker_id).where(Block.blocked_id == viewer_id)
     )
-    return {row[0] for row in db.execute(stmt).all()}
+    hidden = {row[0] for row in db.execute(stmt).all()}
+    hidden |= mute_repository.muted_user_ids(db, viewer_id)
+    return hidden
 
 
 def list_blocked(

@@ -112,6 +112,8 @@ export type UserProfile = {
   is_current_user: boolean;
   /** Whether you have blocked this account. */
   is_blocked: boolean;
+  /** Whether you have muted this account. One-directional; they aren't told. */
+  is_muted: boolean;
   /** Confirmed address. Null on anyone else's profile, and until confirmed. */
   email: string | null;
   /** Claimed but unconfirmed. Null on anyone else's profile. */
@@ -124,6 +126,15 @@ export type BlockedUser = UserSummary & {
 
 export type BlockListPage = {
   items: BlockedUser[];
+  next_cursor: string | null;
+};
+
+export type MutedUser = UserSummary & {
+  muted_at: string;
+};
+
+export type MuteListPage = {
+  items: MutedUser[];
   next_cursor: string | null;
 };
 
