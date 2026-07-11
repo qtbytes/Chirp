@@ -18,5 +18,10 @@ class NotificationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class NotificationPage(BaseModel):
+    items: list[NotificationOut]
+    next_cursor: str | None = None
+
+
 class UnreadCountOut(BaseModel):
     count: int

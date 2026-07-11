@@ -44,7 +44,9 @@ import {
   listUsers,
   login,
   logout,
+  markNotificationRead,
   markNotificationsRead,
+  notificationStreamUrl,
   register,
   toggleTweetLike,
   unfollowUser,
@@ -365,8 +367,25 @@ function AppLayout({
 
   useEffect(() => {
     void refreshUnread();
-    const timer = window.setInterval(() => void refreshUnread(), 20000);
+    // A slow poll as the safety net: the SSE stream below makes the badge live,
+    // but a dropped connection or a Redis-less backend still recovers here.
+    const timer = window.setInterval(() => void refreshUnread(), 30000);
     return () => window.clearInterval(timer);
+  }, [refreshUnread]);
+
+  // Live updates: an SSE nudge means "something changed", so re-read the
+  // authoritative count rather than trust the event to carry it. The browser
+  // reconnects an EventSource on its own; if the stream is unavailable (no
+  // Redis -> 503) it simply stays closed and the poll above covers the gap.
+  useEffect(() => {
+    let source: EventSource | null = null;
+    try {
+      source = new EventSource(notificationStreamUrl(), { withCredentials: true });
+      source.addEventListener("notification", () => void refreshUnread());
+    } catch {
+      source = null;
+    }
+    return () => source?.close();
   }, [refreshUnread]);
 
   async function handleLogout() {
@@ -486,90 +505,135 @@ function NotificationIcon({ type }: { type: Notification["type"] }) {
 function NotificationsView() {
   const { refreshUnread } = useOutletContext<LayoutContext>();
   const [items, setItems] = useState<Notification[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
+  const load = useCallback(
+    async (nextCursor?: string | null, append = false) => {
       setLoading(true);
       setError("");
       try {
-        const data = await listNotifications();
-        if (cancelled) {
-          return;
-        }
-        setItems(data);
-        // Opening the page marks everything read and clears the rail badge.
-        await markNotificationsRead().catch(() => undefined);
-        refreshUnread();
+        const page = await listNotifications(nextCursor);
+        setItems((current) => (append ? [...current, ...page.items] : page.items));
+        setCursor(page.next_cursor);
       } catch (err) {
-        if (!cancelled) {
-          setError(getErrorMessage(err));
-        }
+        setError(getErrorMessage(err));
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
-    }
+    },
+    [],
+  );
+
+  useEffect(() => {
     void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshUnread]);
+  }, [load]);
+
+  const hasUnread = items.some((notification) => !notification.is_read);
+
+  async function markOneRead(notification: Notification) {
+    if (notification.is_read) {
+      return;
+    }
+    // Optimistic: reflect it immediately, and re-read the badge count.
+    setItems((current) =>
+      current.map((item) =>
+        item.id === notification.id ? { ...item, is_read: true } : item,
+      ),
+    );
+    try {
+      await markNotificationRead(notification.id);
+      refreshUnread();
+    } catch {
+      // Roll back on failure so the row doesn't lie about being read.
+      setItems((current) =>
+        current.map((item) =>
+          item.id === notification.id ? { ...item, is_read: false } : item,
+        ),
+      );
+    }
+  }
+
+  async function markAllRead() {
+    setItems((current) => current.map((item) => ({ ...item, is_read: true })));
+    try {
+      await markNotificationsRead();
+      refreshUnread();
+    } catch (err) {
+      setError(getErrorMessage(err));
+      void load();
+    }
+  }
 
   return (
     <>
       <header className="feed-header">
         <div className="feed-title-row">
           <h1>Notifications</h1>
+          {hasUnread ? (
+            <button className="text-button" onClick={() => void markAllRead()}>
+              Mark all read
+            </button>
+          ) : null}
         </div>
       </header>
+      {error ? <div className="status-panel error">{error}</div> : null}
+      {!loading && items.length === 0 && !error ? (
+        <div className="status-panel">No notifications yet.</div>
+      ) : null}
+      <ul className="notif-list">
+        {items.map((notification) => {
+          const to =
+            notification.type === "follow"
+              ? `/${encodeURIComponent(notification.actor.username)}`
+              : notification.tweet_id !== null
+                ? `/tweet/${notification.tweet_id}`
+                : "#";
+          return (
+            <li
+              key={notification.id}
+              className={notification.is_read ? "notif-item" : "notif-item unread"}
+            >
+              <Link
+                to={to}
+                className="notif-link"
+                onClick={() => void markOneRead(notification)}
+              >
+                <NotificationIcon type={notification.type} />
+                <Avatar user={notification.actor} size="small" />
+                <div className="notif-body">
+                  <p>
+                    <strong>@{notification.actor.username}</strong>{" "}
+                    {NOTIFICATION_TEXT[notification.type]}
+                  </p>
+                  {notification.preview ? (
+                    <p className="notif-preview">{notification.preview}</p>
+                  ) : null}
+                  <span className="notif-time">
+                    {formatCompactDate(notification.created_at)}
+                  </span>
+                </div>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      {cursor ? (
+        <button
+          className="load-more"
+          onClick={() => void load(cursor, true)}
+          disabled={loading}
+        >
+          Load more
+        </button>
+      ) : null}
       {loading ? (
         <div className="loading-row">
           <Loader2 className="spin" size={18} aria-hidden="true" />
           <span>Loading notifications</span>
         </div>
-      ) : error ? (
-        <div className="status-panel error">{error}</div>
-      ) : items.length === 0 ? (
-        <div className="status-panel">No notifications yet.</div>
-      ) : (
-        <ul className="notif-list">
-          {items.map((notification) => {
-            const to =
-              notification.type === "follow"
-                ? `/${encodeURIComponent(notification.actor.username)}`
-                : notification.tweet_id !== null
-                  ? `/tweet/${notification.tweet_id}`
-                  : "#";
-            return (
-              <li
-                key={notification.id}
-                className={notification.is_read ? "notif-item" : "notif-item unread"}
-              >
-                <Link to={to} className="notif-link">
-                  <NotificationIcon type={notification.type} />
-                  <Avatar user={notification.actor} size="small" />
-                  <div className="notif-body">
-                    <p>
-                      <strong>@{notification.actor.username}</strong>{" "}
-                      {NOTIFICATION_TEXT[notification.type]}
-                    </p>
-                    {notification.preview ? (
-                      <p className="notif-preview">{notification.preview}</p>
-                    ) : null}
-                    <span className="notif-time">
-                      {formatCompactDate(notification.created_at)}
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      ) : null}
     </>
   );
 }

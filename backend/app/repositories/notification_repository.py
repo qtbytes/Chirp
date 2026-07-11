@@ -1,9 +1,12 @@
-from sqlalchemy import func, select, update
+from datetime import datetime
+
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.models.notification import Notification
 from app.models.post import Post
 from app.models.user import User
+from app.services import events
 
 
 def add_notification(
@@ -32,6 +35,9 @@ def add_notification(
             post_id=post_id,
         )
     )
+    # Nudge the recipient's live stream -- but only once this transaction
+    # commits, so a rolled-back action never wakes anyone.
+    events.queue_user_event(db, recipient_id)
 
 
 def count_unread(db: Session, user_id: int) -> int:
@@ -55,27 +61,64 @@ def mark_all_read(db: Session, user_id: int) -> int:
     return result.rowcount or 0
 
 
+def mark_read(db: Session, user_id: int, notification_id: int) -> bool:
+    """
+    Mark one notification read. Returns False if it does not exist or is not the
+    caller's -- the ``user_id`` guard is what stops reading someone else's row.
+    Idempotent: re-reading an already-read notification still returns True.
+    """
+    result = db.execute(
+        update(Notification)
+        .where(
+            Notification.id == notification_id,
+            Notification.user_id == user_id,
+        )
+        .values(is_read=True)
+    )
+    db.commit()
+    return (result.rowcount or 0) > 0
+
+
 def list_notifications(
     db: Session,
     user_id: int,
     limit: int = 30,
+    cursor_created_at: datetime | None = None,
+    cursor_id: int | None = None,
 ) -> list[dict]:
     """
     Return the recipient's most recent notifications, each joined with its actor
     and a short content preview of the related post (one batched query for the
     posts to avoid N+1).
 
+    Fetches ``limit + 1`` and paginates by ``(created_at, id)`` like the feeds, so
+    the caller can detect a next page and older notifications can't be skipped or
+    repeated as new ones arrive.
+
     ``tweet_id`` / ``comment_id`` are reconstructed from the related post so the
     client keeps its existing linking behaviour: a reply reports both its own id
     (comment_id) and its thread root (tweet_id); a top-level post reports only
     tweet_id.
     """
-    rows = db.execute(
+    stmt = (
         select(Notification, User)
         .join(User, User.id == Notification.actor_id)
         .where(Notification.user_id == user_id)
-        .order_by(Notification.created_at.desc(), Notification.id.desc())
-        .limit(limit)
+    )
+    if cursor_created_at is not None and cursor_id is not None:
+        stmt = stmt.where(
+            or_(
+                Notification.created_at < cursor_created_at,
+                and_(
+                    Notification.created_at == cursor_created_at,
+                    Notification.id < cursor_id,
+                ),
+            )
+        )
+    rows = db.execute(
+        stmt.order_by(
+            Notification.created_at.desc(), Notification.id.desc()
+        ).limit(limit + 1)
     ).all()
 
     post_ids = {n.post_id for n, _ in rows if n.post_id is not None}

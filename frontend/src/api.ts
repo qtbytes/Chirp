@@ -6,6 +6,7 @@ import type {
   LikeToggleResult,
   LinkPreview,
   Notification,
+  NotificationPage,
   ProfileRepliesPage,
   ProfileTweetsPage,
   Session,
@@ -411,16 +412,31 @@ export function updateProfile(
   });
 }
 
-export function listNotifications(): Promise<Notification[]> {
-  return request<Notification[]>("/notifications");
+export function listNotifications(cursor?: string | null): Promise<NotificationPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<NotificationPage>(`/notifications?${params.toString()}`);
 }
 
 export function getUnreadNotificationCount(): Promise<{ count: number }> {
   return request<{ count: number }>("/notifications/unread-count");
 }
 
+/** Mark a single notification read. */
+export function markNotificationRead(id: number): Promise<void> {
+  return request<void>(`/notifications/${id}/read`, { method: "POST" });
+}
+
+/** Mark every notification read. */
 export function markNotificationsRead(): Promise<{ updated: number }> {
   return request<{ updated: number }>("/notifications/mark-read", { method: "POST" });
+}
+
+/** Absolute URL of the SSE notification stream, for an EventSource. */
+export function notificationStreamUrl(): string {
+  return `${API_BASE_URL}/notifications/stream`;
 }
 
 export function uploadAvatar(file: File): Promise<UserProfile> {

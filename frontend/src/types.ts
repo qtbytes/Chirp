@@ -150,6 +150,11 @@ export type Notification = {
   created_at: string;
 };
 
+export type NotificationPage = {
+  items: Notification[];
+  next_cursor: string | null;
+};
+
 export type ReplyWithParent = {
   comment: Comment;
   parent_tweet: Tweet;

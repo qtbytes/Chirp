@@ -13,7 +13,8 @@ work — with a real UI on top rather than a toy script.
 Posting with images and video, threaded comments and replies, likes, quote
 tweets, follows with followers/following lists, profiles with editable bio and
 avatar, email confirmation, password change and reset, active session
-management, notifications, emoji picker, and Open Graph link preview cards.
+management, live notifications over SSE, emoji picker, and Open Graph link
+preview cards.
 
 ## Design notes
 
@@ -64,6 +65,27 @@ the ranking policy is unit-tested without a database or a clock.
 caches degrade gracefully when Redis is unreachable — fan-out falls back to
 inline execution, caches simply miss. Sessions and rate limiting do not: both
 fail closed with a 503 rather than silently dropping their guarantees.
+
+**Live notifications push over SSE, but the event is only a nudge.** The unread
+badge used to poll `unread-count` on a timer. Now `GET /notifications/stream` is
+a Server-Sent Events stream backed by Redis pub/sub: when something notifies a
+user, a message is published to their channel and forwarded to their open tabs.
+The event carries no count — the client re-reads the authoritative number on
+receiving it — so the badge can never drift from the database, and a browser that
+can't hold the stream (or a backend with no Redis, which answers the stream 503)
+still recovers on a slow fallback poll. The publish is deferred to a SQLAlchemy
+`after_commit` hook keyed off the recipient id staged during `add_notification`,
+so a subscriber is woken only for a notification that actually committed — never
+one a rollback discarded, and never racing the client's re-read against a
+not-yet-committed row. The stream is an async generator polling pub/sub
+non-blockingly, so each connection costs an asyncio task rather than a threadpool
+worker; a production build would move to `redis.asyncio`.
+
+Notifications also paginate by the same `(created_at, id)` cursor as the feeds,
+and `is_read` is settable per row (`POST /notifications/{id}/read`, guarded by
+recipient id) as well as in bulk — so opening the page no longer force-marks
+everything read; a notification is marked read when it's opened, or all at once
+from the header.
 
 **Sessions are server-side.** The cookie holds an opaque, HMAC-signed session id;
 Redis maps it to a user id under a sliding idle TTL. The signature is verified

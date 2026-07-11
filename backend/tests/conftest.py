@@ -59,9 +59,14 @@ def isolated_sessions(monkeypatch) -> None:
     Tests that want the real backend undo this (see test_sessions.py).
     """
     from app.core import session_store, tokens
+    from app.services import events
 
     monkeypatch.setattr(session_store, "get_redis_client", lambda: None)
     session_store._memory_sessions.clear()
 
     monkeypatch.setattr(tokens, "get_redis_client", lambda: None)
     tokens._memory_tokens.clear()
+
+    # Keep notification nudges off the developer's real Redis; tests that want to
+    # assert publishing patch this back with a fake recorder.
+    monkeypatch.setattr(events, "get_redis_client", lambda: None)
