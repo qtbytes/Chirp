@@ -47,6 +47,32 @@ class Settings(BaseSettings):
     default_timeline_strategy: str = "read"
     timeline_page_size: int = 20
 
+    # "For you" ranking. The home timeline is chronological; "for you" scores a
+    # bounded pool of recent posts at read time -- engagement decayed by age and
+    # lifted by the viewer's affinity for the author. Because the score depends on
+    # who is viewing (affinity) and when (decay), a ranked feed cannot be
+    # precomputed per follower the way fan-out on write precomputes a
+    # chronological one. See app/services/ranking.py.
+    #
+    # The pool bounds the read-time work: the ranker scores the N most recent
+    # top-level posts, not the whole table (which the old query scanned).
+    ranking_candidate_pool_size: int = 300
+    # A floor so a fresh post with no engagement still has a (decaying) score,
+    # keeping recency in the mix rather than ranking only by raw engagement.
+    ranking_base_score: float = 1.0
+    ranking_like_weight: float = 3.0
+    ranking_retweet_weight: float = 4.0
+    ranking_comment_weight: float = 5.0
+    # Engagement halves every this-many hours of age. Shorter = more like a
+    # chronological feed; longer = engagement outweighs recency for longer.
+    ranking_half_life_hours: float = 18.0
+    # Multiplier bonuses. follow_boost lifts authors the viewer follows;
+    # like_affinity lifts authors whose posts the viewer has liked (up to a cap,
+    # so one heavy-liked author cannot dominate).
+    ranking_follow_boost: float = 1.5
+    ranking_like_affinity_weight: float = 0.15
+    ranking_like_affinity_cap: int = 10
+
     rq_queue_name: str = "feed-fanout"
     rq_job_timeout_seconds: int = 600
     run_fanout_inline_when_queue_unavailable: bool = True

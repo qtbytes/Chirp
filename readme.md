@@ -40,6 +40,26 @@ cause skipped or duplicated rows. Repositories fetch `limit + 1` rows to detect
 the next page without a second query, and engagement counts are aggregated in
 subqueries to avoid N+1.
 
+**"For you" is ranked, and that is why it can't be precomputed.** `GET
+/timeline/for-you` does not order by time. Each candidate is scored `(base +
+weighted engagement) × time-decay × affinity`, where decay halves engagement
+every `ranking_half_life_hours` and affinity lifts authors the viewer follows or
+has liked. So a day-old post with real engagement can sit above a fresh empty
+one — something the `created_at|id` sort structurally cannot do, since there the
+timestamp always wins and engagement only settles exact ties. The score depends
+on *who* is viewing and on *when*, so — unlike fan-out on write, which pushes one
+identical chronological row to every follower — it is computed at read time over
+a bounded candidate pool (the `ranking_candidate_pool_size` newest posts, which
+also caps the work the old unbounded scan did not). That is the crux of the
+read-vs-write comparison: a chronological feed precomputes; a ranked one cannot.
+
+Ranked pagination needs a different cursor. It carries `reference_time|score|id`,
+and the reference time — "now" as of the first page — is frozen into it so every
+page of one scroll decays against the same clock; otherwise page two would score
+posts a few seconds staler and the boundary could drift. The scorer itself
+(`app/services/ranking.py`) is a pure function of counts, age, and affinity, so
+the ranking policy is unit-tested without a database or a clock.
+
 **Redis holds sessions; caching is best-effort.** The timeline and link-preview
 caches degrade gracefully when Redis is unreachable — fan-out falls back to
 inline execution, caches simply miss. Sessions and rate limiting do not: both

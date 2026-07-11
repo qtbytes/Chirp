@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from rq.queue import Queue
@@ -10,6 +10,7 @@ from app.db.redis_client import get_redis_client
 from app.repositories import feed_repository, follow_repository, tweet_repository
 from app.schemas.tweet import TimelinePage, TweetOut
 from app.schemas.user import UserSummary
+from app.services.ranking import score_tweet, weights_from_settings
 from app.services.serializers import serialize_quoted_post
 
 
@@ -40,6 +41,38 @@ def decode_cursor(cursor: str | None) -> tuple[datetime | None, int | None]:
         return datetime.fromisoformat(created_at_raw), int(row_id_raw)
     except (TypeError, ValueError):
         return None, None
+
+
+def encode_rank_cursor(reference_time: datetime, score: float, post_id: int) -> str:
+    """
+    Cursor for the ranked "for you" feed: ``reference_time|score|post_id``.
+
+    The reference time -- "now" as of the first page -- is carried forward so
+    every page of one scroll decays against the *same* clock. Without it, page 2
+    would score posts a few seconds staler than page 1 and the boundary between
+    them could drift, skipping or repeating a post. ``score`` uses ``repr`` so it
+    round-trips to the exact float the next page recomputes and compares against.
+    """
+    return f"{reference_time.isoformat()}|{score!r}|{post_id}"
+
+
+def decode_rank_cursor(
+    cursor: str | None,
+) -> tuple[datetime | None, float | None, int | None]:
+    """Decode a rank cursor. Returns all-None for absent or malformed input."""
+    if not cursor:
+        return None, None, None
+
+    try:
+        reference_raw, score_raw, post_id_raw = cursor.split("|", maxsplit=2)
+        return datetime.fromisoformat(reference_raw), float(score_raw), int(post_id_raw)
+    except (TypeError, ValueError):
+        return None, None, None
+
+
+def _as_utc(value: datetime) -> datetime:
+    """SQLite hands back naive datetimes; treat them as the UTC they were stored as."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
 class TimelineService:
@@ -131,18 +164,57 @@ class TimelineService:
         cursor: str | None,
         user_id: int | None = None,
     ) -> TimelinePage:
-        cursor_created_at, cursor_id = decode_cursor(cursor)
-        if cursor and (cursor_created_at is None or cursor_id is None):
-            raise ValueError("invalid cursor")
+        """
+        Rank a bounded pool of recent posts for this viewer, newest scroll first.
 
-        rows = tweet_repository.list_for_you_tweets(
+        Unlike the home timeline this is not cached and not precomputable: the
+        score depends on the viewer (affinity) and the moment (decay), so it is
+        computed here, at read time. Pagination pins the decay clock into the
+        cursor so one scroll stays stable even as the score of each post keeps
+        decaying in real time.
+        """
+        reference_time, cursor_score, cursor_id = decode_rank_cursor(cursor)
+        if cursor and (
+            reference_time is None or cursor_score is None or cursor_id is None
+        ):
+            raise ValueError("invalid cursor")
+        if reference_time is None:
+            reference_time = datetime.now(timezone.utc)
+
+        candidates = tweet_repository.fetch_for_you_candidates(
             self.db,
-            limit=limit,
+            limit=settings.ranking_candidate_pool_size,
             current_user_id=user_id,
-            cursor_created_at=cursor_created_at,
-            cursor_id=cursor_id,
         )
-        return self._build_page(rows=rows, limit=limit, strategy="for_you")
+
+        weights = weights_from_settings()
+        scored = []
+        for candidate in candidates:
+            post = candidate["tweet"]
+            age_seconds = (reference_time - _as_utc(post.created_at)).total_seconds()
+            score = score_tweet(
+                like_count=candidate["like_count"],
+                retweet_count=candidate["retweet_count"],
+                comment_count=candidate["comment_count"],
+                age_seconds=age_seconds,
+                follows_author=candidate["follows_author"],
+                viewer_likes_on_author=candidate["viewer_like_affinity"],
+                weights=weights,
+            )
+            scored.append({**candidate, "score": score})
+
+        # Highest score first; post id breaks ties so the order is total and
+        # stable, which is what makes the (score, id) cursor unambiguous.
+        scored.sort(key=lambda row: (row["score"], row["tweet"].id), reverse=True)
+
+        if cursor_score is not None:
+            scored = [
+                row
+                for row in scored
+                if (row["score"], row["tweet"].id) < (cursor_score, cursor_id)
+            ]
+
+        return self._build_ranked_page(scored, limit, reference_time)
 
     def serialize_tweet(self, row: dict) -> TweetOut:
         """
@@ -201,6 +273,38 @@ class TimelineService:
             items=items,
             next_cursor=next_cursor,
             strategy=strategy,
+        )
+
+    def _build_ranked_page(
+        self,
+        rows: list[dict],
+        limit: int,
+        reference_time: datetime,
+    ) -> TimelinePage:
+        """
+        Build a "for you" page whose next cursor carries the score to page from.
+
+        Rows arrive already scored and sorted. The cursor is (frozen reference
+        time, last score, last id) rather than (created_at, id): the feed is
+        ordered by score, so that is what the next page must continue from.
+        """
+        has_next = len(rows) > limit
+        page_rows = rows[:limit]
+        items = [self.serialize_tweet(row) for row in page_rows]
+
+        next_cursor = None
+        if has_next and page_rows:
+            last_row = page_rows[-1]
+            next_cursor = encode_rank_cursor(
+                reference_time,
+                last_row["score"],
+                last_row["tweet"].id,
+            )
+
+        return TimelinePage(
+            items=items,
+            next_cursor=next_cursor,
+            strategy="for_you",
         )
 
     def _cache_key(self, user_id: int, limit: int, strategy: str) -> str:

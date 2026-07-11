@@ -80,7 +80,12 @@ def test_user_discovery_includes_follow_state() -> None:
     assert users["bob"]["is_following"] is True
 
 
-def test_for_you_lists_latest_first_then_score() -> None:
+def test_for_you_ranks_engagement_over_recency_at_similar_age() -> None:
+    """
+    The headline property of the ranker: for two posts of near-identical age, the
+    engaged one wins -- even though it was posted *first*. A chronological feed
+    would list the newer empty post on top; a ranked one does not.
+    """
     alice = TestClient(app)
     bob = TestClient(app)
     carol = TestClient(app)
@@ -109,7 +114,8 @@ def test_for_you_lists_latest_first_then_score() -> None:
     response = alice.get("/api/v1/timeline/for-you")
     assert response.status_code == 200
     items = response.json()["items"]
-    assert [item["id"] for item in items[:2]] == [latest_tweet["id"], first_tweet["id"]]
+    # Engaged-but-older beats fresh-but-empty -- the opposite of chronological.
+    assert [item["id"] for item in items[:2]] == [first_tweet["id"], latest_tweet["id"]]
     assert response.json()["strategy"] == "for_you"
 
 

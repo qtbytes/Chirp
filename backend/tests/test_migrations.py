@@ -72,8 +72,9 @@ def test_migrations_index_the_columns_the_feed_queries_sort_by(
     migrated_url: str,
 ) -> None:
     """
-    ``list_for_you_tweets`` orders every top-level post by ``created_at``, and
-    profile timelines filter by ``user_id``. Both went unindexed in production.
+    The "for you" candidate fetch selects the newest top-level posts by
+    ``created_at``, and profile timelines filter by ``user_id``. Both went
+    unindexed in production.
     """
     engine = sa.create_engine(migrated_url)
     try:

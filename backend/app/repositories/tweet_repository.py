@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.models.follow import Follow
 from app.models.like import Like
 from app.models.post import Post
 from app.models.user import User
@@ -267,14 +268,26 @@ def list_feed_with_retweets(
     return feed
 
 
-def list_for_you_tweets(
+def fetch_for_you_candidates(
     db: Session,
     limit: int,
     current_user_id: int | None = None,
-    cursor_created_at: datetime | None = None,
-    cursor_id: int | None = None,
 ) -> list[dict]:
-    """Global feed of top-level tweets ordered by latest first, then engagement."""
+    """
+    A bounded pool of recent top-level posts, with the engagement and
+    viewer-affinity signals the "for you" ranker needs.
+
+    Recency selects the *pool* -- the ``limit`` newest top-level posts -- which
+    bounds the read-time work (the old query scanned every post ever written).
+    The ranking itself happens in the service, over these candidates. Each row
+    carries, for the viewer:
+
+    - ``like_count`` / ``comment_count`` / ``retweet_count`` -- the post's
+      engagement,
+    - ``follows_author`` -- whether the viewer follows the author,
+    - ``viewer_like_affinity`` -- how many of that author's posts the viewer has
+      liked (an affinity signal, capped later by the scorer).
+    """
     like_counts = (
         select(Like.post_id, func.count().label("like_count"))
         .group_by(Like.post_id)
@@ -300,60 +313,64 @@ def list_for_you_tweets(
         .outerjoin(comment_counts, comment_counts.c.post_id == Post.id)
         .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
         .where(Post.reply_to_id.is_(None))
+        .order_by(Post.created_at.desc(), Post.id.desc())
+        .limit(limit)
     )
 
-    if cursor_created_at is not None and cursor_id is not None:
-        stmt = stmt.where(
-            or_(
-                Post.created_at < cursor_created_at,
-                and_(
-                    Post.created_at == cursor_created_at,
-                    Post.id < cursor_id,
-                ),
-            )
-        )
-
     rows = db.execute(stmt).all()
-    liked_ids: set[int] = set()
-    if current_user_id is not None:
-        tweet_ids = [post.id for post, *_ in rows]
-        if tweet_ids:
-            liked_ids = {
-                post_id
-                for (post_id,) in db.execute(
-                    select(Like.post_id).where(
-                        Like.user_id == current_user_id,
-                        Like.post_id.in_(tweet_ids),
-                    )
-                ).all()
-            }
+    posts = [post for post, *_ in rows]
+    post_ids = [post.id for post in posts]
+    author_ids = {post.user_id for post in posts}
 
-    scored_rows = [
+    liked_ids: set[int] = set()
+    followed_authors: set[int] = set()
+    likes_on_author: dict[int, int] = {}
+    if current_user_id is not None and post_ids:
+        liked_ids = {
+            post_id
+            for (post_id,) in db.execute(
+                select(Like.post_id).where(
+                    Like.user_id == current_user_id,
+                    Like.post_id.in_(post_ids),
+                )
+            ).all()
+        }
+        followed_authors = {
+            followee_id
+            for (followee_id,) in db.execute(
+                select(Follow.followee_id).where(
+                    Follow.follower_id == current_user_id,
+                    Follow.followee_id.in_(author_ids),
+                )
+            ).all()
+        }
+        # How many of each candidate author's posts the viewer has liked, ever --
+        # a durable "I engage with this person" signal, not just on this pool.
+        likes_on_author = {
+            author_id: int(count)
+            for author_id, count in db.execute(
+                select(Post.user_id, func.count())
+                .join(Like, Like.post_id == Post.id)
+                .where(
+                    Like.user_id == current_user_id,
+                    Post.user_id.in_(author_ids),
+                )
+                .group_by(Post.user_id)
+            ).all()
+        }
+
+    return [
         {
             "tweet": post,
             "like_count": int(like_count),
             "comment_count": int(comment_count),
             "retweet_count": int(retweet_count),
             "liked_by_me": post.id in liked_ids,
-            "score": int(like_count) * 3
-            + int(retweet_count) * 4
-            + int(comment_count) * 5,
-            "cursor_created_at": post.created_at,
-            "cursor_id": post.id,
+            "follows_author": post.user_id in followed_authors,
+            "viewer_like_affinity": likes_on_author.get(post.user_id, 0),
         }
         for post, like_count, comment_count, retweet_count in rows
     ]
-
-    scored_rows.sort(
-        key=lambda row: (
-            row["cursor_created_at"],
-            row["score"],
-            row["cursor_id"],
-        ),
-        reverse=True,
-    )
-
-    return scored_rows[: limit + 1]
 
 
 def count_tweets_by_author(db: Session, author_id: int) -> int:
