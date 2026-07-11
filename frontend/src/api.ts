@@ -7,6 +7,7 @@ import type {
   Notification,
   ProfileRepliesPage,
   ProfileTweetsPage,
+  Session,
   TimelineKind,
   TimelinePage,
   Tweet,
@@ -175,6 +176,23 @@ export function resetPassword(token: string, newPassword: string): Promise<void>
 
 export function getCurrentUser(): Promise<UserSummary> {
   return request<UserSummary>("/auth/me");
+}
+
+/** The caller's active sessions, most recently seen first. */
+export function listSessions(): Promise<Session[]> {
+  return request<Session[]>("/auth/sessions");
+}
+
+/** End every session except this one. Returns how many were revoked. */
+export function logoutOtherSessions(): Promise<{ revoked: number }> {
+  return request<{ revoked: number }>("/auth/logout-others", { method: "POST" });
+}
+
+/** End one other session by its opaque handle. */
+export function revokeSession(id: string): Promise<void> {
+  return request<void>(`/auth/sessions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 export function uploadMedia(file: File): Promise<{ url: string }> {

@@ -1515,6 +1515,77 @@ button.rail-link:disabled:hover {
   color: var(--danger);
 }
 
+.settings-section {
+  padding: 16px;
+  border-top: 8px solid var(--soft);
+}
+
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-section-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.settings-section-intro {
+  margin: 6px 0 4px;
+}
+
+.session-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.session-row:last-child {
+  border-bottom: none;
+}
+
+.session-icon {
+  display: flex;
+  color: var(--muted);
+}
+
+.session-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-copy strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.session-copy span {
+  color: var(--muted);
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.session-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
 .profile-name {
   margin: 0;
   font-size: 20px;

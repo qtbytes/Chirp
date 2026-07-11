@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from typing import Annotated
 
 from app.api.deps import get_current_user_id
@@ -9,7 +10,11 @@ from app.core.session_store import (
     SessionBackendUnavailable,
     create_session,
     destroy_session,
+    list_user_sessions,
+    revoke_session_by_handle,
     revoke_user_sessions,
+    session_handle,
+    session_id_from_cookie,
 )
 from app.core.tokens import (
     TokenBackendUnavailable,
@@ -27,12 +32,13 @@ from app.schemas.user import (
     ForgotPassword,
     PasswordChange,
     PasswordReset,
+    SessionOut,
     UserCreate,
     UserLogin,
     UserSummary,
 )
 from app.services import mailer
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -71,6 +77,7 @@ def _send_verification(user: User) -> None:
 )
 def register(
     payload: UserCreate,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ) -> UserSummary:
@@ -102,7 +109,7 @@ def register(
     except (mailer.MailerUnavailable, TokenBackendUnavailable):
         logger.exception("could not send a verification email to user %s", user.id)
 
-    _set_session_cookie(response, user.id)
+    _set_session_cookie(response, user.id, request)
     return UserSummary.model_validate(user)
 
 
@@ -113,6 +120,7 @@ def register(
 )
 def login(
     payload: UserLogin,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ) -> UserSummary:
@@ -136,7 +144,7 @@ def login(
             detail="invalid username or password",
         )
 
-    _set_session_cookie(response, user.id)
+    _set_session_cookie(response, user.id, request)
     return UserSummary.model_validate(user)
 
 
@@ -170,6 +178,7 @@ def logout(
 )
 def change_password(
     payload: PasswordChange,
+    request: Request,
     response: Response,
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -228,7 +237,7 @@ def change_password(
 
     # revoke_user_sessions killed this request's session too. Mint a new one so
     # the device that changed the password stays signed in.
-    _set_session_cookie(response, user.id)
+    _set_session_cookie(response, user.id, request)
 
 
 @router.post(
@@ -456,6 +465,112 @@ def reset_password(
     user_repository.update_user_password(db, user.id, hash_password(payload.new_password))
 
 
+@router.get(
+    "/sessions",
+    response_model=list[SessionOut],
+    dependencies=[Depends(rate_limiter("list_sessions"))],
+)
+def list_sessions(
+    session_cookie: Annotated[
+        str | None,
+        Cookie(alias=settings.session_cookie_name),
+    ] = None,
+    current_user_id: int = Depends(get_current_user_id),
+) -> list[SessionOut]:
+    """
+    List the caller's active sessions, most recently seen first.
+
+    Each entry is keyed by an opaque handle (``sha256`` of the session id) --
+    enough to revoke it, useless for anything else. The session making the
+    request is flagged so the UI can label it and withhold a revoke button that
+    would only log the caller out.
+    """
+    current_sid = session_id_from_cookie(session_cookie)
+    current_handle = session_handle(current_sid) if current_sid is not None else None
+
+    try:
+        sessions = list_user_sessions(current_user_id)
+    except SessionBackendUnavailable as exc:
+        raise _unavailable(exc, "Session storage") from exc
+
+    return [
+        SessionOut(
+            id=info.id,
+            ip=info.ip,
+            user_agent=info.user_agent,
+            created_at=datetime.fromtimestamp(info.created_at, tz=timezone.utc),
+            last_seen=datetime.fromtimestamp(info.last_seen, tz=timezone.utc),
+            current=info.id == current_handle,
+        )
+        for info in sessions
+    ]
+
+
+@router.post(
+    "/logout-others",
+    dependencies=[Depends(rate_limiter("revoke_session"))],
+)
+def logout_others(
+    session_cookie: Annotated[
+        str | None,
+        Cookie(alias=settings.session_cookie_name),
+    ] = None,
+    current_user_id: int = Depends(get_current_user_id),
+) -> dict:
+    """
+    End every session except the one making the request.
+
+    Change-password's blast radius without the password change: a user who
+    suspects one of their devices signs the rest out and keeps working here. The
+    current session is spared by id, so this device is never bounced to login.
+    """
+    keep_sid = session_id_from_cookie(session_cookie)
+    try:
+        revoked = revoke_user_sessions(current_user_id, keep_sid=keep_sid)
+    except SessionBackendUnavailable as exc:
+        raise _unavailable(exc, "Session storage") from exc
+    return {"revoked": revoked}
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limiter("revoke_session"))],
+)
+def revoke_session(
+    session_id: str,
+    session_cookie: Annotated[
+        str | None,
+        Cookie(alias=settings.session_cookie_name),
+    ] = None,
+    current_user_id: int = Depends(get_current_user_id),
+) -> None:
+    """
+    End one other session by its handle.
+
+    Only the caller's own sessions are searched, so a handle from elsewhere
+    reaches nothing. Ending the *current* session is refused here -- that is what
+    ``/logout`` is for -- so this endpoint never has to also clear the cookie.
+    """
+    current_sid = session_id_from_cookie(session_cookie)
+    if current_sid is not None and session_handle(current_sid) == session_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="use logout to end the current session",
+        )
+
+    try:
+        removed = revoke_session_by_handle(current_user_id, session_id)
+    except SessionBackendUnavailable as exc:
+        raise _unavailable(exc, "Session storage") from exc
+
+    if not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="session not found",
+        )
+
+
 @router.get("/me", response_model=UserSummary)
 def me(
     current_user_id: int = Depends(get_current_user_id),
@@ -470,10 +585,25 @@ def me(
     return UserSummary.model_validate(user)
 
 
-def _set_session_cookie(response: Response, user_id: int) -> None:
+# A user agent is a client-supplied string; cap it so a hostile client cannot
+# stuff the session hash with an unbounded header.
+_USER_AGENT_MAX_LENGTH = 400
+
+
+def _client_meta(request: Request) -> tuple[str | None, str | None]:
+    """The peer address and user-agent to stamp on a new session, for display."""
+    ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    if user_agent is not None:
+        user_agent = user_agent[:_USER_AGENT_MAX_LENGTH]
+    return ip, user_agent
+
+
+def _set_session_cookie(response: Response, user_id: int, request: Request) -> None:
+    ip, user_agent = _client_meta(request)
     response.set_cookie(
         settings.session_cookie_name,
-        create_session(user_id),
+        create_session(user_id, ip=ip, user_agent=user_agent),
         # max_age mirrors the server-side TTL so the browser stops sending a
         # cookie the store would reject anyway. The server remains the
         # authority: a client that ignores max_age still gets a 401.

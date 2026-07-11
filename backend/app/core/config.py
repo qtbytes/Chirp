@@ -114,6 +114,14 @@ class Settings(BaseSettings):
     rate_limit_resend_verification_max_requests: int = 3
     rate_limit_resend_verification_window_seconds: int = 900
 
+    # Session management, authenticated, bucketed by user. Listing is cheap and
+    # polled by the account page; revoking (log out one / all others) is rarer
+    # and a little tighter.
+    rate_limit_list_sessions_max_requests: int = 60
+    rate_limit_list_sessions_window_seconds: int = 60
+    rate_limit_revoke_session_max_requests: int = 20
+    rate_limit_revoke_session_window_seconds: int = 300
+
     # Outbound mail. Without smtp_host the app uses a console sender that prints
     # the message instead of delivering it -- fine locally, refused in a
     # production configuration (see app/services/mailer.py), where the reset and

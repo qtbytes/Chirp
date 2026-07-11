@@ -111,6 +111,17 @@ export type UserProfile = {
   pending_email: string | null;
 };
 
+export type Session = {
+  /** Opaque handle (sha256 of the session id), safe to pass back for revocation. */
+  id: string;
+  ip: string | null;
+  user_agent: string | null;
+  created_at: string;
+  last_seen: string;
+  /** The session making the request. Never offered a revoke button. */
+  current: boolean;
+};
+
 export type ProfileTweetsPage = {
   items: Tweet[];
   next_cursor: string | null;

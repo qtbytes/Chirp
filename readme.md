@@ -12,8 +12,8 @@ work — with a real UI on top rather than a toy script.
 
 Posting with images and video, threaded comments and replies, likes, quote
 tweets, follows, profiles with editable bio and avatar, email confirmation,
-password change and reset, notifications, emoji picker, and Open Graph link
-preview cards.
+password change and reset, active session management, notifications, emoji
+picker, and Open Graph link preview cards.
 
 ## Design notes
 
@@ -58,6 +58,18 @@ hash is written — if the store is unreachable the request fails having changed
 nothing, where the other order would leave the new password in place and the
 leaked sessions alive. Proving knowledge of the current password is required, so
 a stolen cookie alone cannot take the account over.
+
+**Sessions are also reviewable.** Because the store already indexes every
+session by user, `GET /auth/sessions` can list them with the IP, user agent, and
+last-seen time each was stamped with — enough to spot a login you don't
+recognise. `POST /auth/logout-others` then revokes all but the current one (the
+same blast radius as change-password, without changing the password), and
+`DELETE /auth/sessions/{id}` ends a single one. The `id` is `sha256(sid)`, never
+the session id itself: the sid is half of a bearer credential, so it is treated
+like the mailed tokens — stored and compared, never returned to a browser. A
+handle only matches within the caller's own index, so it cannot reach another
+account's session, and ending the *current* session is refused here so the one
+endpoint that clears the cookie stays `POST /auth/logout`.
 
 **A claimed address is not a confirmed one.** `users.email` is the address a
 user has *proven* they control; `users.pending_email` is one they have merely

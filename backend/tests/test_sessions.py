@@ -6,8 +6,12 @@ from app.core.session_store import (
     SessionBackendUnavailable,
     create_session,
     destroy_session,
+    list_user_sessions,
     resolve_session,
+    revoke_session_by_handle,
     revoke_user_sessions,
+    session_handle,
+    session_id_from_cookie,
 )
 from fastapi.testclient import TestClient
 from main import app
@@ -74,10 +78,10 @@ def test_active_session_slides_its_ttl() -> None:
 
     # resolve() with refresh=True should push expiry out to the full TTL.
     assert resolve_session(cookie, refresh=True) == 9
-    _, expires_at = session_store._memory_sessions[sid]
+    expires_at = session_store._memory_sessions[sid].expires_at
 
     assert resolve_session(cookie, refresh=False) == 9
-    _, unchanged = session_store._memory_sessions[sid]
+    unchanged = session_store._memory_sessions[sid].expires_at
     assert unchanged == expires_at, "refresh=False must not extend the session"
 
 
@@ -104,6 +108,102 @@ def test_revoke_user_sessions_logs_out_every_device() -> None:
     assert resolve_session(first) is None
     assert resolve_session(second) is None
     assert resolve_session(other) == 12, "other users must be unaffected"
+
+
+# --------------------------------------------------- listing & selective revoke
+
+
+def test_list_user_sessions_returns_only_the_owners_with_metadata() -> None:
+    a = create_session(user_id=20, ip="1.1.1.1", user_agent="Firefox")
+    b = create_session(user_id=20, ip="2.2.2.2", user_agent="Safari")
+    create_session(user_id=99, ip="9.9.9.9", user_agent="Edge")
+
+    sessions = list_user_sessions(20)
+
+    assert len(sessions) == 2, "another user's session must not appear"
+    assert {s.ip for s in sessions} == {"1.1.1.1", "2.2.2.2"}
+    assert {s.user_agent for s in sessions} == {"Firefox", "Safari"}
+    # The handle is sha256(sid), not the sid itself.
+    ids = {s.id for s in sessions}
+    assert session_handle(session_id_from_cookie(a)) in ids
+    assert session_handle(session_id_from_cookie(b)) in ids
+
+
+def test_revoke_user_sessions_can_keep_the_current_one() -> None:
+    keep = create_session(user_id=30)
+    other = create_session(user_id=30)
+
+    assert revoke_user_sessions(30, keep_sid=session_id_from_cookie(keep)) == 1
+    assert resolve_session(keep) == 30, "the kept session must survive"
+    assert resolve_session(other) is None
+
+
+def test_revoke_session_by_handle_targets_one_and_only_the_owners() -> None:
+    mine = create_session(user_id=40)
+    also_mine = create_session(user_id=40)
+    someone_else = create_session(user_id=41)
+
+    handle = session_handle(session_id_from_cookie(also_mine))
+    assert revoke_session_by_handle(40, handle) is True
+    assert resolve_session(also_mine) is None
+    assert resolve_session(mine) == 40, "sibling session untouched"
+
+    # A handle for another user's session is invisible from this account.
+    foreign = session_handle(session_id_from_cookie(someone_else))
+    assert revoke_session_by_handle(40, foreign) is False
+    assert resolve_session(someone_else) == 41
+
+    # An unknown handle is a miss, not an error.
+    assert revoke_session_by_handle(40, "deadbeef") is False
+
+
+def test_sessions_endpoint_lists_and_flags_current(client: TestClient) -> None:
+    _register(client)
+    me_id = client.get("/api/v1/auth/me").json()["id"]
+    # A second device signed in as the same user.
+    create_session(user_id=me_id, ip="5.6.7.8", user_agent="OtherDevice/1.0")
+
+    response = client.get("/api/v1/auth/sessions")
+    assert response.status_code == 200, response.text
+    sessions = response.json()
+
+    assert len(sessions) == 2
+    assert [s for s in sessions if s["current"]], "one entry must be the caller"
+    assert len([s for s in sessions if s["current"]]) == 1
+
+    # The raw session id must never appear in the listing.
+    captured_sid = client.cookies[settings.session_cookie_name].split(".")[0]
+    assert all(captured_sid not in session["id"] for session in sessions)
+
+
+def test_logout_others_keeps_this_device_and_drops_the_rest(client: TestClient) -> None:
+    _register(client)
+    me_id = client.get("/api/v1/auth/me").json()["id"]
+    ghost = create_session(user_id=me_id)
+
+    response = client.post("/api/v1/auth/logout-others")
+    assert response.status_code == 200, response.text
+    assert response.json()["revoked"] == 1
+
+    assert client.get("/api/v1/auth/me").status_code == 200, "this device stays in"
+    assert resolve_session(ghost) is None, "the other device is gone"
+
+
+def test_revoke_named_session_endpoint_guards(client: TestClient) -> None:
+    _register(client)
+    me_id = client.get("/api/v1/auth/me").json()["id"]
+    ghost = create_session(user_id=me_id, user_agent="Ghost")
+    ghost_handle = session_handle(session_id_from_cookie(ghost))
+
+    current = next(s for s in client.get("/api/v1/auth/sessions").json() if s["current"])
+    # The current session cannot be ended here; that is what logout is for.
+    assert client.delete(f"/api/v1/auth/sessions/{current['id']}").status_code == 400
+    # An unknown handle is a 404.
+    assert client.delete("/api/v1/auth/sessions/unknown-handle").status_code == 404
+
+    # The other device is revoked and really gone.
+    assert client.delete(f"/api/v1/auth/sessions/{ghost_handle}").status_code == 204
+    assert resolve_session(ghost) is None
 
 
 def test_logout_invalidates_a_captured_cookie(client: TestClient) -> None:
@@ -175,3 +275,14 @@ def test_redis_backend_roundtrip(monkeypatch) -> None:
     assert revoke_user_sessions(4243) == 2
     assert resolve_session(a) is None
     assert resolve_session(b) is None
+
+    # Metadata round-trips through a real Redis hash, and the handle-based
+    # revoke keeps the sibling alive.
+    keep = create_session(user_id=4244, ttl_seconds=60, ip="8.8.8.8", user_agent="Real")
+    drop = create_session(user_id=4244, ttl_seconds=60, ip="9.9.9.9")
+    listed = list_user_sessions(4244)
+    assert {s.ip for s in listed} == {"8.8.8.8", "9.9.9.9"}
+    assert revoke_session_by_handle(4244, session_handle(session_id_from_cookie(drop)))
+    assert resolve_session(drop) is None
+    assert resolve_session(keep) == 4244
+    revoke_user_sessions(4244)

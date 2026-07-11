@@ -120,6 +120,20 @@ class EmailVerification(BaseModel):
     token: str = Field(min_length=1, max_length=512)
 
 
+class SessionOut(BaseModel):
+    # `id` is sha256(sid), an opaque handle -- never the session id itself, which
+    # is half of a bearer credential. It is enough to target one session for
+    # revocation, and useless for anything else.
+    id: str
+    ip: str | None = None
+    user_agent: str | None = None
+    created_at: datetime
+    last_seen: datetime
+    # True for the session making the request, so the UI can label "this device"
+    # and refuse to offer a revoke button that would just log the caller out.
+    current: bool = False
+
+
 class UserDiscoveryOut(UserSummary):
     is_following: bool = False
     is_current_user: bool = False
