@@ -22,6 +22,7 @@ import {
   MessageCircle,
   Repeat2,
   Search,
+  Settings,
   Sun,
   UserPlus,
 } from "lucide-react";
@@ -79,6 +80,7 @@ import {
   parseBackendDate,
 } from "./components";
 import { ProfileView } from "./ProfileView";
+import { AccountView } from "./AccountView";
 import { ResetPasswordView, VerifyEmailView } from "./AuthTokenViews";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
 import { EmojiPicker } from "./EmojiPicker";
@@ -199,6 +201,7 @@ function App() {
         <Route path="/following" element={<HomeView />} />
         <Route path="/search" element={<PeopleRoute />} />
         <Route path="/notifications" element={<NotificationsView />} />
+        <Route path="/settings" element={<AccountView currentUser={currentUser} />} />
         <Route path="/tweet/:tweetId" element={<TweetDetailRoute />} />
         <Route
           path="/:username"
@@ -342,9 +345,10 @@ function AppLayout({
   const location = useLocation();
   const isSearchRoute = location.pathname === "/search";
   const isNotificationsRoute = location.pathname === "/notifications";
+  const isSettingsRoute = location.pathname === "/settings";
   const isHomeRoute =
     location.pathname === "/" || location.pathname === "/following";
-  const hideDiscovery = isSearchRoute || isNotificationsRoute;
+  const hideDiscovery = isSearchRoute || isNotificationsRoute || isSettingsRoute;
   const onDiscoveryChanged = () => setRefreshToken((value) => value + 1);
 
   const refreshUnread = useCallback(async () => {
@@ -396,6 +400,13 @@ function AppLayout({
               ) : null}
             </span>
             <span>Alerts</span>
+          </Link>
+          <Link
+            className={isSettingsRoute ? "rail-link active" : "rail-link"}
+            to="/settings"
+          >
+            <Settings size={22} aria-hidden="true" />
+            <span>Account</span>
           </Link>
         </nav>
         <div className="rail-user">

@@ -23,8 +23,6 @@ import {
   getErrorMessage,
   parseBackendDate,
 } from "./components";
-import { ChangeEmailModal } from "./ChangeEmailModal";
-import { ChangePasswordModal } from "./ChangePasswordModal";
 import { EditProfileModal } from "./EditProfileModal";
 
 export function ProfileView({
@@ -46,8 +44,6 @@ export function ProfileView({
   const [profileError, setProfileError] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [changingEmail, setChangingEmail] = useState(false);
 
   const [tweets, setTweets] = useState<Tweet[]>([]);
   const [tweetsCursor, setTweetsCursor] = useState<string | null>(null);
@@ -218,12 +214,6 @@ export function ProfileView({
           <Avatar user={profile} size="large" />
           {profile.is_current_user ? (
             <div className="profile-actions">
-              <button className="outline-button" onClick={() => setChangingEmail(true)}>
-                Email
-              </button>
-              <button className="outline-button" onClick={() => setChangingPassword(true)}>
-                Change password
-              </button>
               <button className="outline-button" onClick={() => setEditing(true)}>
                 Edit profile
               </button>
@@ -240,22 +230,6 @@ export function ProfileView({
         </div>
         <h1 className="profile-name">{displayName(profile)}</h1>
         <p className="profile-handle">@{profile.username}</p>
-        {profile.is_current_user && !profile.email ? (
-          // Only the owner ever sees this: email is null on everyone else's
-          // profile, so this can never leak another account's state.
-          <p className="form-hint">
-            {profile.pending_email
-              ? `Confirm ${profile.pending_email} to enable password reset.`
-              : "Add an email address to enable password reset."}{" "}
-            <button
-              type="button"
-              className="text-button inline"
-              onClick={() => setChangingEmail(true)}
-            >
-              {profile.pending_email ? "Resend link" : "Add email"}
-            </button>
-          </p>
-        ) : null}
         {profile.bio ? <p className="profile-bio">{profile.bio}</p> : null}
         <p className="profile-meta">
           <Calendar size={16} aria-hidden="true" />
@@ -386,19 +360,6 @@ export function ProfileView({
         />
       ) : null}
 
-      {changingPassword && profile.is_current_user ? (
-        <ChangePasswordModal onClose={() => setChangingPassword(false)} />
-      ) : null}
-
-      {changingEmail && profile.is_current_user ? (
-        <ChangeEmailModal
-          profile={profile}
-          onClose={() => setChangingEmail(false)}
-          onChanged={(pendingEmail) =>
-            setProfile({ ...profile, pending_email: pendingEmail })
-          }
-        />
-      ) : null}
     </section>
   );
 }

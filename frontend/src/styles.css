@@ -1475,6 +1475,46 @@ button.rail-link:disabled:hover {
   gap: 8px;
 }
 
+/* Account settings page: a plain list of self-service rows (email, password),
+   each an icon + label/status + an action button on the right. */
+.settings-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-row-icon {
+  display: flex;
+  color: var(--muted);
+}
+
+.settings-row-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-copy strong {
+  display: block;
+  font-size: 15px;
+}
+
+.settings-row-copy span {
+  color: var(--muted);
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.settings-row-copy .settings-warn {
+  color: var(--danger);
+}
+
 .profile-name {
   margin: 0;
   font-size: 20px;
