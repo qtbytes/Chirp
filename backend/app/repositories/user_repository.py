@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, or_, select
@@ -201,7 +202,20 @@ def soft_delete_user(
     )
     db.execute(delete(Report).where(Report.reporter_id == user_id))
 
-    user.username = f"deleted_{user_id}"
+    # deleted_<id> is unique by construction: the id is unique, and registration
+    # forbids anyone from claiming that shape. The check is a belt-and-suspenders
+    # guard for a legacy row that took the name before that rule existed -- fall
+    # back to a random suffix rather than crash on the unique constraint.
+    tombstone_username = f"deleted_{user_id}"
+    taken = db.scalar(
+        select(User.id).where(
+            User.username == tombstone_username, User.id != user_id
+        )
+    )
+    if taken is not None:
+        tombstone_username = f"deleted_{user_id}_{secrets.token_hex(4)}"
+
+    user.username = tombstone_username
     user.email = None
     user.pending_email = None
     user.display_name = None

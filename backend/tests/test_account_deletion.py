@@ -245,3 +245,28 @@ def test_write_timeline_excludes_a_deleted_author_from_precomputed_feed() -> Non
         ), "the deleted author's stale feed row is hidden"
 
 
+# ----------------------------------------------------------------- username shape
+
+
+def test_deleted_username_shape_is_reserved_at_registration() -> None:
+    """Nobody may claim deleted_<n>, so a future deletion's tombstone never collides."""
+    taken = TestClient(app).post(
+        "/api/v1/auth/register",
+        json={
+            "username": "deleted_5",
+            "email": "squatter@example.com",
+            "password": "password123",
+        },
+    )
+    assert taken.status_code == 422
+
+    # A name that merely starts with "deleted_" but isn't the tombstone shape is fine.
+    ok = TestClient(app).post(
+        "/api/v1/auth/register",
+        json={
+            "username": "deleted_dreams",
+            "email": "dreams@example.com",
+            "password": "password123",
+        },
+    )
+    assert ok.status_code == 201

@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Annotated
 
@@ -66,7 +67,14 @@ class UserCreate(BaseModel):
     @field_validator("username")
     @classmethod
     def _reject_reserved_username(cls, value: str) -> str:
-        if value.lower() in RESERVED_USERNAMES:
+        lowered = value.lower()
+        if lowered in RESERVED_USERNAMES:
+            raise ValueError("username is reserved")
+        # deleted_<n> is the shape a deleted account's username is rewritten to,
+        # so it must never be claimable: otherwise a live account could squat the
+        # name a future deletion needs (blocking that deletion), or impersonate a
+        # tombstone. This makes deleted_<id> collision-free by construction.
+        if re.fullmatch(r"deleted_\d+", lowered):
             raise ValueError("username is reserved")
         return value
 
