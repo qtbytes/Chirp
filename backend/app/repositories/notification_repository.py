@@ -27,6 +27,32 @@ def add_notification(
     if recipient_id == actor_id:
         return
 
+    # Collapse repeatable actions. A like can be toggled off and on all day, and
+    # a follow the same; without this, each re-like would stack another "so-and-so
+    # liked your tweet" on the owner. The tuple (recipient, actor, type, post_id)
+    # is what "the same notification" means:
+    #
+    # - like:   post_id is the liked post, constant across re-likes -> collapses.
+    # - follow: post_id is NULL and actor+recipient are fixed        -> collapses.
+    # - comment/reply/retweet: post_id is the *new* post's own id, unique per
+    #   action, so distinct comments or quotes never collide and are never
+    #   suppressed.
+    #
+    # The notification is left in place when the like/follow is later undone: it
+    # is a record that the action happened, and keeping it is what stops the next
+    # re-like from minting a fresh one. (`== post_id` renders as IS NULL when
+    # post_id is None, which is exactly the follow case.)
+    already_exists = db.scalar(
+        select(Notification.id).where(
+            Notification.user_id == recipient_id,
+            Notification.actor_id == actor_id,
+            Notification.type == type,
+            Notification.post_id == post_id,
+        )
+    )
+    if already_exists is not None:
+        return
+
     db.add(
         Notification(
             user_id=recipient_id,

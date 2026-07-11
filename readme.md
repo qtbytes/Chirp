@@ -87,6 +87,19 @@ recipient id) as well as in bulk — so opening the page no longer force-marks
 everything read; a notification is marked read when it's opened, or all at once
 from the header.
 
+**Repeatable actions coalesce, so toggling can't spam.** A like can be turned off
+and on all day, and a follow the same; left alone, each re-like would stack
+another "liked your tweet" on the owner. `add_notification` dedupes on
+`(recipient, actor, type, post_id)` — the tuple that means "the same
+notification." For a like, `post_id` is the liked post and stays constant across
+re-likes; for a follow it's `NULL` with a fixed actor and recipient; for a
+comment, reply, or quote it's the *new* post's own id, unique per action, so
+those never collapse. The row is deliberately kept when the like or follow is
+undone: it records that the action happened, and keeping it is exactly what stops
+the next re-like from minting a fresh one (and a re-notify nudge). The badge and
+the live stream are both driven off that create, so neither can be spammed by a
+toggle either.
+
 **Sessions are server-side.** The cookie holds an opaque, HMAC-signed session id;
 Redis maps it to a user id under a sliding idle TTL. The signature is verified
 before the store is consulted, so a forged id never costs a round trip. Logout

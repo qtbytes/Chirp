@@ -181,6 +181,85 @@ def test_cannot_mark_someone_elses_notification_read() -> None:
     assert alice.post("/api/v1/notifications/999999/read").status_code == 404
 
 
+def test_toggling_a_like_does_not_stack_notifications() -> None:
+    alice, alice_id = _register("alice")
+    bob, _ = _register("bob")
+
+    tweet_id = alice.post("/api/v1/tweets", json={"content": "hi"}).json()["id"]
+
+    # like -> unlike -> like: the owner must end with exactly one notification.
+    for _ in range(3):
+        assert bob.post(f"/api/v1/tweets/{tweet_id}/likes/toggle").status_code == 200
+
+    items = alice.get("/api/v1/notifications").json()["items"]
+    like_notifications = [item for item in items if item["type"] == "like"]
+    assert len(like_notifications) == 1
+    assert alice.get("/api/v1/notifications/unread-count").json()["count"] == 1
+
+
+def test_toggling_a_follow_does_not_stack_notifications() -> None:
+    alice, alice_id = _register("alice")
+    bob, _ = _register("bob")
+
+    bob.post(f"/api/v1/follows/{alice_id}")
+    bob.delete(f"/api/v1/follows/{alice_id}")
+    bob.post(f"/api/v1/follows/{alice_id}")
+
+    items = alice.get("/api/v1/notifications").json()["items"]
+    follow_notifications = [item for item in items if item["type"] == "follow"]
+    assert len(follow_notifications) == 1
+
+
+def test_different_actors_each_notify_for_the_same_post() -> None:
+    alice, alice_id = _register("alice")
+    bob, _ = _register("bob")
+    carol, _ = _register("carol")
+
+    tweet_id = alice.post("/api/v1/tweets", json={"content": "hi"}).json()["id"]
+    bob.post(f"/api/v1/tweets/{tweet_id}/likes/toggle")
+    carol.post(f"/api/v1/tweets/{tweet_id}/likes/toggle")
+
+    likes = [
+        item
+        for item in alice.get("/api/v1/notifications").json()["items"]
+        if item["type"] == "like"
+    ]
+    assert len(likes) == 2, "dedup is per actor, not per post"
+
+
+def test_repeated_comments_are_not_deduped() -> None:
+    alice, alice_id = _register("alice")
+    bob, _ = _register("bob")
+
+    tweet_id = alice.post("/api/v1/tweets", json={"content": "hi"}).json()["id"]
+    bob.post(f"/api/v1/tweets/{tweet_id}/comments", json={"content": "one"})
+    bob.post(f"/api/v1/tweets/{tweet_id}/comments", json={"content": "two"})
+
+    comments = [
+        item
+        for item in alice.get("/api/v1/notifications").json()["items"]
+        if item["type"] == "comment"
+    ]
+    assert len(comments) == 2, "each comment is a distinct post -> distinct notification"
+
+
+def test_re_liking_does_not_publish_a_second_nudge(monkeypatch) -> None:
+    fake = _RecordingRedis()
+    monkeypatch.setattr(events, "get_redis_client", lambda: fake)
+
+    alice, alice_id = _register("alice")
+    bob, _ = _register("bob")
+    tweet_id = alice.post("/api/v1/tweets", json={"content": "hi"}).json()["id"]
+
+    for _ in range(3):  # like, unlike, like
+        bob.post(f"/api/v1/tweets/{tweet_id}/likes/toggle")
+
+    like_nudges = [
+        channel for channel, _ in fake.published if channel == f"events:user:{alice_id}"
+    ]
+    assert len(like_nudges) == 1, "only the first like should wake the owner"
+
+
 class _RecordingRedis:
     """Captures publishes so a test can assert a nudge was sent post-commit."""
 
