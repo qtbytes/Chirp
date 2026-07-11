@@ -204,7 +204,15 @@ function App() {
         <Route path="/following" element={<HomeView />} />
         <Route path="/search" element={<PeopleRoute />} />
         <Route path="/notifications" element={<NotificationsView />} />
-        <Route path="/settings" element={<AccountView currentUser={currentUser} />} />
+        <Route
+          path="/settings"
+          element={
+            <AccountView
+              currentUser={currentUser}
+              onLoggedOut={() => setCurrentUser(null)}
+            />
+          }
+        />
         <Route path="/tweet/:tweetId" element={<TweetDetailRoute />} />
         <Route
           path="/:username"

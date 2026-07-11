@@ -295,7 +295,7 @@ export function ProfileView({
       <header className="profile-header">
         <div className="profile-header-top">
           <Avatar user={profile} size="large" />
-          {profile.is_current_user ? (
+          {profile.is_deleted ? null : profile.is_current_user ? (
             <div className="profile-actions">
               <button className="outline-button" onClick={() => setEditing(true)}>
                 Edit profile
@@ -339,7 +339,13 @@ export function ProfileView({
         </div>
         <h1 className="profile-name">{displayName(profile)}</h1>
         <p className="profile-handle">@{profile.username}</p>
-        {profile.bio ? <p className="profile-bio">{profile.bio}</p> : null}
+        {profile.is_deleted ? (
+          <p className="profile-bio profile-deleted-note">
+            This account has been deleted.
+          </p>
+        ) : profile.bio ? (
+          <p className="profile-bio">{profile.bio}</p>
+        ) : null}
         <p className="profile-meta">
           <Calendar size={16} aria-hidden="true" />
           <span>Joined {joinedDate}</span>

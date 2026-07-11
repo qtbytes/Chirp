@@ -4,6 +4,8 @@ export type UserSummary = {
   display_name: string | null;
   created_at: string;
   avatar_url: string | null;
+  /** True once the account is deleted; the UI renders it as a tombstone. */
+  is_deleted?: boolean;
 };
 
 export type UserDiscovery = UserSummary & {
@@ -110,6 +112,8 @@ export type UserProfile = {
   tweet_count: number;
   is_following: boolean;
   is_current_user: boolean;
+  /** Whether this profile belongs to a deleted (tombstoned) account. */
+  is_deleted: boolean;
   /** Whether you have blocked this account. */
   is_blocked: boolean;
   /** Whether you have muted this account. One-directional; they aren't told. */

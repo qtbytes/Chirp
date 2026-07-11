@@ -1,7 +1,15 @@
-from sqlalchemy import select
+from datetime import datetime, timezone
+
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
+from app.models.block import Block
+from app.models.feed import FeedItem
 from app.models.follow import Follow
+from app.models.like import Like
+from app.models.mute import Mute
+from app.models.notification import Notification
+from app.models.report import Report
 from app.models.user import User
 
 
@@ -79,7 +87,7 @@ def list_users(
     limit: int,
     exclude_user_ids: set[int] | None = None,
 ) -> list[tuple[User, bool]]:
-    stmt = select(User)
+    stmt = select(User).where(User.deleted_at.is_(None))
     if query:
         stmt = stmt.where(User.username.ilike(f"%{query}%"))
     # Blocked (and blocking) users do not surface in discovery.
@@ -141,6 +149,67 @@ def update_user_avatar(db: Session, user_id: int, avatar_url: str) -> User:
         raise ValueError("user not found")
 
     user.avatar_url = avatar_url
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def soft_delete_user(
+    db: Session, user_id: int, scrubbed_password_hash: str
+) -> User | None:
+    """
+    Tombstone an account: clear everything keyed to the user, scrub their
+    personal data, and stamp ``deleted_at`` -- all in one transaction. Returns
+    the updated row, or None if the user is missing or already deleted.
+
+    Authored posts are deliberately kept, so replies and quotes others built on
+    them still resolve an author (the whole reason this is a soft delete). What
+    goes: every personal edge (follows both ways, likes, blocks and mutes both
+    ways, reports), the user's own home-feed rows, and their entire notification
+    history as recipient and as actor. The PII on the row is nulled, the username
+    is rewritten to ``deleted_<id>`` (freeing the original for reuse), and the
+    password is replaced with an unknown hash so the row can never authenticate.
+
+    Feed rows where the user is the *author* (``actor_id``) are left alone: the
+    posts survive as tombstones, so they should keep resolving in the feeds they
+    were fanned out to -- as should likes, notifications, and reports by other
+    users that point at those posts, which stay valid because the posts stay.
+    """
+    user = db.get(User, user_id)
+    if user is None or user.deleted_at is not None:
+        return None
+
+    db.execute(
+        delete(Follow).where(
+            or_(Follow.follower_id == user_id, Follow.followee_id == user_id)
+        )
+    )
+    db.execute(delete(Like).where(Like.user_id == user_id))
+    db.execute(delete(FeedItem).where(FeedItem.owner_id == user_id))
+    db.execute(
+        delete(Notification).where(
+            or_(Notification.user_id == user_id, Notification.actor_id == user_id)
+        )
+    )
+    db.execute(
+        delete(Block).where(
+            or_(Block.blocker_id == user_id, Block.blocked_id == user_id)
+        )
+    )
+    db.execute(
+        delete(Mute).where(or_(Mute.muter_id == user_id, Mute.muted_id == user_id))
+    )
+    db.execute(delete(Report).where(Report.reporter_id == user_id))
+
+    user.username = f"deleted_{user_id}"
+    user.email = None
+    user.pending_email = None
+    user.display_name = None
+    user.bio = None
+    user.avatar_url = None
+    user.password_hash = scrubbed_password_hash
+    user.deleted_at = datetime.now(timezone.utc)
+
     db.commit()
     db.refresh(user)
     return user

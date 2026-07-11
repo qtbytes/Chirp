@@ -46,7 +46,11 @@ export function isVideoUrl(url: string): boolean {
 export function displayName(user: {
   username: string;
   display_name?: string | null;
+  is_deleted?: boolean;
 }): string {
+  if (user.is_deleted) {
+    return "Deleted account";
+  }
   return user.display_name?.trim() || user.username;
 }
 
@@ -119,6 +123,18 @@ export function login(username: string, password: string): Promise<UserSummary> 
 
 export function logout(): Promise<void> {
   return request<void>("/auth/logout", { method: "POST" });
+}
+
+/**
+ * Permanently delete the signed-in account (soft delete + PII scrub). Requires
+ * the current password. The server revokes every session and clears the cookie,
+ * so the caller is logged out; the app should drop its local user state.
+ */
+export function deleteAccount(password: string): Promise<void> {
+  return request<void>("/auth/account", {
+    method: "DELETE",
+    body: JSON.stringify({ password }),
+  });
 }
 
 /**

@@ -1,5 +1,7 @@
 import logging
+import secrets
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated
 
 from app.api.deps import get_current_user_id
@@ -27,6 +29,7 @@ from app.db.database import get_db
 from app.models.user import User
 from app.repositories import user_repository
 from app.schemas.user import (
+    AccountDeletion,
     EmailChange,
     EmailVerification,
     ForgotPassword,
@@ -138,7 +141,14 @@ def login(
     trivial. Password strength and (eventually) MFA are the answer there.
     """
     user = user_repository.get_user_by_username(db, payload.username)
-    if user is None or not verify_password(payload.password, user.password_hash):
+    # A deleted account's password was scrubbed to an unknown value, so the
+    # verify below already fails -- but check deleted_at explicitly so the intent
+    # is on the page and a future code path can't accidentally revive a tombstone.
+    if (
+        user is None
+        or user.deleted_at is not None
+        or not verify_password(payload.password, user.password_hash)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid username or password",
@@ -238,6 +248,90 @@ def change_password(
     # revoke_user_sessions killed this request's session too. Mint a new one so
     # the device that changed the password stays signed in.
     _set_session_cookie(response, user.id, request)
+
+
+def _delete_avatar_files(user_id: int) -> None:
+    """Remove any stored avatar for a user. Best effort: deletion must not fail on it."""
+    avatars_dir = Path(settings.uploads_dir) / "avatars"
+    try:
+        for path in avatars_dir.glob(f"{user_id}.*"):
+            path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning(
+            "failed to remove avatar files for user %s", user_id, exc_info=True
+        )
+
+
+@router.delete(
+    "/account",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limiter("delete_account"))],
+)
+def delete_account(
+    payload: AccountDeletion,
+    response: Response,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Delete the caller's account: a soft delete that tombstones the row.
+
+    The account row is kept so posts others replied to or quoted keep an author,
+    but everything personal is destroyed -- the PII, every graph edge, the whole
+    notification history, all sessions and tokens, and the avatar file. The
+    username is released (rewritten to ``deleted_<id>``) and the password is
+    replaced with an unknown value, so the account can never be logged into again.
+
+    Requires the current password: an irreversible action must not ride on a
+    stolen cookie alone.
+    """
+    user = user_repository.get_user(db, current_user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="session user not found",
+        )
+
+    if not verify_password(payload.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="password is incorrect",
+        )
+
+    # Revoke first, mutate second -- change-password's rule. If session or token
+    # storage is down, fail before scrubbing the row rather than leave a
+    # half-deleted account with live sessions still resolving to it.
+    try:
+        revoke_user_sessions(user.id)
+        revoke_tokens(TokenPurpose.PASSWORD_RESET, user.id)
+        revoke_tokens(TokenPurpose.EMAIL_VERIFICATION, user.id)
+    except SessionBackendUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Session storage is unavailable.",
+        ) from exc
+    except TokenBackendUnavailable as exc:
+        raise _unavailable(exc, "Token storage") from exc
+
+    # An unknown, valid hash: the account keeps a well-formed password_hash that
+    # no input can satisfy, rather than a sentinel verify_password might choke on.
+    user_repository.soft_delete_user(
+        db,
+        user.id,
+        scrubbed_password_hash=hash_password(secrets.token_urlsafe(32)),
+    )
+
+    _delete_avatar_files(user.id)
+
+    # The sessions are gone server-side; drop the browser's cookie too so the
+    # client stops sending a handle that now resolves to nothing.
+    response.delete_cookie(
+        settings.session_cookie_name,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=settings.session_cookie_secure,
+    )
 
 
 @router.post(

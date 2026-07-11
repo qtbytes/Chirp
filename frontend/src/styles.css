@@ -2015,12 +2015,29 @@ a.tab {
 }
 
 .danger-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 9px 18px;
   border: 0;
   border-radius: 999px;
   background: var(--danger-solid);
   color: #ffffff;
   font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-danger-heading {
+  color: var(--danger);
+}
+
+.profile-deleted-note {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.settings-section > .danger-button {
+  margin-top: 8px;
 }
 
 .danger-button:hover:not(:disabled) {

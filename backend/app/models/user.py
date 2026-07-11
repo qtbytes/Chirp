@@ -47,7 +47,19 @@ class User(Base):
         default=utcnow,
         nullable=False,
     )
+    # Set when the account is deleted. The row survives -- soft delete -- so that
+    # posts others replied to or quoted keep an author to point at; the personal
+    # fields above are scrubbed and the username is rewritten to deleted_<id>.
+    # A tombstone: login is refused, discovery skips it, and the UI renders it as
+    # "Deleted account".
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     posts = relationship(
         "Post", back_populates="author", cascade="all, delete-orphan"
     )
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None

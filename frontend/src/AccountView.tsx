@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { KeyRound, Loader2, Mail, Monitor, Smartphone } from "lucide-react";
 import {
+  KeyRound,
+  Loader2,
+  Mail,
+  Monitor,
+  Smartphone,
+  Trash2,
+} from "lucide-react";
+import {
+  deleteAccount,
   displayName,
   getUserProfile,
   listBlocked,
@@ -23,7 +31,13 @@ import { Avatar, formatCompactDate, getErrorMessage } from "./components";
 import { ChangeEmailModal } from "./ChangeEmailModal";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 
-export function AccountView({ currentUser }: { currentUser: UserSummary }) {
+export function AccountView({
+  currentUser,
+  onLoggedOut,
+}: {
+  currentUser: UserSummary;
+  onLoggedOut: () => void;
+}) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState("");
   const [changingEmail, setChangingEmail] = useState(false);
@@ -106,6 +120,7 @@ export function AccountView({ currentUser }: { currentUser: UserSummary }) {
 
       <BlockedSection />
       <MutedSection />
+      <DeleteAccountSection onLoggedOut={onLoggedOut} />
 
       {changingEmail && profile ? (
         <ChangeEmailModal
@@ -448,6 +463,102 @@ function MutedSection() {
         <button className="load-more" onClick={() => void load(cursor, true)}>
           Load more
         </button>
+      ) : null}
+    </section>
+  );
+}
+
+function DeleteAccountSection({ onLoggedOut }: { onLoggedOut: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [password, setPassword] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+
+  function close() {
+    setConfirming(false);
+    setPassword("");
+    setError("");
+  }
+
+  async function submit() {
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteAccount(password);
+      // Server revoked our session and cleared the cookie; drop local state,
+      // which drops the app back to the sign-in screen.
+      onLoggedOut();
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <section className="settings-section" aria-labelledby="delete-heading">
+      <div className="settings-section-head">
+        <h2 id="delete-heading" className="settings-danger-heading">
+          Delete account
+        </h2>
+      </div>
+      <p className="form-hint settings-section-intro">
+        This can&apos;t be undone. Your profile, follows, likes, and personal data
+        are removed and you&apos;re signed out everywhere. Posts you&apos;ve made
+        stay as &ldquo;Deleted account&rdquo; so replies others left on them keep
+        working.
+      </p>
+      <button className="danger-button" onClick={() => setConfirming(true)}>
+        <Trash2 size={16} aria-hidden="true" />
+        <span>Delete my account</span>
+      </button>
+
+      {confirming ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => (deleting ? undefined : close())}
+        >
+          <section
+            className="modal confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete account"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2>Delete your account?</h2>
+            <p>
+              Enter your password to confirm. This permanently deletes your
+              account and can&apos;t be undone.
+            </p>
+            <label className="edit-field">
+              <span>Password</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoFocus
+              />
+            </label>
+            {error ? <p className="form-error">{error}</p> : null}
+            <div className="confirm-actions">
+              <button
+                className="outline-button"
+                onClick={close}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                onClick={() => void submit()}
+                disabled={deleting || password.length === 0}
+              >
+                {deleting ? "Deleting…" : "Delete account"}
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </section>
   );

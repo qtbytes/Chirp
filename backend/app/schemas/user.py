@@ -77,6 +77,9 @@ class UserSummary(BaseModel):
     display_name: str | None = None
     created_at: datetime
     avatar_url: str | None = None
+    # True once the account is deleted, so the UI can tombstone the author of a
+    # post that outlived its owner. Read from the User.is_deleted property.
+    is_deleted: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -94,6 +97,14 @@ class PasswordChange(BaseModel):
     new_password: str = Field(
         min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH
     )
+
+
+class AccountDeletion(BaseModel):
+    # Deleting an account is irreversible from the user's side, so -- like
+    # change-password and change-email -- a stolen session cookie alone must not
+    # be enough. Proving knowledge of the password is the gate. No minimum, for
+    # the same timing reason PasswordChange.current_password has none.
+    password: str = Field(max_length=PASSWORD_MAX_LENGTH)
 
 
 class EmailChange(BaseModel):
@@ -156,6 +167,8 @@ class UserProfileOut(BaseModel):
     tweet_count: int
     is_following: bool
     is_current_user: bool
+    # Whether this profile belongs to a deleted (tombstoned) account.
+    is_deleted: bool = False
     # Whether the viewer has blocked this profile's owner.
     is_blocked: bool = False
     # Whether the viewer has muted this profile's owner. Like is_blocked, this is

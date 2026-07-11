@@ -125,6 +125,12 @@ class Settings(BaseSettings):
     rate_limit_change_password_max_requests: int = 5
     rate_limit_change_password_window_seconds: int = 900
 
+    # Deleting an account also verifies the current password, so it exposes the
+    # same guess-from-a-stolen-cookie vector as change_password and gets the same
+    # tight bucket.
+    rate_limit_delete_account_max_requests: int = 5
+    rate_limit_delete_account_window_seconds: int = 900
+
     # Unauthenticated. forgot_password sends mail to somebody else's address, so
     # a loose limit is a spam cannon aimed at a third party. The two redeem
     # endpoints are throttled because a token is a 256-bit secret that a patient

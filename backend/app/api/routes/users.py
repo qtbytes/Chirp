@@ -80,6 +80,7 @@ def _build_profile(db: Session, user: User, current_user_id: int) -> UserProfile
         tweet_count=tweet_repository.count_tweets_by_author(db, user.id),
         is_following=follow_repository.is_following(db, current_user_id, user.id),
         is_current_user=is_current_user,
+        is_deleted=user.is_deleted,
         # Whether *you* have blocked them, so the UI can offer "Unblock". Their
         # having blocked you is deliberately not surfaced as a flag -- its effect
         # (their content simply isn't there) is the only signal.
