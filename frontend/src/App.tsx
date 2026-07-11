@@ -411,7 +411,7 @@ function AppLayout({
           <Link
             className={isNotificationsRoute ? "rail-link active" : "rail-link"}
             to="/notifications"
-            aria-label={unread > 0 ? `Alerts, ${unread} unread` : "Alerts"}
+            aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
           >
             <span className="rail-icon">
               <Bell size={22} aria-hidden="true" />
@@ -421,14 +421,14 @@ function AppLayout({
                 </span>
               ) : null}
             </span>
-            <span>Alerts</span>
+            <span>Notifications</span>
           </Link>
           <Link
             className={isSettingsRoute ? "rail-link active" : "rail-link"}
             to="/settings"
           >
             <Settings size={22} aria-hidden="true" />
-            <span>Account</span>
+            <span>Settings</span>
           </Link>
         </nav>
         <div className="rail-user">
