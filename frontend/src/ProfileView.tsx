@@ -255,11 +255,13 @@ export function ProfileView({
           ) : profile.is_blocked ? (
             <div className="profile-actions">
               <button
-                className="outline-button"
+                className="blocked-toggle"
                 onClick={() => void toggleBlock()}
                 disabled={blockBusy}
+                title="Unblock"
               >
-                Blocked
+                <span className="blocked-toggle-default">Blocked</span>
+                <span className="blocked-toggle-hover">Unblock</span>
               </button>
             </div>
           ) : (
@@ -299,41 +301,38 @@ export function ProfileView({
         {profileError ? <p className="form-error">{profileError}</p> : null}
       </header>
 
-      <div className="tab-list" role="tablist" aria-label="Profile content">
-        <Link
-          to={`/${encodeURIComponent(username)}`}
-          className={activeTab === "tweets" ? "tab active" : "tab"}
-          role="tab"
-          aria-selected={activeTab === "tweets"}
-        >
-          Tweets
-        </Link>
-        <Link
-          to={`/${encodeURIComponent(username)}/replies`}
-          className={activeTab === "replies" ? "tab active" : "tab"}
-          role="tab"
-          aria-selected={activeTab === "replies"}
-        >
-          Replies
-        </Link>
-      </div>
+      {profile.is_blocked ? null : (
+        <div className="tab-list" role="tablist" aria-label="Profile content">
+          <Link
+            to={`/${encodeURIComponent(username)}`}
+            className={activeTab === "tweets" ? "tab active" : "tab"}
+            role="tab"
+            aria-selected={activeTab === "tweets"}
+          >
+            Tweets
+          </Link>
+          <Link
+            to={`/${encodeURIComponent(username)}/replies`}
+            className={activeTab === "replies" ? "tab active" : "tab"}
+            role="tab"
+            aria-selected={activeTab === "replies"}
+          >
+            Replies
+          </Link>
+        </div>
+      )}
 
       {feedError ? <div className="status-panel error">{feedError}</div> : null}
 
       {profile.is_blocked ? (
-        <div className="status-panel">
-          <strong>@{profile.username} is blocked</strong>
-          <p>
+        <div className="blocked-notice">
+          <h2 className="blocked-notice-title">
+            @{profile.username} is blocked
+          </h2>
+          <p className="blocked-notice-text">
             You can&apos;t see their Tweets, and they can&apos;t see yours or
             interact with you.
           </p>
-          <button
-            className="outline-button"
-            onClick={() => void toggleBlock()}
-            disabled={blockBusy}
-          >
-            Unblock
-          </button>
         </div>
       ) : activeTab === "tweets" ? (
         <>
@@ -416,6 +415,7 @@ export function ProfileView({
           title={`Block @${profile.username}?`}
           message="They won't be able to follow you or see your Tweets, and you won't see theirs. Any follow between you is removed."
           confirmLabel="Block"
+          busyLabel="Blocking…"
           busy={blockBusy}
           onConfirm={() => void toggleBlock()}
           onCancel={() => setConfirmingBlock(false)}

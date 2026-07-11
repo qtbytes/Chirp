@@ -465,6 +465,7 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel,
+  busyLabel = "Working…",
   busy,
   onConfirm,
   onCancel,
@@ -472,6 +473,7 @@ export function ConfirmDialog({
   title: string;
   message: string;
   confirmLabel: string;
+  busyLabel?: string;
   busy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -498,7 +500,7 @@ export function ConfirmDialog({
             Cancel
           </button>
           <button className="danger-button" onClick={onConfirm} disabled={busy}>
-            {busy ? "Deleting…" : confirmLabel}
+            {busy ? busyLabel : confirmLabel}
           </button>
         </div>
       </section>
@@ -1184,6 +1186,7 @@ export function TweetCard({
           title="Delete Tweet?"
           message="This can't be undone and it will be removed from your profile, the timeline, and any threads it started."
           confirmLabel="Delete"
+          busyLabel="Deleting…"
           busy={deleting}
           onConfirm={() => void confirmDelete()}
           onCancel={() => setConfirmingDelete(false)}
@@ -1397,6 +1400,7 @@ export function CommentCard({
           title="Delete comment?"
           message="This can't be undone and it will remove this comment and any replies to it."
           confirmLabel="Delete"
+          busyLabel="Deleting…"
           busy={deleting}
           onConfirm={() => void confirmDelete()}
           onCancel={() => setConfirmingDelete(false)}
