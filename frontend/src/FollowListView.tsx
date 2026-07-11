@@ -134,8 +134,9 @@ export function FollowListView() {
         <div className="status-panel">{empty}</div>
       ) : null}
 
-      <div className="user-list">
-        {items.map((user) => (
+      {items.length > 0 ? (
+        <div className="user-list">
+          {items.map((user) => (
           <div className="user-row" key={user.id}>
             <Link
               to={`/${encodeURIComponent(user.username)}`}
@@ -154,9 +155,10 @@ export function FollowListView() {
                 {user.is_following ? "Following" : "Follow"}
               </button>
             )}
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {cursor ? (
         <button
