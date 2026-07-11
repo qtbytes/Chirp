@@ -231,6 +231,23 @@ export function ProfileView({
     }
   }
 
+  // After muting or blocking the profile's owner from one of their post cards,
+  // resync from the server: a block flips the profile to its blocked state and
+  // empties the feed, while a mute leaves the posts in place but updates the
+  // header's Mute/Unmute control.
+  async function refreshAfterModeration() {
+    try {
+      setProfile(await getUserProfile(username));
+    } catch (err) {
+      setProfileError(getErrorMessage(err));
+    }
+    if (activeTab === "tweets") {
+      void loadTweets();
+    } else {
+      void loadReplies();
+    }
+  }
+
   if (notFound) {
     return (
       <section className="profile-view">
@@ -387,6 +404,8 @@ export function ProfileView({
                 onDeleted={(id) =>
                   setTweets((current) => current.filter((item) => item.id !== id))
                 }
+                onAuthorMuted={() => void refreshAfterModeration()}
+                onAuthorBlocked={() => void refreshAfterModeration()}
               />
             ))}
           </section>
@@ -418,6 +437,8 @@ export function ProfileView({
                   onTweetPatch={patchReplyParent}
                   currentUserId={currentUser.id}
                   onDeleted={() => void loadReplies()}
+                  onAuthorMuted={() => void loadReplies()}
+                  onAuthorBlocked={() => void loadReplies()}
                 />
                 <CommentCard
                   comment={item.comment}

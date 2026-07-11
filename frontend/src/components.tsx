@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  Ban,
   Heart,
   Image as ImageIcon,
   Loader2,
@@ -18,15 +19,18 @@ import {
   Pencil,
   Repeat2,
   Trash2,
+  VolumeX,
   X,
 } from "lucide-react";
 import {
   ApiError,
+  blockUser,
   createComment,
   createTweet,
   deleteComment,
   deleteTweet,
   displayName,
+  muteUser,
   editComment,
   editTweet,
   isVideoUrl,
@@ -391,12 +395,21 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
 }
 
 // A "⋯" dropdown with Edit/Delete, shown only on the author's own posts.
+// The "···" menu on a post. For your own posts it offers Edit/Delete; for
+// anyone else's it offers moderation of the author (Mute/Block). A post is
+// never both, so the two sets are mutually exclusive in practice.
 export function PostMenu({
   onEdit,
   onDelete,
+  authorUsername,
+  onMute,
+  onBlock,
 }: {
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  authorUsername?: string;
+  onMute?: () => void;
+  onBlock?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -413,6 +426,11 @@ export function PostMenu({
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, [open]);
+
+  function choose(action: () => void) {
+    setOpen(false);
+    action();
+  }
 
   return (
     <div className="post-menu" ref={ref}>
@@ -431,29 +449,40 @@ export function PostMenu({
       </button>
       {open ? (
         <div className="post-menu-dropdown" role="menu" onClick={(event) => event.stopPropagation()}>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onEdit();
-            }}
-          >
-            <Pencil size={16} aria-hidden="true" />
-            <span>Edit</span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="danger"
-            onClick={() => {
-              setOpen(false);
-              onDelete();
-            }}
-          >
-            <Trash2 size={16} aria-hidden="true" />
-            <span>Delete</span>
-          </button>
+          {onEdit ? (
+            <button type="button" role="menuitem" onClick={() => choose(onEdit)}>
+              <Pencil size={16} aria-hidden="true" />
+              <span>Edit</span>
+            </button>
+          ) : null}
+          {onDelete ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="danger"
+              onClick={() => choose(onDelete)}
+            >
+              <Trash2 size={16} aria-hidden="true" />
+              <span>Delete</span>
+            </button>
+          ) : null}
+          {onMute ? (
+            <button type="button" role="menuitem" onClick={() => choose(onMute)}>
+              <VolumeX size={16} aria-hidden="true" />
+              <span>Mute{authorUsername ? ` @${authorUsername}` : ""}</span>
+            </button>
+          ) : null}
+          {onBlock ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="danger"
+              onClick={() => choose(onBlock)}
+            >
+              <Ban size={16} aria-hidden="true" />
+              <span>Block{authorUsername ? ` @${authorUsername}` : ""}</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -987,6 +1016,8 @@ export function TweetCard({
   onTweetPatch,
   currentUserId,
   onDeleted,
+  onAuthorMuted,
+  onAuthorBlocked,
   onQuoted,
 }: {
   tweet: Tweet;
@@ -994,13 +1025,55 @@ export function TweetCard({
   onTweetPatch: (tweetId: number, patch: Partial<Tweet>) => void;
   currentUserId: number;
   onDeleted: (tweetId: number) => void;
+  /**
+   * Called after the author is muted from this card. Optional because muting
+   * doesn't always hide content (a muted user's own profile still shows their
+   * posts); hosts that aggregate posts -- the feed, a thread -- pass it to drop
+   * the author. When omitted, the card simply stays.
+   */
+  onAuthorMuted?: (authorId: number) => void;
+  /**
+   * Called after the author is blocked from this card. A block always hides the
+   * author, so hosts pass this to drop every post by them; when omitted it falls
+   * back to removing just this card via onDeleted.
+   */
+  onAuthorBlocked?: (authorId: number) => void;
   onQuoted?: (tweet: Tweet) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
+  const [moderating, setModerating] = useState(false);
   const isOwn = tweet.author.id === currentUserId;
+
+  async function muteAuthor() {
+    setError("");
+    try {
+      await muteUser(tweet.author.id);
+      onAuthorMuted?.(tweet.author.id);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  async function confirmBlock() {
+    setModerating(true);
+    setError("");
+    try {
+      await blockUser(tweet.author.id);
+      if (onAuthorBlocked) {
+        onAuthorBlocked(tweet.author.id);
+      } else {
+        onDeleted(tweet.id);
+      }
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setModerating(false);
+      setConfirmingBlock(false);
+    }
+  }
 
   async function saveEdit(content: string) {
     setSaving(true);
@@ -1108,7 +1181,13 @@ export function TweetCard({
           onEdit={() => setEditing(true)}
           onDelete={() => setConfirmingDelete(true)}
         />
-      ) : null}
+      ) : (
+        <PostMenu
+          authorUsername={tweet.author.username}
+          onMute={() => void muteAuthor()}
+          onBlock={() => setConfirmingBlock(true)}
+        />
+      )}
       <div className="tweet-body">
         <header>
           <Link
@@ -1197,6 +1276,17 @@ export function TweetCard({
           quoted={tweet}
           onClose={() => setQuoting(false)}
           onQuoted={handleQuoted}
+        />
+      ) : null}
+      {confirmingBlock ? (
+        <ConfirmDialog
+          title={`Block @${tweet.author.username}?`}
+          message="They won't be able to follow you or see your Tweets, and you won't see theirs. Any follow between you is removed."
+          confirmLabel="Block"
+          busyLabel="Blocking…"
+          busy={moderating}
+          onConfirm={() => void confirmBlock()}
+          onCancel={() => setConfirmingBlock(false)}
         />
       ) : null}
     </article>

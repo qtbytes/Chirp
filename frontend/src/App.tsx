@@ -680,6 +680,25 @@ function HomeView() {
     });
   }, []);
 
+  // After muting/blocking an author, drop every post of theirs from the feed --
+  // not just the card the action came from.
+  const removeTweetsByAuthor = useCallback(
+    (authorId: number) => {
+      const removedIds = new Set(
+        Object.values(tweetById)
+          .filter((tweet) => tweet.author.id === authorId)
+          .map((tweet) => tweet.id),
+      );
+      setTweetIds((ids) => ids.filter((id) => !removedIds.has(id)));
+      setTweetById((current) => {
+        const next = { ...current };
+        removedIds.forEach((id) => delete next[id]);
+        return next;
+      });
+    },
+    [tweetById],
+  );
+
   const loadFeed = useCallback(
     async (cursor?: string | null, append = false) => {
       setLoadingFeed(true);
@@ -793,6 +812,8 @@ function HomeView() {
             onTweetPatch={patchTweet}
             currentUserId={currentUser.id}
             onDeleted={removeTweet}
+            onAuthorMuted={removeTweetsByAuthor}
+            onAuthorBlocked={removeTweetsByAuthor}
             onQuoted={insertPostedTweet}
           />
         ))}
