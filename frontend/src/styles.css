@@ -1390,6 +1390,11 @@ button.rail-link:disabled:hover {
 
 .discovery-column {
   padding-top: 12px;
+  /* The column is pinned at height: 100vh (see the .rail/.discovery-column rule
+     above), so its own content -- Trending plus a potentially long people list --
+     must scroll within it rather than being clipped past the viewport bottom. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .discovery-panel {
