@@ -13,22 +13,19 @@ from app.core.session_store import (
     session_handle,
     session_id_from_cookie,
 )
+from app.db.redis_client import get_redis_client
 from fastapi.testclient import TestClient
 from main import app
+from redis.exceptions import RedisError
 
 
-@pytest.fixture(autouse=True)
-def _in_memory_sessions(monkeypatch) -> None:
-    """
-    Exercise the store without depending on a running Redis.
+def _redis_down(monkeypatch) -> None:
+    """Make the session store see Redis as unreachable."""
 
-    Both backends are covered: the tests that only care about semantics run
-    against the in-process fallback, and test_redis_backend_roundtrip skips
-    itself when Redis is absent.
-    """
-    monkeypatch.setattr(session_store, "get_redis_client", lambda: None)
-    monkeypatch.setattr(settings, "session_cookie_secure", False)
-    session_store._memory_sessions.clear()
+    def down(*args, **kwargs):
+        raise RedisError("redis is gone")
+
+    monkeypatch.setattr(session_store, "get_redis_client", down)
 
 
 @pytest.fixture
@@ -73,16 +70,21 @@ def test_expired_session_is_rejected() -> None:
 
 
 def test_active_session_slides_its_ttl() -> None:
-    cookie = create_session(user_id=9, ttl_seconds=1)
+    cookie = create_session(user_id=9)
     sid = cookie.split(".", 1)[0]
+    key = session_store._session_key(sid)
+    redis = get_redis_client()
 
-    # resolve() with refresh=True should push expiry out to the full TTL.
-    assert resolve_session(cookie, refresh=True) == 9
-    expires_at = session_store._memory_sessions[sid].expires_at
+    # Shrink the TTL so a refresh is observable.
+    redis.expire(key, 5)
 
+    # A read that does not refresh must leave the (short) TTL alone.
     assert resolve_session(cookie, refresh=False) == 9
-    unchanged = session_store._memory_sessions[sid].expires_at
-    assert unchanged == expires_at, "refresh=False must not extend the session"
+    assert redis.ttl(key) <= 5, "refresh=False must not extend the session"
+
+    # A refreshing read pushes it back out to the full session TTL.
+    assert resolve_session(cookie, refresh=True) == 9
+    assert redis.ttl(key) > 5, "refresh=True slides the TTL forward"
 
 
 def test_destroy_session_invalidates_immediately() -> None:
@@ -226,22 +228,24 @@ def test_expired_cookie_is_rejected_by_the_api(client: TestClient, monkeypatch) 
     assert client.get("/api/v1/auth/me").status_code == 401
 
 
-def test_production_refuses_the_in_memory_fallback(monkeypatch) -> None:
-    """Without Redis, a production config must fail closed rather than degrade."""
-    monkeypatch.setattr(settings, "session_cookie_secure", True)
+def test_redis_outage_fails_closed(monkeypatch) -> None:
+    """An unreachable Redis raises SessionBackendUnavailable, never degrades."""
+    _redis_down(monkeypatch)
 
     with pytest.raises(SessionBackendUnavailable):
         create_session(user_id=1)
 
-    # A validly signed id reaches the backend, which is missing -> fail closed.
+    # A validly signed id reaches the backend, which is down -> fail closed.
     signed = f"some-sid.{sign_payload('some-sid')}"
     with pytest.raises(SessionBackendUnavailable):
         resolve_session(signed)
 
 
 def test_forged_cookie_never_reaches_the_backend(monkeypatch) -> None:
-    """A bad signature is a 401, not a 503 -- it must not consult the store."""
-    monkeypatch.setattr(settings, "session_cookie_secure", True)
+    """A bad signature is a miss, not a 503 -- it must not consult the store."""
+    # Even with Redis down, a forged/absent cookie is rejected on the signature
+    # check before the store is ever touched.
+    _redis_down(monkeypatch)
 
     assert resolve_session("anything.at-all") is None
     assert resolve_session(None) is None
@@ -249,21 +253,15 @@ def test_forged_cookie_never_reaches_the_backend(monkeypatch) -> None:
 
 def test_session_backend_unavailable_surfaces_as_503(client: TestClient, monkeypatch) -> None:
     _register(client)
-    monkeypatch.setattr(settings, "session_cookie_secure", True)
+    _redis_down(monkeypatch)
 
     response = client.get("/api/v1/auth/me")
     assert response.status_code == 503
     assert "unavailable" in response.json()["detail"].lower()
 
 
-def test_redis_backend_roundtrip(monkeypatch) -> None:
-    """Same semantics against the real backend, when one is running."""
-    monkeypatch.undo()  # restore the real get_redis_client
-    from app.db.redis_client import get_redis_client
-
-    if get_redis_client() is None:
-        pytest.skip("Redis is not running")
-
+def test_full_session_lifecycle_and_legacy_pruning() -> None:
+    """End-to-end against the real Redis backend: lifecycle, revoke, metadata, legacy."""
     cookie = create_session(user_id=4242, ttl_seconds=60)
     assert resolve_session(cookie) == 4242
 

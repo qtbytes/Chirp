@@ -23,10 +23,9 @@ def get_trending(db: Session) -> list[dict]:
     """Return the cached trending hashtags, recomputing on a miss."""
     redis_client = get_redis_client()
 
-    if redis_client is not None:
-        cached = redis_client.get(_CACHE_KEY)
-        if cached:
-            return json.loads(cached)
+    cached = redis_client.get(_CACHE_KEY)
+    if cached:
+        return json.loads(cached)
 
     trending = hashtag_repository.list_trending(
         db,
@@ -36,11 +35,10 @@ def get_trending(db: Session) -> list[dict]:
         limit=settings.trending_limit,
     )
 
-    if redis_client is not None:
-        redis_client.setex(
-            _CACHE_KEY,
-            settings.trending_cache_ttl_seconds,
-            json.dumps(trending),
-        )
+    redis_client.setex(
+        _CACHE_KEY,
+        settings.trending_cache_ttl_seconds,
+        json.dumps(trending),
+    )
 
     return trending

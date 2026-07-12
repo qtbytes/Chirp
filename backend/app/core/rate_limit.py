@@ -97,13 +97,6 @@ def _enforce(bucket_name: str, identity: str) -> None:
     """
     max_requests, window_seconds = _policy(bucket_name)
 
-    redis_client = get_redis_client()
-    if redis_client is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Redis is required for rate limiting but is unavailable.",
-        )
-
     now_ns = time_ns()
     now_ms = now_ns // 1_000_000
     window_start_ms = now_ms - window_seconds * 1000
@@ -112,6 +105,7 @@ def _enforce(bucket_name: str, identity: str) -> None:
     member = f"{now_ns}:{identity}"
 
     try:
+        redis_client = get_redis_client()
         pipeline = redis_client.pipeline(transaction=True)
         pipeline.zremrangebyscore(bucket_key, 0, window_start_ms)
         pipeline.zadd(bucket_key, {member: now_ms})

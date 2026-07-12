@@ -14,12 +14,13 @@ def main() -> None:
     Usage:
         uv run python -m app.worker
     """
-    redis = get_redis_client()
-    if redis is None:
+    try:
+        redis = get_redis_client()
+    except RedisError as exc:
         raise RuntimeError(
             f"Unable to connect to Redis at {settings.redis_url}. "
             "RQ worker cannot start without Redis."
-        )
+        ) from exc
 
     queue_names = [settings.rq_queue_name]
 

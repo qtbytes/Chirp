@@ -18,21 +18,18 @@ Lookups are by derived key, so there is no secret to compare and no timing side
 channel to protect: an attacker who cannot produce the token cannot produce its
 hash, and a wrong hash simply misses.
 
-Fallback: as with sessions, an unreachable Redis falls back to an in-process
-dict for local development, and that fallback is refused in a production
-configuration (``session_cookie_secure``) so tokens never silently become
-per-worker.
+Redis is required. When it cannot be reached the caller gets
+``TokenBackendUnavailable`` (surfaced as 503).
 """
 
 from __future__ import annotations
 
 import hashlib
 import secrets
-import time
 from enum import Enum
 
-from app.core.config import settings
 from app.db.redis_client import get_redis_client
+from redis import Redis
 from redis.exceptions import RedisError
 
 
@@ -42,11 +39,7 @@ class TokenPurpose(str, Enum):
 
 
 class TokenBackendUnavailable(RuntimeError):
-    """The token store cannot be reached and no safe fallback is allowed."""
-
-
-# digest -> (purpose, user_id, expires_at_monotonic)
-_memory_tokens: dict[str, tuple[str, int, float]] = {}
+    """The token store (Redis) cannot be reached."""
 
 
 def _digest(raw_token: str) -> str:
@@ -61,38 +54,19 @@ def _user_index_key(purpose: TokenPurpose, user_id: int) -> str:
     return f"token_user:{purpose.value}:{user_id}"
 
 
-def _redis_or_memory():
+def _client() -> Redis:
+    """The Redis client, or ``TokenBackendUnavailable`` if it cannot connect."""
     try:
-        client = get_redis_client()
-    except RedisError:
-        client = None
-
-    if client is not None:
-        return client
-
-    if settings.session_cookie_secure:
-        raise TokenBackendUnavailable(
-            "Redis is unavailable and in-process tokens are unsafe in production."
-        )
-    return None
-
-
-def _memory_purge_expired() -> None:
-    now = time.monotonic()
-    for digest in [d for d, (_, _, exp) in _memory_tokens.items() if exp <= now]:
-        _memory_tokens.pop(digest, None)
+        return get_redis_client()
+    except RedisError as exc:
+        raise TokenBackendUnavailable("token store is unavailable") from exc
 
 
 def issue_token(purpose: TokenPurpose, user_id: int, ttl_seconds: int) -> str:
     """Mint a token for ``user_id`` and return it. Only the caller ever sees it."""
     raw_token = secrets.token_urlsafe(32)
     digest = _digest(raw_token)
-    client = _redis_or_memory()
-
-    if client is None:
-        _memory_purge_expired()
-        _memory_tokens[digest] = (purpose.value, user_id, time.monotonic() + ttl_seconds)
-        return raw_token
+    client = _client()
 
     try:
         pipeline = client.pipeline(transaction=True)
@@ -119,30 +93,12 @@ def redeem_token(purpose: TokenPurpose, raw_token: str) -> int | None:
         return None
 
     digest = _digest(raw_token)
-    client = _redis_or_memory()
-
-    if client is None:
-        _memory_purge_expired()
-        entry = _memory_tokens.get(digest)
-        if entry is None:
-            return None
-        stored_purpose, user_id, _ = entry
-
-        # A token minted to confirm an address must not double as a reset link --
-        # and offering it to the wrong endpoint must not *consume* it either, or
-        # anyone holding a confirmation link could destroy it by POSTing it to
-        # /auth/reset-password. Check the purpose before spending the token.
-        #
-        # Redis gets this for free: its keys are namespaced by purpose, so the
-        # GETDEL below simply misses. This branch has to do it by hand, and the
-        # two must not disagree.
-        if stored_purpose != purpose.value:
-            return None
-
-        del _memory_tokens[digest]
-        return user_id
+    client = _client()
 
     try:
+        # Keys are namespaced by purpose, so offering a token to the wrong
+        # endpoint simply misses the GETDEL -- a confirmation link POSTed to
+        # /auth/reset-password neither redeems nor gets consumed.
         raw = client.getdel(_token_key(purpose, digest))
         if raw is None:
             return None
@@ -157,18 +113,7 @@ def redeem_token(purpose: TokenPurpose, raw_token: str) -> int | None:
 
 def revoke_tokens(purpose: TokenPurpose, user_id: int) -> int:
     """Invalidate every outstanding token of one purpose for a user."""
-    client = _redis_or_memory()
-
-    if client is None:
-        _memory_purge_expired()
-        victims = [
-            digest
-            for digest, (stored_purpose, uid, _) in _memory_tokens.items()
-            if uid == user_id and stored_purpose == purpose.value
-        ]
-        for digest in victims:
-            _memory_tokens.pop(digest, None)
-        return len(victims)
+    client = _client()
 
     try:
         digests = client.smembers(_user_index_key(purpose, user_id))

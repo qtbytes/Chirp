@@ -296,11 +296,13 @@ def test_tokens_are_stored_hashed_never_in_the_clear(client, outbox) -> None:
     _forgot(client, "alice@example.com")
     token = outbox.token()
 
-    stored = tokens._memory_tokens
-    assert stored, "no token was stored"
-    assert token not in stored
-    assert all(token not in str(key) for key in stored)
-    assert tokens._digest(token) in stored
+    from app.db.redis_client import get_redis_client
+
+    client = get_redis_client()
+    keys = [k.decode() if isinstance(k, bytes) else k for k in client.keys("token:*")]
+    assert keys, "no token was stored"
+    assert all(token not in key for key in keys)
+    assert any(tokens._digest(token) in key for key in keys)
 
 
 # ----------------------------------------------- the account-takeover boundary

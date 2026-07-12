@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.rate_limit import REGISTERED_BUCKETS
 from fastapi.testclient import TestClient
 from main import app
+from redis.exceptions import RedisError
 
 
 class _FakeSortedSets:
@@ -232,11 +233,12 @@ def test_authenticated_buckets_key_on_the_user_not_the_address(
 def test_rate_limiting_fails_closed_when_redis_is_gone(
     client: TestClient, monkeypatch
 ) -> None:
-    """
-    A limit that cannot be enforced is refused, not waived. The timeline and
-    link-preview *caches* degrade without Redis; this guarantee does not.
-    """
-    monkeypatch.setattr(rate_limit, "get_redis_client", lambda: None)
+    """A limit that cannot be enforced is refused (503), not waived."""
+
+    def down():
+        raise RedisError("redis is gone")
+
+    monkeypatch.setattr(rate_limit, "get_redis_client", down)
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
 
     assert _login(client).status_code == 503

@@ -8,6 +8,8 @@ Defense in depth is good and it also hides the defect. These tests hold
 `redeem_token` to the guarantee on its own.
 """
 
+import time
+
 import pytest
 from app.core import tokens
 from app.core.tokens import (
@@ -16,6 +18,7 @@ from app.core.tokens import (
     redeem_token,
     revoke_tokens,
 )
+from app.db.redis_client import get_redis_client
 
 RESET = TokenPurpose.PASSWORD_RESET
 VERIFY = TokenPurpose.EMAIL_VERIFICATION
@@ -53,7 +56,9 @@ def test_a_token_is_bound_to_its_purpose() -> None:
 
 
 def test_an_expired_token_is_gone() -> None:
-    token = issue_token(RESET, user_id=7, ttl_seconds=0)
+    # Real Redis rejects SETEX 0, so mint a 1s token and let it lapse.
+    token = issue_token(RESET, user_id=7, ttl_seconds=1)
+    time.sleep(1.1)
     assert redeem_token(RESET, token) is None
 
 
@@ -79,9 +84,12 @@ def test_the_store_never_holds_a_redeemable_token() -> None:
     """A dump of the keyspace, or a stray log line, must yield nothing usable."""
     token = issue_token(RESET, user_id=7, ttl_seconds=60)
 
-    assert token not in tokens._memory_tokens
-    assert all(token not in str(key) for key in tokens._memory_tokens)
-    assert tokens._digest(token) in tokens._memory_tokens
+    client = get_redis_client()
+    keys = [k.decode() if isinstance(k, bytes) else k for k in client.keys("token:*")]
+    # The raw token appears nowhere; only a key derived from its hash exists.
+    assert keys, "no token was stored"
+    assert all(token not in key for key in keys)
+    assert client.exists(tokens._token_key(RESET, tokens._digest(token)))
 
 
 def test_two_tokens_are_never_the_same() -> None:
@@ -92,46 +100,3 @@ def test_two_tokens_are_never_the_same() -> None:
 @pytest.mark.parametrize("garbage", ["", "not-a-token", "x" * 200])
 def test_garbage_redeems_to_nothing(garbage: str) -> None:
     assert redeem_token(RESET, garbage) is None
-
-
-def test_the_redis_backend_behaves_exactly_like_the_fallback(monkeypatch) -> None:
-    """
-    The two backends must not diverge, and once did.
-
-    Redis namespaces its keys by purpose, so offering a token to the wrong
-    endpoint simply misses. The in-process dict is keyed by digest alone, so it
-    had to check the purpose by hand -- and originally consumed the token before
-    doing so, letting anyone destroy a confirmation link by POSTing it to
-    /auth/reset-password. Run the same script against the real store.
-    """
-    monkeypatch.undo()  # restore the real get_redis_client that conftest stubbed
-    from app.db.redis_client import get_redis_client
-
-    if get_redis_client() is None:
-        pytest.skip("redis is not running")
-
-    # Without this the undo() above could quietly fail and leave the module on
-    # the in-process dict, turning this into a duplicate of the tests above.
-    assert tokens.get_redis_client() is not None, "not exercising the Redis backend"
-    assert not tokens._memory_tokens
-
-    user_id = 987_654
-    revoke_tokens(RESET, user_id)
-    revoke_tokens(VERIFY, user_id)
-
-    verification = issue_token(VERIFY, user_id, ttl_seconds=60)
-    reset = issue_token(RESET, user_id, ttl_seconds=60)
-    try:
-        # wrong purpose: refused, and not consumed
-        assert redeem_token(RESET, verification) is None
-        assert redeem_token(VERIFY, reset) is None
-
-        # right purpose: works exactly once
-        assert redeem_token(VERIFY, verification) == user_id
-        assert redeem_token(VERIFY, verification) is None
-
-        assert redeem_token(RESET, reset) == user_id
-        assert redeem_token(RESET, reset) is None
-    finally:
-        revoke_tokens(RESET, user_id)
-        revoke_tokens(VERIFY, user_id)

@@ -341,9 +341,6 @@ class TimelineService:
         - first page is hottest
         - deeper pages change often and are less frequently accessed
         """
-        if self.redis is None:
-            return None
-
         payload = self.redis.get(self._cache_key(user_id, limit, strategy))
         if not payload:
             return None
@@ -357,9 +354,6 @@ class TimelineService:
         strategy: str,
         page: TimelinePage,
     ) -> None:
-        if self.redis is None:
-            return
-
         self.redis.setex(
             self._cache_key(user_id, limit, strategy),
             settings.timeline_cache_ttl_seconds,
@@ -382,9 +376,6 @@ def invalidate_timeline_cache_for_users(user_ids: list[int]) -> None:
       bounded staleness is acceptable for the demo benchmark.
     """
     redis_client = get_redis_client()
-    if redis_client is None:
-        return
-
     unique_user_ids = list(set(user_ids))
     eager_invalidation_limit = 1000
 
@@ -438,20 +429,10 @@ def run_feed_fanout_job(tweet_id: int, author_id: int) -> None:
 
 
 def enqueue_feed_fanout_job(tweet_id: int, author_id: int) -> None:
-    """
-    Enqueue fan-out work into RQ when Redis is available.
-
-    If Redis is unavailable, fall back to inline execution so local development
-    still works.
-    """
-    redis_client = get_redis_client()
-    if redis_client is None:
-        run_feed_fanout_job(tweet_id=tweet_id, author_id=author_id)
-        return
-
+    """Enqueue fan-out on write into RQ. Redis is required."""
     queue = Queue(
-        name=getattr(settings, "rq_queue_name", "timeline-fanout"),
-        connection=redis_client,
+        name=settings.rq_queue_name,
+        connection=get_redis_client(),
     )
     queue.enqueue(
         "app.services.timeline_service.run_feed_fanout_job",

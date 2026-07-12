@@ -363,8 +363,6 @@ def _cache_key(url: str) -> str:
 def _cache_get(url: str) -> tuple[bool, LinkPreviewOut | None]:
     """Return ``(hit, preview)``; an empty cached value is a negative result."""
     client = get_redis_client()
-    if client is None:
-        return (False, None)
     raw = client.get(_cache_key(url))
     if raw is None:
         return (False, None)
@@ -378,8 +376,6 @@ def _cache_get(url: str) -> tuple[bool, LinkPreviewOut | None]:
 
 def _cache_set(url: str, preview: LinkPreviewOut | None) -> None:
     client = get_redis_client()
-    if client is None:
-        return
     if preview is None:
         client.setex(_cache_key(url), _NEGATIVE_TTL, b"")
     else:

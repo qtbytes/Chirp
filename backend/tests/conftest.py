@@ -12,6 +12,16 @@ from app.core.config import settings
 # test_profile_api.py.
 settings.uploads_dir = tempfile.mkdtemp(prefix="chirp-test-uploads-")
 
+# Redis is a hard dependency now (no in-memory fallback), so the suite talks to a
+# real Redis -- but on a dedicated logical DB so it never touches the developer's
+# working keyspace (db 0). Set before anything builds a client, and drop any
+# cached client so it reconnects against this DB.
+settings.redis_url = "redis://localhost:6379/15"
+
+from app.db import redis_client as _redis_client  # noqa: E402
+
+_redis_client._client = None
+
 from app.db.database import Base, get_db  # noqa: E402
 from main import app  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
@@ -50,28 +60,17 @@ def reset_database() -> None:
 
 
 @pytest.fixture(autouse=True)
-def isolated_sessions(monkeypatch) -> None:
+def flush_test_redis() -> Generator[None, None, None]:
     """
-    Keep sessions and mailed tokens in-process during tests.
+    Start every test with an empty Redis keyspace.
 
-    Otherwise every test that logs in writes `session:*` keys into the
-    developer's real Redis, sharing a keyspace with their browser session.
-    Tests that want the real backend undo this (see test_sessions.py).
+    Sessions, tokens, caches, and the fan-out queue all share the test DB (15);
+    flushing between tests keeps them isolated -- a session minted by one test, or
+    the single global trending-cache key, cannot leak into the next.
     """
-    from app.core import session_store, tokens
-    from app.services import events, trending_service
+    from app.db.redis_client import get_redis_client
 
-    monkeypatch.setattr(session_store, "get_redis_client", lambda: None)
-    session_store._memory_sessions.clear()
-
-    monkeypatch.setattr(tokens, "get_redis_client", lambda: None)
-    tokens._memory_tokens.clear()
-
-    # Keep notification nudges off the developer's real Redis; tests that want to
-    # assert publishing patch this back with a fake recorder.
-    monkeypatch.setattr(events, "get_redis_client", lambda: None)
-
-    # Trending is cached under a single global key; without this a value cached by
-    # one test would leak into the next (unlike the user-scoped timeline cache).
-    # Computing inline keeps each test hermetic.
-    monkeypatch.setattr(trending_service, "get_redis_client", lambda: None)
+    client = get_redis_client()
+    client.flushdb()
+    yield
+    client.flushdb()

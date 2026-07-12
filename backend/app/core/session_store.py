@@ -24,11 +24,9 @@ The listing exposes ``sha256(sid)`` as an opaque handle, never the sid itself:
 the sid is half of a bearer credential, so it is treated like the mailed tokens
 in ``tokens.py`` -- stored and compared, never handed back to a browser.
 
-Fallback: when Redis is unavailable the store falls back to an in-process dict,
-which is fine for local development and tests but obviously does not survive a
-restart or span workers. In a production configuration (``session_cookie_secure``)
-that fallback is refused and the caller gets ``SessionBackendUnavailable``, so
-auth fails closed rather than silently degrading to per-worker sessions.
+Redis is required. When it cannot be reached the caller gets
+``SessionBackendUnavailable`` (surfaced as 503), so auth fails closed rather than
+silently degrading.
 """
 
 from __future__ import annotations
@@ -42,20 +40,11 @@ from dataclasses import dataclass
 from app.core.config import settings
 from app.core.security import sign_payload
 from app.db.redis_client import get_redis_client
+from redis import Redis
 from redis.exceptions import RedisError, ResponseError
 
 _SESSION_PREFIX = "session:"
 _USER_INDEX_PREFIX = "session_user:"
-
-
-@dataclass
-class _MemorySession:
-    user_id: int
-    expires_at: float  # time.monotonic() deadline
-    created_at: float  # unix epoch, for display
-    last_seen: float  # unix epoch, for display
-    ip: str | None
-    user_agent: str | None
 
 
 @dataclass
@@ -69,11 +58,8 @@ class SessionInfo:
     user_agent: str | None
 
 
-_memory_sessions: dict[str, _MemorySession] = {}
-
-
 class SessionBackendUnavailable(RuntimeError):
-    """The session store cannot be reached and no safe fallback is allowed."""
+    """The session store (Redis) cannot be reached."""
 
 
 def _ttl() -> int:
@@ -132,32 +118,12 @@ def session_id_from_cookie(raw_cookie: str | None) -> str | None:
     return _split_cookie(raw_cookie)
 
 
-def _redis_or_memory():
-    """
-    Return the Redis client, or None to use the in-process fallback.
-
-    Refuses the fallback in a production configuration: per-worker, non-durable
-    sessions are worse than a hard failure.
-    """
+def _client() -> Redis:
+    """The Redis client, or ``SessionBackendUnavailable`` if it cannot connect."""
     try:
-        client = get_redis_client()
-    except RedisError:
-        client = None
-
-    if client is not None:
-        return client
-
-    if settings.session_cookie_secure:
-        raise SessionBackendUnavailable(
-            "Redis is unavailable and in-process sessions are unsafe in production."
-        )
-    return None
-
-
-def _memory_purge_expired() -> None:
-    now = time.monotonic()
-    for sid in [s for s, rec in _memory_sessions.items() if rec.expires_at <= now]:
-        _memory_sessions.pop(sid, None)
+        return get_redis_client()
+    except RedisError as exc:
+        raise SessionBackendUnavailable("session store is unavailable") from exc
 
 
 def create_session(
@@ -170,41 +136,30 @@ def create_session(
     """Create a session and return the signed cookie value."""
     ttl = _ttl() if ttl_seconds is None else ttl_seconds
     sid = secrets.token_urlsafe(32)
-    client = _redis_or_memory()
+    client = _client()
     now = time.time()
 
-    if client is None:
-        _memory_purge_expired()
-        _memory_sessions[sid] = _MemorySession(
-            user_id=user_id,
-            expires_at=time.monotonic() + ttl,
-            created_at=now,
-            last_seen=now,
-            ip=ip,
-            user_agent=user_agent,
+    try:
+        pipeline = client.pipeline(transaction=True)
+        pipeline.hset(
+            _session_key(sid),
+            mapping={
+                "uid": str(user_id),
+                "created": repr(now),
+                "seen": repr(now),
+                "ip": ip or "",
+                "ua": user_agent or "",
+            },
         )
-    else:
-        try:
-            pipeline = client.pipeline(transaction=True)
-            pipeline.hset(
-                _session_key(sid),
-                mapping={
-                    "uid": str(user_id),
-                    "created": repr(now),
-                    "seen": repr(now),
-                    "ip": ip or "",
-                    "ua": user_agent or "",
-                },
-            )
-            pipeline.expire(_session_key(sid), ttl)
-            # Index so every session for a user can be revoked at once. The
-            # index outlives individual sessions, so give it the same TTL and
-            # refresh it whenever a session is created.
-            pipeline.sadd(_user_index_key(user_id), sid)
-            pipeline.expire(_user_index_key(user_id), ttl)
-            pipeline.execute()
-        except RedisError as exc:
-            raise SessionBackendUnavailable("failed to persist session") from exc
+        pipeline.expire(_session_key(sid), ttl)
+        # Index so every session for a user can be revoked at once. The index
+        # outlives individual sessions, so give it the same TTL and refresh it
+        # whenever a session is created.
+        pipeline.sadd(_user_index_key(user_id), sid)
+        pipeline.expire(_user_index_key(user_id), ttl)
+        pipeline.execute()
+    except RedisError as exc:
+        raise SessionBackendUnavailable("failed to persist session") from exc
 
     return f"{sid}.{sign_payload(sid)}"
 
@@ -222,17 +177,7 @@ def resolve_session(raw_cookie: str | None, refresh: bool = True) -> int | None:
     if sid is None:
         return None
 
-    client = _redis_or_memory()
-
-    if client is None:
-        _memory_purge_expired()
-        rec = _memory_sessions.get(sid)
-        if rec is None:
-            return None
-        if refresh:
-            rec.expires_at = time.monotonic() + _ttl()
-            rec.last_seen = time.time()
-        return rec.user_id
+    client = _client()
 
     try:
         raw = client.hget(_session_key(sid), "uid")
@@ -261,11 +206,7 @@ def destroy_session(raw_cookie: str | None) -> None:
     if sid is None:
         return
 
-    client = _redis_or_memory()
-
-    if client is None:
-        _memory_sessions.pop(sid, None)
-        return
+    client = _client()
 
     try:
         try:
@@ -285,23 +226,7 @@ def destroy_session(raw_cookie: str | None) -> None:
 
 def list_user_sessions(user_id: int) -> list[SessionInfo]:
     """Every live session for a user, most recently seen first."""
-    client = _redis_or_memory()
-
-    if client is None:
-        _memory_purge_expired()
-        infos = [
-            SessionInfo(
-                id=session_handle(sid),
-                created_at=rec.created_at,
-                last_seen=rec.last_seen,
-                ip=rec.ip,
-                user_agent=rec.user_agent,
-            )
-            for sid, rec in _memory_sessions.items()
-            if rec.user_id == user_id
-        ]
-        infos.sort(key=lambda info: info.last_seen, reverse=True)
-        return infos
+    client = _client()
 
     try:
         sids = [_dec(s) for s in client.smembers(_user_index_key(user_id))]
@@ -346,17 +271,7 @@ def revoke_user_sessions(user_id: int, *, keep_sid: str | None = None) -> int:
     Returns how many were removed. ``keep_sid`` is how "log out everywhere else"
     keeps the caller's own device signed in, exactly as change-password does.
     """
-    client = _redis_or_memory()
-
-    if client is None:
-        victims = [
-            s
-            for s, rec in _memory_sessions.items()
-            if rec.user_id == user_id and s != keep_sid
-        ]
-        for sid in victims:
-            _memory_sessions.pop(sid, None)
-        return len(victims)
+    client = _client()
 
     try:
         sids = [_dec(s) for s in client.smembers(_user_index_key(user_id))]
@@ -380,15 +295,7 @@ def revoke_session_by_handle(user_id: int, handle: str) -> bool:
     Only the caller's own sessions are searched, so a handle cannot be used to
     reach another account's session. Returns True if one was found and removed.
     """
-    client = _redis_or_memory()
-
-    if client is None:
-        _memory_purge_expired()
-        for sid, rec in list(_memory_sessions.items()):
-            if rec.user_id == user_id and session_handle(sid) == handle:
-                _memory_sessions.pop(sid, None)
-                return True
-        return False
+    client = _client()
 
     try:
         sids = [_dec(s) for s in client.smembers(_user_index_key(user_id))]

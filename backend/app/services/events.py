@@ -60,13 +60,12 @@ def queue_user_event(db: Session, user_id: int) -> None:
 
 
 def _publish(user_id: int, payload: dict) -> None:
-    client = get_redis_client()
-    if client is None:
-        return
+    # Best-effort on purpose: this runs in an after-commit hook, and the client
+    # also polls, so a dropped nudge is recovered -- it must not fail the write
+    # that already committed.
     try:
-        client.publish(_channel(user_id), json.dumps(payload))
+        get_redis_client().publish(_channel(user_id), json.dumps(payload))
     except RedisError:
-        # The client also polls, so a dropped nudge is recovered, not fatal.
         pass
 
 
@@ -98,11 +97,7 @@ async def stream_user_events(user_id: int) -> AsyncIterator[str]:
     Polls pub/sub without blocking and sleeps between reads, so the connection
     costs an asyncio task rather than a worker thread.
     """
-    client = get_redis_client()
-    if client is None:
-        return  # the route returns 503 before reaching here
-
-    pubsub = client.pubsub()
+    pubsub = get_redis_client().pubsub()
     pubsub.subscribe(_channel(user_id))
     try:
         # An initial comment flushes headers so the browser marks the stream open.

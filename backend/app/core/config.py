@@ -95,7 +95,6 @@ class Settings(BaseSettings):
 
     rq_queue_name: str = "feed-fanout"
     rq_job_timeout_seconds: int = 600
-    run_fanout_inline_when_queue_unavailable: bool = True
 
     # Link previews fetch arbitrary user URLs server-side.
     # - Set link_preview_http_proxy to route those fetches through an outbound

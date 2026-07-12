@@ -312,8 +312,12 @@ def test_a_rolled_back_transaction_publishes_nothing(monkeypatch) -> None:
 def test_stream_requires_redis(monkeypatch) -> None:
     alice, _ = _register("alice")
     from app.api.routes import notifications as notifications_route
+    from redis.exceptions import RedisError
 
-    monkeypatch.setattr(notifications_route, "get_redis_client", lambda: None)
+    def down():
+        raise RedisError("redis is gone")
+
+    monkeypatch.setattr(notifications_route, "get_redis_client", down)
     assert alice.get("/api/v1/notifications/stream").status_code == 503
 
 

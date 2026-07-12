@@ -1,14 +1,10 @@
-import pytest
 from app.services import link_preview as link_preview_service
 from fastapi.testclient import TestClient
 from main import app
 
-
-@pytest.fixture(autouse=True)
-def _disable_link_preview_cache(monkeypatch) -> None:
-    # Keep these tests hermetic: never touch a real Redis (which could serve a
-    # previously cached live preview instead of the stubbed fetch below).
-    monkeypatch.setattr(link_preview_service, "get_redis_client", lambda: None)
+# The test Redis (db 15) is flushed between tests by conftest, so the preview
+# cache starts empty every time and cannot serve a stale live preview in place of
+# the stubbed fetch below.
 
 SAMPLE_HTML = """
 <html><head>

@@ -7,6 +7,7 @@ from app.services import events
 from app.services.timeline_service import decode_cursor, encode_cursor
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -70,11 +71,13 @@ def stream_notifications(
     authoritative unread count -- so a browser that cannot use SSE loses nothing
     but immediacy.
     """
-    if get_redis_client() is None:
+    try:
+        get_redis_client()
+    except RedisError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Live updates require Redis, which is unavailable.",
-        )
+        ) from exc
     return StreamingResponse(
         events.stream_user_events(current_user_id),
         media_type="text/event-stream",

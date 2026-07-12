@@ -135,6 +135,12 @@ def test_trending_excludes_deleted_authors_tags(monkeypatch) -> None:
     finally:
         db.close()
 
+    # Trending is cached; drop the cached snapshot so the next call recomputes and
+    # reflects the deletion (in production the short TTL does this).
+    from app.db.redis_client import get_redis_client
+
+    get_redis_client().delete("hashtags:trending")
+
     assert next(r for r in _trending(alice) if r["tag"] == "topic")["post_count"] == 2
 
 
