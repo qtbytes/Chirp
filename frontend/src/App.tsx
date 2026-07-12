@@ -1629,9 +1629,11 @@ function TweetDetail({
             >
               <strong>@{tweet.author.username}</strong>
             </Link>
-            <span>{displayDate}</span>
-            {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
-            <VisibilityBadge visibility={tweet.visibility} />
+            <div className="detail-meta">
+              <span>{displayDate}</span>
+              {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
+              <VisibilityBadge visibility={tweet.visibility} />
+            </div>
           </div>
         </div>
         {editing ? (
