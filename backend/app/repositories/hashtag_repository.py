@@ -61,7 +61,14 @@ def list_trending(
         select(PostHashtag.tag, recent_count, prior_count)
         .join(Post, Post.id == PostHashtag.post_id)
         .join(User, User.id == Post.user_id)
-        .where(PostHashtag.created_at >= baseline_cutoff, User.deleted_at.is_(None))
+        .where(
+            PostHashtag.created_at >= baseline_cutoff,
+            User.deleted_at.is_(None),
+            # Only public tweets feed trending -- a followers-only or private
+            # tweet must never move (or leak into) a figure shared across all
+            # viewers.
+            Post.visibility == "public",
+        )
         .group_by(PostHashtag.tag)
     ).all()
 

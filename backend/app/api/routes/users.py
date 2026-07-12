@@ -22,6 +22,7 @@ from app.schemas.user import (
     UserSummary,
     UserUpdate,
 )
+from app.repositories.visibility import can_view_post
 from app.services.serializers import serialize_quoted_post
 from app.services.timeline_service import TimelineService, decode_cursor, encode_cursor
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
@@ -145,7 +146,7 @@ def list_user_tweets(
 
     has_next = len(rows) > limit
     page_rows = rows[:limit]
-    service = TimelineService(db)
+    service = TimelineService(db, viewer_id=current_user_id)
     items = [service.serialize_tweet(row) for row in page_rows]
 
     next_cursor = None
@@ -188,6 +189,7 @@ def list_user_replies(
         db,
         user_id=user.id,
         limit=limit,
+        current_user_id=current_user_id,
         cursor_created_at=cursor_created_at,
         cursor_id=cursor_id,
     )
@@ -255,7 +257,12 @@ def list_user_replies(
                     comment_count=t_stats["comment_count"],
                     liked_by_me=t_stats["liked_by_me"],
                     retweet_count=t_stats["retweet_count"],
-                    quoted_post=serialize_quoted_post(tweet.quoted_post),
+                    quoted_post=(
+                        serialize_quoted_post(tweet.quoted_post)
+                        if can_view_post(db, current_user_id, tweet.quoted_post)
+                        else None
+                    ),
+                    visibility=tweet.visibility,
                 ),
             )
         )

@@ -13,6 +13,7 @@ from app.repositories import (
     follow_repository,
     tweet_repository,
 )
+from app.repositories.visibility import can_view_post
 from app.schemas.tweet import TimelinePage, TweetOut
 from app.schemas.user import UserSummary
 from app.services.ranking import score_tweet, weights_from_settings
@@ -95,8 +96,12 @@ class TimelineService:
     This service lets you discuss both approaches with the same API.
     """
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, viewer_id: int | None = None):
         self.db = db
+        # The viewer these rows are serialized for. Used to gate a quoted embed:
+        # a followers-only/private post the viewer can't see renders as no embed
+        # (``quoted_post=None``), the same as a deleted quote.
+        self.viewer_id = viewer_id
         self.redis = get_redis_client()
 
     def get_home_timeline(
@@ -260,7 +265,12 @@ class TimelineService:
             comment_count=row["comment_count"],
             retweet_count=row["retweet_count"],
             liked_by_me=row.get("liked_by_me", False),
-            quoted_post=serialize_quoted_post(tweet.quoted_post),
+            quoted_post=(
+                serialize_quoted_post(tweet.quoted_post)
+                if can_view_post(self.db, self.viewer_id, tweet.quoted_post)
+                else None
+            ),
+            visibility=tweet.visibility,
         )
 
     def _build_page(

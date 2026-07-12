@@ -1,9 +1,18 @@
 from datetime import datetime, timezone
+from typing import Literal
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
+
+# Per-tweet audience. A top-level tweet is visible to ``public`` (everyone),
+# ``followers`` (the author and whoever follows them), or ``private`` (the author
+# alone). Replies carry no audience of their own -- a thread is governed by the
+# visibility of its root tweet (see app/repositories/visibility.py).
+TweetVisibility = Literal["public", "followers", "private"]
+VISIBILITY_VALUES: frozenset[str] = frozenset(("public", "followers", "private"))
+DEFAULT_VISIBILITY: TweetVisibility = "public"
 
 
 def utcnow() -> datetime:
@@ -52,6 +61,16 @@ class Post(Base):
     # that embeds another post. A "retweet" is just a quote with empty content.
     quoted_post_id: Mapped[int | None] = mapped_column(
         ForeignKey("posts.id"), nullable=True
+    )
+    # Audience for a top-level tweet: ``public`` / ``followers`` / ``private``.
+    # Only meaningful for top-level tweets; a reply inherits the audience of its
+    # thread root and this stays at the default. Read paths gate on the root's
+    # value (app/repositories/visibility.py).
+    visibility: Mapped[str] = mapped_column(
+        String(16),
+        default=DEFAULT_VISIBILITY,
+        server_default=DEFAULT_VISIBILITY,
+        nullable=False,
     )
 
     author = relationship("User", back_populates="posts")

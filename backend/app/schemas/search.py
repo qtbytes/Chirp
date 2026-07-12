@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from app.models.post import DEFAULT_VISIBILITY, TweetVisibility
 from app.schemas.tweet import QuotedPostOut
 from app.schemas.user import UserSummary
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,6 +24,7 @@ class SearchPostOut(BaseModel):
     retweet_count: int = 0
     liked_by_me: bool = False
     quoted_post: QuotedPostOut | None = None
+    visibility: TweetVisibility = DEFAULT_VISIBILITY
     is_reply: bool = False
     thread_id: int
 

@@ -9,6 +9,7 @@ from app.models.user import User
 from app.repositories.block_repository import blocks_between
 from app.repositories.notification_repository import add_notification
 from app.repositories.tweet_repository import _quote_counts_subquery
+from app.repositories.visibility import can_view_thread, visible_root_predicate
 
 
 # --- likes -----------------------------------------------------------------
@@ -139,6 +140,11 @@ def create_comment(
     if blocks_between(db, user_id, tweet.user_id):
         raise ValueError("tweet not found")
 
+    # You cannot reply to a thread you are not allowed to see (a followers-only or
+    # private tweet) -- also reported as missing.
+    if not can_view_thread(db, user_id, tweet):
+        raise ValueError("tweet not found")
+
     author = db.get(User, user_id)
     if author is None:
         raise ValueError("user not found")
@@ -227,6 +233,11 @@ def list_comments_by_tweet(
     """
     tweet = db.get(Post, tweet_id)
     if tweet is None or tweet.reply_to_id is not None:
+        raise ValueError("tweet not found")
+
+    # The thread is only readable if the viewer may see its tweet; a
+    # followers-only or private tweet's replies stay hidden (reported as missing).
+    if not can_view_thread(db, current_user_id, tweet):
         raise ValueError("tweet not found")
 
     like_counts = (
@@ -400,16 +411,27 @@ def list_replies_by_user(
     db: Session,
     user_id: int,
     limit: int,
+    current_user_id: int | None = None,
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
 ) -> list[dict]:
     """
     Return the user's reply feed newest-first: the replies they authored, each
     joined with its immediate parent and the authors involved.
+
+    A reply is only shown when the *viewer* (``current_user_id``) may see its
+    thread root, so a reply into a followers-only or private tweet does not leak
+    that thread to a stranger browsing the author's replies.
     """
+    Root = aliased(Post)
     stmt = (
         select(Post.id, Post.created_at)
-        .where(Post.user_id == user_id, Post.reply_to_id.is_not(None))
+        .join(Root, Root.id == func.coalesce(Post.root_id, Post.id))
+        .where(
+            Post.user_id == user_id,
+            Post.reply_to_id.is_not(None),
+            visible_root_predicate(current_user_id, Root),
+        )
         .order_by(Post.created_at.desc(), Post.id.desc())
         .limit(limit + 1)
     )

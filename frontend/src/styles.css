@@ -594,6 +594,45 @@ button.rail-link:disabled:hover {
   margin-right: auto;
 }
 
+/* Audience selector in the composer: an icon + label with a transparent native
+   <select> stretched over it, so the whole chip is the click target. */
+.visibility-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  margin-left: 4px;
+  border-radius: 999px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.visibility-picker:hover {
+  background: var(--accent-soft, rgba(29, 155, 240, 0.1));
+}
+
+.visibility-picker select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  cursor: pointer;
+}
+
+/* On-card marker that a tweet isn't public. */
+.visibility-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .emoji-picker {
   position: relative;
   display: inline-flex;

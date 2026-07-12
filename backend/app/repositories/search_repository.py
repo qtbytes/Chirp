@@ -19,12 +19,13 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import and_, bindparam, literal_column, or_, select, text
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, bindparam, func, literal_column, or_, select, text
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.models.post import Post
 from app.models.user import User
 from app.repositories import engagement_repository, tweet_repository
+from app.repositories.visibility import visible_root_predicate
 
 SearchSort = Literal["relevance", "recent"]
 
@@ -73,11 +74,22 @@ def _relevance_hits(
     cursor_score: float | None,
     cursor_id: int | None,
     exclude_author_ids: set[int] | None,
+    viewer_id: int,
 ) -> list[tuple[int, float]]:
     """Matching post ids ordered by BM25 relevance, each with its score."""
     conditions = ["u.deleted_at IS NULL"]
-    params: dict = {"match": match, "row_limit": limit + 1}
+    params: dict = {"match": match, "row_limit": limit + 1, "viewer": viewer_id}
     expanding = []
+
+    # Gate on the audience of each hit's *thread root* (``root`` below), so a
+    # reply is visible exactly when its root tweet is. Mirrors
+    # ``visible_root_predicate`` in raw SQL for the FTS path.
+    conditions.append(
+        "(root.user_id = :viewer OR root.visibility = 'public'"
+        " OR (root.visibility = 'followers'"
+        " AND root.user_id IN (SELECT followee_id FROM follows"
+        " WHERE follower_id = :viewer)))"
+    )
 
     if exclude_author_ids:
         conditions.append("p.user_id NOT IN :excluded")
@@ -101,6 +113,7 @@ def _relevance_hits(
         ) AS s
         JOIN posts p ON p.id = s.rowid
         JOIN users u ON u.id = p.user_id
+        JOIN posts root ON root.id = COALESCE(p.root_id, p.id)
         WHERE {where}
         ORDER BY s.score ASC, p.id ASC
         LIMIT :row_limit
@@ -119,6 +132,7 @@ def _recent_hits(
     cursor_created_at: datetime | None,
     cursor_id: int | None,
     exclude_author_ids: set[int] | None,
+    viewer_id: int,
 ) -> list[tuple[int, datetime]]:
     """Matching post ids ordered newest-first, each with its ``created_at``."""
     # The FTS match feeds an ``IN`` subquery so the ordering and the datetime
@@ -130,10 +144,18 @@ def _recent_hits(
         .where(text("posts_fts MATCH :match").bindparams(match=match))
     )
 
+    # Gate on each hit's thread root so a reply is visible exactly when its root
+    # tweet is (a top-level tweet is its own root via the coalesce).
+    Root = aliased(Post)
     stmt = (
         select(Post.id, Post.created_at)
         .join(User, User.id == Post.user_id)
-        .where(Post.id.in_(match_ids), User.deleted_at.is_(None))
+        .join(Root, Root.id == func.coalesce(Post.root_id, Post.id))
+        .where(
+            Post.id.in_(match_ids),
+            User.deleted_at.is_(None),
+            visible_root_predicate(viewer_id, Root),
+        )
         .order_by(Post.created_at.desc(), Post.id.desc())
         .limit(limit + 1)
     )
@@ -242,11 +264,23 @@ def search_posts(
     """
     if sort == "recent":
         ordered = _recent_hits(
-            db, match, limit, cursor_created_at, cursor_id, exclude_author_ids
+            db,
+            match,
+            limit,
+            cursor_created_at,
+            cursor_id,
+            exclude_author_ids,
+            current_user_id,
         )
     else:
         ordered = _relevance_hits(
-            db, match, limit, cursor_score, cursor_id, exclude_author_ids
+            db,
+            match,
+            limit,
+            cursor_score,
+            cursor_id,
+            exclude_author_ids,
+            current_user_id,
         )
 
     return _hydrate(db, ordered, sort, current_user_id)

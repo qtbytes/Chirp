@@ -21,6 +21,7 @@ import type {
   TrendingHashtag,
   Tweet,
   TweetStats,
+  TweetVisibility,
   UserDiscovery,
   UserProfile,
   UserSummary,
@@ -233,12 +234,14 @@ export function createTweet(
   content: string,
   mediaUrls: string[] = [],
   quotedPostId?: number,
+  visibility: TweetVisibility = "public",
 ): Promise<Tweet> {
   return request<Tweet>("/tweets", {
     method: "POST",
     body: JSON.stringify({
       content,
       media_urls: mediaUrls,
+      visibility,
       ...(quotedPostId != null ? { quoted_post_id: quotedPostId } : {}),
     }),
   });

@@ -1,11 +1,12 @@
 from datetime import datetime
 
 from sqlalchemy import and_, func, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.models.notification import Notification
 from app.models.post import Post
 from app.models.user import User
+from app.repositories.visibility import visible_root_predicate
 from app.services import events
 
 
@@ -127,10 +128,25 @@ def list_notifications(
     (comment_id) and its thread root (tweet_id); a top-level post reports only
     tweet_id.
     """
+    # Gate on the audience of the referenced post's thread root: a notification
+    # about a tweet the recipient can no longer see (e.g. a mention in a
+    # followers-only tweet by someone they don't follow) is dropped. Notifications
+    # with no post (a follow) are always kept. ``private`` mentions/quotes are
+    # suppressed at write time, so this only bites the followers-only case.
+    NotifPost = aliased(Post)
+    Root = aliased(Post)
     stmt = (
         select(Notification, User)
         .join(User, User.id == Notification.actor_id)
-        .where(Notification.user_id == user_id)
+        .outerjoin(NotifPost, NotifPost.id == Notification.post_id)
+        .outerjoin(Root, Root.id == func.coalesce(NotifPost.root_id, NotifPost.id))
+        .where(
+            Notification.user_id == user_id,
+            or_(
+                Notification.post_id.is_(None),
+                visible_root_predicate(user_id, Root),
+            ),
+        )
     )
     # Hide notifications from a now-blocked actor (e.g. a like from before the
     # block). New ones can't be produced -- interactions are blocked at source.

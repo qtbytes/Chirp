@@ -32,7 +32,7 @@ def get_home_timeline(
     - Uses cursor pagination instead of offset pagination.
     - Delegates business logic to the service layer so the route stays thin.
     """
-    service = TimelineService(db)
+    service = TimelineService(db, viewer_id=current_user_id)
 
     try:
         return service.get_home_timeline(
@@ -59,7 +59,7 @@ def get_for_you_timeline(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> TimelinePage:
-    service = TimelineService(db)
+    service = TimelineService(db, viewer_id=current_user_id)
 
     try:
         return service.get_for_you_timeline(

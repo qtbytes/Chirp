@@ -66,6 +66,7 @@ import type {
   TimelinePage,
   TrendingHashtag,
   Tweet,
+  TweetVisibility,
   UserDiscovery,
   UserSummary,
 } from "./types";
@@ -84,6 +85,7 @@ import {
   QuotedPostCard,
   ReplyComposer,
   TweetCard,
+  VisibilityPicker,
   formatCompactDate,
   getErrorMessage,
   mergeCommentStats,
@@ -1362,6 +1364,7 @@ function Composer({
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
+  const [visibility, setVisibility] = useState<TweetVisibility>("public");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(content, setContent, 280);
   const media = useMediaAttachment();
   const remaining = 280 - content.length;
@@ -1376,9 +1379,10 @@ function Composer({
     setPosting(true);
     setError("");
     try {
-      const tweet = await createTweet(content.trim(), media.mediaUrls);
+      const tweet = await createTweet(content.trim(), media.mediaUrls, undefined, visibility);
       setContent("");
       media.clear();
+      setVisibility("public");
       onPosted(tweet);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1404,6 +1408,7 @@ function Composer({
           <div className="composer-tools">
             <EmojiPicker onSelect={insertEmoji} />
             <MediaButton attachment={media} />
+            <VisibilityPicker value={visibility} onChange={setVisibility} disabled={posting} />
           </div>
           <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
           <button className="primary-button compact" disabled={posting || media.uploading || !canPost}>

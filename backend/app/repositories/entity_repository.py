@@ -37,6 +37,12 @@ def sync_post_entities(db: Session, post: Post, author_id: int) -> None:
     for tag in extract_hashtags(post.content):
         db.add(PostHashtag(post_id=post.id, tag=tag))
 
+    # A private thread is seen only by its author, so a mention in it must not
+    # notify anyone else. The audience is the thread root's: a top-level tweet's
+    # own visibility, or -- for a reply -- the root tweet's.
+    root = post if post.reply_to_id is None else db.get(Post, post.root_id or post.id)
+    suppress_mentions = root is not None and root.visibility == "private"
+
     for username in extract_mention_usernames(post.content):
         user = user_repository.get_user_by_username(db, username)
         if user is None or user.deleted_at is not None or user.id == author_id:
@@ -45,6 +51,8 @@ def sync_post_entities(db: Session, post: Post, author_id: int) -> None:
             continue
 
         db.add(PostMention(post_id=post.id, mentioned_user_id=user.id))
+        if suppress_mentions:
+            continue
         notification_repository.add_notification(
             db,
             recipient_id=user.id,

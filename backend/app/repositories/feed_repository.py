@@ -10,6 +10,7 @@ from app.repositories.tweet_repository import (
     _quote_counts_subquery,
     deleted_author_ids,
 )
+from app.repositories.visibility import visible_root_predicate
 
 
 def bulk_insert_feed_items(
@@ -129,6 +130,10 @@ def list_feed_tweets(
     # posts should leave the timeline even though the rows linger.
     if exclude_deleted_authors:
         stmt = stmt.where(Post.user_id.not_in(deleted_author_ids()))
+    # A precomputed row can also outlive the audience it was fanned out for (e.g.
+    # a followers-only author the owner later unfollowed). Gate on the post's
+    # audience at read time so it never surfaces to someone who can't see it.
+    stmt = stmt.where(visible_root_predicate(owner_id))
 
     if cursor_created_at is not None and cursor_id is not None:
         stmt = stmt.where(

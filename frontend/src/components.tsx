@@ -12,14 +12,17 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Ban,
   Flag,
+  Globe,
   Heart,
   Image as ImageIcon,
   Loader2,
+  Lock,
   MessageCircle,
   MoreHorizontal,
   Pencil,
   Repeat2,
   Trash2,
+  Users,
   VolumeX,
   X,
 } from "lucide-react";
@@ -50,6 +53,7 @@ import type {
   ReportReason,
   Tweet,
   TweetStats,
+  TweetVisibility,
   UserSummary,
 } from "./types";
 import { EmojiPicker } from "./EmojiPicker";
@@ -1192,6 +1196,65 @@ export function PostBody({
   );
 }
 
+// The three audiences, in the order the composer lists them, each with the icon
+// and labels the picker and the on-card badge share.
+const VISIBILITY_OPTIONS: {
+  value: TweetVisibility;
+  label: string;
+  short: string;
+  Icon: typeof Globe;
+}[] = [
+  { value: "public", label: "Everyone", short: "Everyone", Icon: Globe },
+  { value: "followers", label: "Followers", short: "Followers", Icon: Users },
+  { value: "private", label: "Only you", short: "Only you", Icon: Lock },
+];
+
+/** The composer's audience selector (Everyone / Followers / Only you). */
+export function VisibilityPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: TweetVisibility;
+  onChange: (value: TweetVisibility) => void;
+  disabled?: boolean;
+}) {
+  const active =
+    VISIBILITY_OPTIONS.find((option) => option.value === value) ?? VISIBILITY_OPTIONS[0];
+  return (
+    <label className="visibility-picker" title="Who can see this?">
+      <active.Icon size={16} aria-hidden="true" />
+      <span className="visibility-picker-label">{active.short}</span>
+      <select
+        value={value}
+        disabled={disabled}
+        aria-label="Who can see this?"
+        onChange={(event) => onChange(event.target.value as TweetVisibility)}
+      >
+        {VISIBILITY_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** A small badge on a card marking a non-public tweet's audience. */
+export function VisibilityBadge({ visibility }: { visibility: TweetVisibility }) {
+  const option = VISIBILITY_OPTIONS.find((item) => item.value === visibility);
+  if (!option || visibility === "public") {
+    return null;
+  }
+  return (
+    <span className="visibility-badge" title={`Visible to: ${option.label}`}>
+      <option.Icon size={13} aria-hidden="true" />
+      {option.short}
+    </span>
+  );
+}
+
 export function TweetCard({
   tweet,
   onOpen,
@@ -1384,6 +1447,7 @@ export function TweetCard({
           <span>@{tweet.author.username}</span>
           <span>{displayDate}</span>
           {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
+          <VisibilityBadge visibility={tweet.visibility} />
         </header>
         {editing ? (
           <PostEditor

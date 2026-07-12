@@ -11,6 +11,7 @@ from app.repositories import (
     tweet_repository,
     user_repository,
 )
+from app.repositories.visibility import can_view_post, can_view_thread
 from app.schemas.tweet import TweetCreate, TweetOut, TweetStatsOut
 from app.schemas.user import UserSummary
 from app.services.serializers import serialize_quoted_post
@@ -86,6 +87,7 @@ def create_tweet(
             content=payload.content,
             media_urls=payload.media_urls,
             quoted_post_id=payload.quoted_post_id,
+            visibility=payload.visibility,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -98,7 +100,7 @@ def create_tweet(
         author_id=current_user_id,
     )
 
-    service = TimelineService(db)
+    service = TimelineService(db, viewer_id=current_user_id)
     return service.serialize_tweet(
         {
             "tweet": tweet,
@@ -133,6 +135,14 @@ def get_tweet(
             detail="tweet not found",
         )
 
+    # A followers-only or private thread the viewer can't see is 404 too -- the
+    # audience is enforced on the thread's root.
+    if not can_view_thread(db, current_user_id, tweet):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="tweet not found",
+        )
+
     stats_rows = tweet_repository.list_tweet_stats(
         db,
         tweet_ids=[tweet_id],
@@ -156,7 +166,12 @@ def get_tweet(
         comment_count=stats["comment_count"],
         retweet_count=stats["retweet_count"],
         liked_by_me=stats["liked_by_me"],
-        quoted_post=serialize_quoted_post(tweet.quoted_post),
+        quoted_post=(
+            serialize_quoted_post(tweet.quoted_post)
+            if can_view_post(db, current_user_id, tweet.quoted_post)
+            else None
+        ),
+        visibility=tweet.visibility,
     )
 
 
@@ -212,7 +227,12 @@ def edit_tweet(
         comment_count=stats["comment_count"],
         retweet_count=stats["retweet_count"],
         liked_by_me=stats["liked_by_me"],
-        quoted_post=serialize_quoted_post(tweet.quoted_post),
+        quoted_post=(
+            serialize_quoted_post(tweet.quoted_post)
+            if can_view_post(db, current_user_id, tweet.quoted_post)
+            else None
+        ),
+        visibility=tweet.visibility,
     )
 
 

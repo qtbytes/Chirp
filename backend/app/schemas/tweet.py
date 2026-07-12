@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
+from app.models.post import DEFAULT_VISIBILITY, TweetVisibility
 from app.schemas.media import MAX_MEDIA_ITEMS, validate_media_urls
 from app.schemas.user import UserSummary
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -10,6 +11,8 @@ class TweetCreate(BaseModel):
     content: str = Field(default="", max_length=280)
     media_urls: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
     quoted_post_id: int | None = None
+    # Audience for this tweet; ignored on edit (visibility is set at post time).
+    visibility: TweetVisibility = DEFAULT_VISIBILITY
 
     @field_validator("media_urls")
     @classmethod
@@ -53,6 +56,7 @@ class TweetOut(BaseModel):
     retweet_count: int = 0
     liked_by_me: bool = False
     quoted_post: QuotedPostOut | None = None
+    visibility: TweetVisibility = DEFAULT_VISIBILITY
 
     model_config = ConfigDict(from_attributes=True)
 

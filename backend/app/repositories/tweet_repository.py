@@ -7,9 +7,11 @@ from app.models.follow import Follow
 from app.models.like import Like
 from app.models.post import Post
 from app.models.post_hashtag import PostHashtag
+from app.models.post import DEFAULT_VISIBILITY, VISIBILITY_VALUES
 from app.models.user import User
 from app.repositories.block_repository import blocks_between
 from app.repositories.notification_repository import add_notification
+from app.repositories.visibility import can_view_thread, visible_root_predicate
 
 
 def deleted_author_ids():
@@ -44,6 +46,7 @@ def create_tweet(
     content: str,
     media_urls: list[str] | None = None,
     quoted_post_id: int | None = None,
+    visibility: str = DEFAULT_VISIBILITY,
 ) -> Post | None:
     """
     Create a top-level post (tweet) and reload it with author information.
@@ -52,9 +55,17 @@ def create_tweet(
     own id after it is assigned. When ``quoted_post_id`` is given the post is a
     quote (Twitter-style repost); the quoted author is notified.
 
+    ``visibility`` is the tweet's audience (``public`` / ``followers`` /
+    ``private``); an unknown value falls back to ``public`` rather than storing an
+    unenforceable audience. A ``private`` tweet is seen only by its author, so it
+    generates no outbound notifications.
+
     Raises ``ValueError`` if ``quoted_post_id`` refers to a post that does not
-    exist.
+    exist or that the author is not allowed to see.
     """
+    if visibility not in VISIBILITY_VALUES:
+        visibility = DEFAULT_VISIBILITY
+
     quoted = None
     if quoted_post_id is not None:
         quoted = db.get(Post, quoted_post_id)
@@ -63,18 +74,23 @@ def create_tweet(
         # You cannot quote across a block; hidden the same way a missing post is.
         if blocks_between(db, author_id, quoted.user_id):
             raise ValueError("quoted post not found")
+        # You cannot quote a tweet you are not allowed to see (a followers-only or
+        # private thread) -- also reported as "not found".
+        if not can_view_thread(db, author_id, quoted):
+            raise ValueError("quoted post not found")
 
     post = Post(
         user_id=author_id,
         content=content,
         media_urls=media_urls or None,
         quoted_post_id=quoted_post_id,
+        visibility=visibility,
     )
     db.add(post)
     db.flush()  # assign post.id
     post.root_id = post.id
 
-    if quoted is not None and quoted.user_id != author_id:
+    if quoted is not None and quoted.user_id != author_id and visibility != "private":
         add_notification(
             db,
             recipient_id=quoted.user_id,
@@ -265,7 +281,13 @@ def list_feed_with_retweets(
 
     ident_stmt = (
         select(Post.id, Post.created_at)
-        .where(Post.user_id.in_(author_ids), Post.reply_to_id.is_(None))
+        .where(
+            Post.user_id.in_(author_ids),
+            Post.reply_to_id.is_(None),
+            # These are top-level tweets, so each is its own thread root; gate on
+            # the tweet's own audience for the viewer.
+            visible_root_predicate(current_user_id),
+        )
         .order_by(Post.created_at.desc(), Post.id.desc())
         .limit(limit + 1)
     )
@@ -327,7 +349,11 @@ def list_tweets_by_hashtag(
     ident_stmt = (
         select(Post.id, Post.created_at)
         .join(PostHashtag, PostHashtag.post_id == Post.id)
-        .where(PostHashtag.tag == tag, Post.reply_to_id.is_(None))
+        .where(
+            PostHashtag.tag == tag,
+            Post.reply_to_id.is_(None),
+            visible_root_predicate(current_user_id),
+        )
         .order_by(Post.created_at.desc(), Post.id.desc())
         .limit(limit + 1)
     )
@@ -414,13 +440,15 @@ def fetch_for_you_candidates(
         .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
         .where(Post.reply_to_id.is_(None))
     )
-    # Filter hidden authors out of the pool *before* the limit, so a blocked
-    # (or deleted) author cannot consume candidate slots the viewer should have
-    # seen.
+    # Filter hidden authors and audience-restricted tweets out of the pool
+    # *before* the limit, so a blocked/deleted author -- or a followers-only tweet
+    # the viewer can't see -- cannot consume candidate slots the viewer should
+    # have seen.
     if exclude_author_ids:
         stmt = stmt.where(Post.user_id.not_in(exclude_author_ids))
     if exclude_deleted_authors:
         stmt = stmt.where(Post.user_id.not_in(deleted_author_ids()))
+    stmt = stmt.where(visible_root_predicate(current_user_id))
     stmt = stmt.order_by(Post.created_at.desc(), Post.id.desc()).limit(limit)
 
     rows = db.execute(stmt).all()

@@ -34,6 +34,9 @@ export type LinkPreview = {
   site_name: string | null;
 };
 
+/** Who can see a tweet. Set at post time; a reply inherits its thread's. */
+export type TweetVisibility = "public" | "followers" | "private";
+
 export type Tweet = {
   id: number;
   content: string;
@@ -46,6 +49,7 @@ export type Tweet = {
   retweet_count: number;
   liked_by_me: boolean;
   quoted_post: QuotedPost | null;
+  visibility: TweetVisibility;
 };
 
 export type LikeToggleResult = {

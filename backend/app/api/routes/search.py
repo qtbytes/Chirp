@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.repositories import block_repository, search_repository
+from app.repositories.visibility import can_view_post
 from app.schemas.search import SearchPage, SearchPostOut
 from app.schemas.user import UserSummary
 from app.services.serializers import serialize_quoted_post
@@ -82,7 +83,12 @@ def search_posts(
             comment_count=row["comment_count"],
             retweet_count=row["retweet_count"],
             liked_by_me=row["liked_by_me"],
-            quoted_post=serialize_quoted_post(row["post"].quoted_post),
+            quoted_post=(
+                serialize_quoted_post(row["post"].quoted_post)
+                if can_view_post(db, current_user_id, row["post"].quoted_post)
+                else None
+            ),
+            visibility=row["post"].visibility,
             is_reply=row["is_reply"],
             thread_id=row["thread_id"],
         )
