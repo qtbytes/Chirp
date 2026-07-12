@@ -2260,10 +2260,6 @@ a.tab {
   gap: 8px;
 }
 
-.post-editor-spacer {
-  flex: 1;
-}
-
 /* Delete confirmation modal. */
 .confirm-modal {
   max-width: 340px;

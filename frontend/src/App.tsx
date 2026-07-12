@@ -1450,10 +1450,10 @@ function TweetDetail({
     setEditing(true);
   }
 
-  async function saveEdit(content: string) {
+  async function saveEdit(content: string, mediaUrls: string[]) {
     setSavingEdit(true);
     try {
-      const updated = await editTweet(tweet.id, content, tweet.media_urls, editVisibility);
+      const updated = await editTweet(tweet.id, content, mediaUrls, editVisibility);
       onTweetPatch(tweet.id, {
         content: updated.content,
         media_urls: updated.media_urls,
@@ -1641,8 +1641,8 @@ function TweetDetail({
         {editing ? (
           <PostEditor
             initialContent={tweet.content}
+            initialMedia={tweet.media_urls}
             maxLength={280}
-            canSaveEmpty={tweet.media_urls.length > 0}
             saving={savingEdit}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}

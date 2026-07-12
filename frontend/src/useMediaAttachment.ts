@@ -17,8 +17,8 @@ function messageFrom(err: unknown): string {
 // Manages up to MAX_MEDIA_ITEMS image attachments for a composer: multi-file
 // selection, concurrent uploads, per-item removal, and reset. The returned
 // object is passed to <MediaButton> and <MediaPreview>.
-export function useMediaAttachment() {
-  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+export function useMediaAttachment(initial: string[] = []) {
+  const [mediaUrls, setMediaUrls] = useState<string[]>(initial);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);

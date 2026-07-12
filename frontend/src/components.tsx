@@ -725,12 +725,14 @@ export function ConfirmDialog({
   );
 }
 
-// Inline editor that replaces a post's content while editing. Media is
-// preserved as-is (the caller re-sends the existing media on save).
+// Inline editor that replaces a post's content while editing. Its action bar
+// mirrors the composer -- emoji + media tools on the left, an optional audience
+// row above them (tweets only) -- so editing feels the same as posting. Media is
+// seeded from the post and can be added to or removed before saving.
 export function PostEditor({
   initialContent,
+  initialMedia = [],
   maxLength,
-  canSaveEmpty,
   saving,
   onSave,
   onCancel,
@@ -738,10 +740,10 @@ export function PostEditor({
   onVisibilityChange,
 }: {
   initialContent: string;
+  initialMedia?: string[];
   maxLength: number;
-  canSaveEmpty: boolean;
   saving: boolean;
-  onSave: (content: string) => void;
+  onSave: (content: string, mediaUrls: string[]) => void;
   onCancel: () => void;
   // When both are given (tweet edit), the editor shows an audience selector.
   // Omitted for comments, which have no audience of their own.
@@ -749,12 +751,14 @@ export function PostEditor({
   onVisibilityChange?: (value: TweetVisibility) => void;
 }) {
   const [value, setValue] = useState(initialContent);
+  const media = useMediaAttachment(initialMedia);
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
     value,
     setValue,
     maxLength,
   );
-  const canSave = (value.trim().length > 0 || canSaveEmpty) && !saving;
+  const canSave =
+    (value.trim().length > 0 || media.mediaUrls.length > 0) && !saving && !media.uploading;
 
   return (
     <form
@@ -763,7 +767,7 @@ export function PostEditor({
       onSubmit={(event) => {
         event.preventDefault();
         if (canSave) {
-          onSave(value.trim());
+          onSave(value.trim(), media.mediaUrls);
         }
       }}
     >
@@ -774,16 +778,22 @@ export function PostEditor({
         aria-label="Edit content"
         autoFocus
       />
-      <div className="post-editor-actions">
-        <EmojiPicker onSelect={insertEmoji} />
-        {visibility != null && onVisibilityChange ? (
+      <MediaPreview attachment={media} />
+      {media.error ? <p className="form-error">{media.error}</p> : null}
+      {visibility != null && onVisibilityChange ? (
+        <div className="composer-visibility">
           <VisibilityPicker
             value={visibility}
             onChange={onVisibilityChange}
             disabled={saving}
           />
-        ) : null}
-        <span className="post-editor-spacer" />
+        </div>
+      ) : null}
+      <div className="post-editor-actions">
+        <div className="composer-tools">
+          <EmojiPicker onSelect={insertEmoji} />
+          <MediaButton attachment={media} />
+        </div>
         <button
           type="button"
           className="outline-button compact"
@@ -1431,11 +1441,11 @@ export function TweetCard({
     }
   }
 
-  async function saveEdit(content: string) {
+  async function saveEdit(content: string, mediaUrls: string[]) {
     setSaving(true);
     setError("");
     try {
-      const updated = await editTweet(tweet.id, content, tweet.media_urls, editVisibility);
+      const updated = await editTweet(tweet.id, content, mediaUrls, editVisibility);
       onTweetPatch(tweet.id, {
         content: updated.content,
         media_urls: updated.media_urls,
@@ -1568,8 +1578,8 @@ export function TweetCard({
         {editing ? (
           <PostEditor
             initialContent={tweet.content}
+            initialMedia={tweet.media_urls}
             maxLength={280}
-            canSaveEmpty={tweet.media_urls.length > 0}
             saving={saving}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}
@@ -1722,15 +1732,11 @@ export function CommentCard({
     }
   }
 
-  async function saveEdit(content: string) {
+  async function saveEdit(content: string, mediaUrls: string[]) {
     setSaving(true);
     setError("");
     try {
-      const updated = await editComment(
-        localComment.id,
-        content,
-        localComment.media_urls,
-      );
+      const updated = await editComment(localComment.id, content, mediaUrls);
       setLocalComment((value) => ({
         ...value,
         content: updated.content,
@@ -1837,8 +1843,8 @@ export function CommentCard({
         {editing ? (
           <PostEditor
             initialContent={localComment.content}
+            initialMedia={localComment.media_urls}
             maxLength={1000}
-            canSaveEmpty={localComment.media_urls.length > 0}
             saving={saving}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}
