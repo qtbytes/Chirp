@@ -47,12 +47,23 @@ class Settings(BaseSettings):
     default_timeline_strategy: str = "read"
     timeline_page_size: int = 20
 
-    # Trending hashtags: the top tags by post volume within a recent window.
+    # Trending hashtags rank by *velocity*, not raw volume: a tag's activity in
+    # the recent window measured against its own baseline, so a tag spiking now
+    # outranks one that is merely steadily popular. The score is
+    #   recent / (baseline_rate_per_window + 1)
+    # where baseline_rate_per_window scales the count over the preceding
+    # ``trending_baseline_hours`` down to one ``trending_window_hours`` slice, and
+    # the +1 smooths brand-new tags so a single post cannot yield an unbounded
+    # score. ``trending_min_posts`` is the recent-count floor a tag must clear to
+    # be eligible, which keeps one-off noise off the board.
+    #
     # It is a global aggregate (not viewer-specific), so it is cached once for
     # everyone and recomputed when the short TTL lapses -- the same cache-aside
     # approach the timeline first page uses. Falls back to computing inline when
     # Redis is unavailable.
     trending_window_hours: int = 24
+    trending_baseline_hours: int = 168  # 7 days preceding the recent window
+    trending_min_posts: int = 2
     trending_limit: int = 10
     trending_cache_ttl_seconds: int = 300
 

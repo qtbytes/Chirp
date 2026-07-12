@@ -31,6 +31,8 @@ def get_trending(db: Session) -> list[dict]:
     trending = hashtag_repository.list_trending(
         db,
         window_hours=settings.trending_window_hours,
+        baseline_hours=settings.trending_baseline_hours,
+        min_posts=settings.trending_min_posts,
         limit=settings.trending_limit,
     )
 

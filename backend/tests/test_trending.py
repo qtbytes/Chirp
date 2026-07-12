@@ -1,8 +1,10 @@
 """
 Trending hashtags: GET /hashtags/trending.
 
-A global aggregate -- the top tags by post volume in a recent window. Redis is
-disabled in tests (see conftest), so each call computes fresh.
+Trending ranks by *velocity* -- recent activity relative to a tag's own baseline
+-- so a spiking tag outranks a steadily popular one. The displayed ``post_count``
+is the recent-window volume. Redis is disabled in tests (see conftest), so each
+call computes fresh; the windows/threshold are pinned per test for determinism.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -39,58 +41,93 @@ def _post(client: TestClient, content: str) -> int:
     return response.json()["id"]
 
 
+def _backdate(post_ids: list[int], hours: float) -> None:
+    """Move the given posts' hashtag rows into the past (to seed a baseline)."""
+    db = _db()
+    try:
+        when = datetime.now(timezone.utc) - timedelta(hours=hours)
+        db.query(PostHashtag).filter(PostHashtag.post_id.in_(post_ids)).update(
+            {"created_at": when}, synchronize_session=False
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 def _trending(client: TestClient) -> list[dict]:
     response = client.get("/api/v1/hashtags/trending")
     assert response.status_code == 200
     return response.json()
 
 
-def test_trending_ranks_tags_by_recent_post_volume() -> None:
+def test_velocity_ranks_a_spike_above_a_higher_volume_steady_tag(monkeypatch) -> None:
+    # Recent = last 24h; baseline = the 24h before that.
+    monkeypatch.setattr(settings, "trending_window_hours", 24)
+    monkeypatch.setattr(settings, "trending_baseline_hours", 24)
+    monkeypatch.setattr(settings, "trending_min_posts", 2)
     alice, _ = _register("alice")
+
+    # #spike: brand new, 3 posts now, no history.
     for _ in range(3):
-        _post(alice, "a #python post")
-    for _ in range(2):
-        _post(alice, "a #django post")
-    _post(alice, "a #ruby post")
+        _post(alice, "breaking #spike")
 
-    assert _trending(alice) == [
-        {"tag": "python", "post_count": 3},
-        {"tag": "django", "post_count": 2},
-        {"tag": "ruby", "post_count": 1},
-    ]
-
-
-def test_trending_respects_the_time_window() -> None:
-    alice, _ = _register("alice")
-    fresh = _post(alice, "fresh #news today")
-    old = _post(alice, "old #news")
-
-    # Age the old post's tag rows to just outside the window.
-    db = _db()
-    try:
-        stale = datetime.now(timezone.utc) - timedelta(
-            hours=settings.trending_window_hours + 1
-        )
-        db.query(PostHashtag).filter_by(post_id=old).update({"created_at": stale})
-        db.commit()
-    finally:
-        db.close()
+    # #steady: MORE recent volume (4 now) but a heavy baseline (6 a day ago),
+    # so its velocity is low.
+    for _ in range(4):
+        _post(alice, "daily #steady")
+    steady_old = [_post(alice, "older #steady") for _ in range(6)]
+    _backdate(steady_old, hours=36)
 
     trending = _trending(alice)
-    news = next(row for row in trending if row["tag"] == "news")
-    assert news["post_count"] == 1, "only the in-window post counts"
-    assert fresh != old
+    tags = [row["tag"] for row in trending]
+    assert tags.index("spike") < tags.index("steady"), (
+        "the spiking tag ranks above the higher-volume but steady one"
+    )
+    # post_count is the recent-window volume, not the velocity score.
+    by_tag = {row["tag"]: row["post_count"] for row in trending}
+    assert by_tag["spike"] == 3
+    assert by_tag["steady"] == 4
 
 
-def test_trending_excludes_deleted_authors_tags() -> None:
+def test_a_tag_below_the_recent_floor_does_not_trend(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "trending_window_hours", 24)
+    monkeypatch.setattr(settings, "trending_min_posts", 3)
+    alice, _ = _register("alice")
+
+    for _ in range(3):
+        _post(alice, "#hot")
+    _post(alice, "#cold")  # only one recent post -> below the floor
+
+    tags = [row["tag"] for row in _trending(alice)]
+    assert "hot" in tags
+    assert "cold" not in tags
+
+
+def test_recent_window_bounds_the_displayed_count(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "trending_window_hours", 24)
+    monkeypatch.setattr(settings, "trending_baseline_hours", 24)
+    monkeypatch.setattr(settings, "trending_min_posts", 1)
+    alice, _ = _register("alice")
+
+    for _ in range(2):
+        _post(alice, "#news")
+    old = [_post(alice, "#news")]
+    _backdate(old, hours=100)  # outside both the recent and baseline windows
+
+    news = next(row for row in _trending(alice) if row["tag"] == "news")
+    assert news["post_count"] == 2, "only in-window posts count"
+
+
+def test_trending_excludes_deleted_authors_tags(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "trending_min_posts", 1)
     alice, _ = _register("alice")
     bob, bob_id = _register("bob")
 
     _post(alice, "alice on #topic")
+    _post(alice, "alice again #topic")
     _post(bob, "bob on #topic")
 
-    # Before deletion: both count.
-    assert _trending(alice)[0] == {"tag": "topic", "post_count": 2}
+    assert next(r for r in _trending(alice) if r["tag"] == "topic")["post_count"] == 3
 
     db = _db()
     try:
@@ -98,8 +135,7 @@ def test_trending_excludes_deleted_authors_tags() -> None:
     finally:
         db.close()
 
-    # After: only alice's tagged post drives the trend.
-    assert _trending(alice)[0] == {"tag": "topic", "post_count": 1}
+    assert next(r for r in _trending(alice) if r["tag"] == "topic")["post_count"] == 2
 
 
 def test_trending_is_empty_with_no_hashtags() -> None:
