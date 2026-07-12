@@ -130,6 +130,51 @@ def test_blank_or_punctuation_only_query_returns_empty() -> None:
     assert _search(alice, "!!! ??? ...")["items"] == []
 
 
+def test_recent_sort_orders_newest_first() -> None:
+    alice, _ = _register("alice")
+    # Densest match is posted first; under recency it must still come out last.
+    dense = _post(alice, "banana banana banana")
+    middle = _post(alice, "a banana here")
+    newest = _post(alice, "one more banana")
+
+    ids = [item["id"] for item in _search(alice, "banana", sort="recent")["items"]]
+    assert ids == [newest, middle, dense], "newest-first, ignoring relevance"
+
+
+def test_recent_sort_paginates_by_cursor_without_gaps_or_dupes() -> None:
+    alice, _ = _register("alice")
+    posted = [_post(alice, f"cherry entry {n}") for n in range(5)]
+
+    seen: list[int] = []
+    cursor = None
+    for _ in range(10):
+        page = _search(
+            alice, "cherry", sort="recent", limit=2, **({"cursor": cursor} if cursor else {})
+        )
+        seen.extend(item["id"] for item in page["items"])
+        cursor = page["next_cursor"]
+        if cursor is None:
+            break
+
+    assert cursor is None
+    assert seen == list(reversed(posted)), "strictly newest-first across pages, no dupes"
+
+
+def test_a_cursor_from_one_sort_is_rejected_by_the_other() -> None:
+    alice, _ = _register("alice")
+    for _ in range(3):
+        _post(alice, "grape post")
+
+    # A recent (time) cursor cannot be decoded as a relevance (score) cursor.
+    recent_cursor = _search(alice, "grape", sort="recent", limit=1)["next_cursor"]
+    assert recent_cursor is not None
+    mismatched = alice.get(
+        "/api/v1/search",
+        params={"q": "grape", "sort": "relevance", "cursor": recent_cursor},
+    )
+    assert mismatched.status_code == 400
+
+
 # --- extraction on write ---------------------------------------------------
 
 

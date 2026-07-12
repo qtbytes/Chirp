@@ -14,6 +14,7 @@ import type {
   ProfileRepliesPage,
   ProfileTweetsPage,
   SearchPage,
+  SearchSort,
   Session,
   TimelineKind,
   TimelinePage,
@@ -343,9 +344,13 @@ export function listUsers(query: string): Promise<UserDiscovery[]> {
   return request<UserDiscovery[]>(`/users?${params.toString()}`);
 }
 
-/** Full-text search over post content (tweets and replies), most-relevant first. */
-export function searchPosts(query: string, cursor?: string | null): Promise<SearchPage> {
-  const params = new URLSearchParams({ q: query.trim(), limit: "20" });
+/** Full-text search over post content (tweets and replies). */
+export function searchPosts(
+  query: string,
+  cursor?: string | null,
+  sort: SearchSort = "relevance",
+): Promise<SearchPage> {
+  const params = new URLSearchParams({ q: query.trim(), limit: "20", sort });
   if (cursor) {
     params.set("cursor", cursor);
   }

@@ -183,6 +183,8 @@ export type SearchPost = Tweet & {
   thread_id: number;
 };
 
+export type SearchSort = "relevance" | "recent";
+
 export type SearchPage = {
   items: SearchPost[];
   next_cursor: string | null;

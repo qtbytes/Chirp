@@ -1,3 +1,5 @@
+from typing import Literal
+
 from app.api.deps import get_current_user_id
 from app.core.config import settings
 from app.core.rate_limit import rate_limiter
@@ -6,6 +8,7 @@ from app.repositories import block_repository, search_repository
 from app.schemas.search import SearchPage, SearchPostOut
 from app.schemas.user import UserSummary
 from app.services.serializers import serialize_quoted_post
+from app.services.timeline_service import decode_cursor, encode_cursor
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -19,19 +22,29 @@ router = APIRouter(prefix="/search", tags=["search"])
 )
 def search_posts(
     q: str = Query(..., min_length=1, max_length=200),
+    sort: Literal["relevance", "recent"] = "relevance",
     limit: int = Query(default=settings.timeline_page_size, ge=1, le=50),
     cursor: str | None = None,
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> SearchPage:
     """
-    Full-text search over post content (tweets and replies), most-relevant first.
+    Full-text search over post content (tweets and replies).
 
-    Uses the same page-and-cursor shape as the timelines, but the cursor keys on
-    BM25 relevance ``(score, id)`` rather than time -- see search_repository.
+    ``sort=relevance`` (default) ranks by BM25, paging on a ``(score, id)``
+    cursor; ``sort=recent`` orders newest-first, paging on the timelines'
+    ``(created_at, id)`` cursor. The cursor is opaque and sort-specific, so a
+    caller keeps ``sort`` fixed across one pagination run.
     """
-    cursor_score, cursor_id = search_repository.decode_search_cursor(cursor)
-    if cursor and (cursor_score is None or cursor_id is None):
+    # Decode the cursor with the codec that matches the sort.
+    cursor_score = cursor_created_at = cursor_id = None
+    if sort == "recent":
+        cursor_created_at, cursor_id = decode_cursor(cursor)
+        malformed = cursor and (cursor_created_at is None or cursor_id is None)
+    else:
+        cursor_score, cursor_id = search_repository.decode_search_cursor(cursor)
+        malformed = cursor and (cursor_score is None or cursor_id is None)
+    if malformed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid cursor",
@@ -46,10 +59,12 @@ def search_posts(
         db,
         match=match,
         limit=limit,
-        cursor_score=cursor_score,
-        cursor_id=cursor_id,
+        sort=sort,
         current_user_id=current_user_id,
         exclude_author_ids=block_repository.hidden_user_ids(db, current_user_id),
+        cursor_score=cursor_score,
+        cursor_created_at=cursor_created_at,
+        cursor_id=cursor_id,
     )
 
     has_next = len(rows) > limit
@@ -77,8 +92,11 @@ def search_posts(
     next_cursor = None
     if has_next and page_rows:
         last = page_rows[-1]
-        next_cursor = search_repository.encode_search_cursor(
-            last["cursor_score"], last["cursor_id"]
-        )
+        if sort == "recent":
+            next_cursor = encode_cursor(last["cursor_created_at"], last["cursor_id"])
+        else:
+            next_cursor = search_repository.encode_search_cursor(
+                last["cursor_score"], last["cursor_id"]
+            )
 
     return SearchPage(items=items, next_cursor=next_cursor)

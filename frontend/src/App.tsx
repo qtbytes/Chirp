@@ -61,6 +61,7 @@ import type {
   Notification,
   ProfileTweetsPage,
   SearchPost,
+  SearchSort,
   TimelineKind,
   TimelinePage,
   TrendingHashtag,
@@ -564,6 +565,7 @@ function SearchPostsPanel({
 }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState(initialQuery);
+  const [sort, setSort] = useState<SearchSort>("relevance");
   const [postById, setPostById] = useState<Record<number, SearchPost>>({});
   const [ids, setIds] = useState<number[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -617,7 +619,7 @@ function SearchPostsPanel({
       setLoading(true);
       setError("");
       try {
-        const page = await searchPosts(term, nextCursor);
+        const page = await searchPosts(term, nextCursor, sort);
         setPostById((current) => {
           const next = append ? { ...current } : {};
           for (const post of page.items) {
@@ -640,7 +642,7 @@ function SearchPostsPanel({
         setLoading(false);
       }
     },
-    [],
+    [sort],
   );
 
   // Arriving via a #hashtag link (or clicking another one while already here)
@@ -677,6 +679,24 @@ function SearchPostsPanel({
           aria-label="Search posts"
         />
       </label>
+      <div className="search-sort" role="tablist" aria-label="Sort results">
+        <button
+          className={sort === "relevance" ? "search-sort-btn active" : "search-sort-btn"}
+          onClick={() => setSort("relevance")}
+          role="tab"
+          aria-selected={sort === "relevance"}
+        >
+          Top
+        </button>
+        <button
+          className={sort === "recent" ? "search-sort-btn active" : "search-sort-btn"}
+          onClick={() => setSort("recent")}
+          role="tab"
+          aria-selected={sort === "recent"}
+        >
+          Latest
+        </button>
+      </div>
       {error ? <p className="form-error">{error}</p> : null}
       {searched && !loading && posts.length === 0 && !error ? (
         <div className="status-panel">No posts found.</div>

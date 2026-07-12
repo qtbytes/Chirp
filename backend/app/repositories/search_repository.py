@@ -2,21 +2,31 @@
 Full-text search over post content, backed by the SQLite FTS5 ``posts_fts``
 index (see ``app/db/fts.py``).
 
-Results are ranked by BM25 relevance, not recency, so pagination uses a
-``(score, id)`` keyset cursor rather than the timelines' ``(created_at, id)``
-one. BM25 is deterministic for a given query and index, so the boundary row's
-score recomputes to the exact same float on the next page -- the same trick the
-"for you" rank cursor relies on. SQLite's ``bm25()`` returns smaller (more
-negative) numbers for better matches, hence the ascending order.
+Two orderings are supported:
+
+- ``relevance`` (default): BM25 relevance, paginated by a ``(score, id)`` keyset
+  cursor. BM25 is deterministic for a given query and index, so the boundary
+  row's score recomputes to the same float on the next page -- the same trick the
+  "for you" rank cursor uses. SQLite's ``bm25()`` returns smaller (more negative)
+  numbers for better matches, hence ascending order.
+- ``recent``: newest-first by ``(created_at, id)`` -- the same keyset cursor the
+  timelines use. The FTS match is applied as a subquery so the ordering runs over
+  the typed ``posts.created_at`` column and the datetime cursor compares
+  correctly.
 """
 
 import re
+from datetime import datetime
+from typing import Literal
 
-from sqlalchemy import bindparam, select, text
+from sqlalchemy import and_, bindparam, literal_column, or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.post import Post
+from app.models.user import User
 from app.repositories import engagement_repository, tweet_repository
+
+SearchSort = Literal["relevance", "recent"]
 
 # Split the query into word tokens, dropping every FTS5 operator character in the
 # process (quotes, parentheses, ``*``, ``:``, ``-`` ...). This is what keeps a raw
@@ -46,7 +56,7 @@ def encode_search_cursor(score: float, post_id: int) -> str:
 
 
 def decode_search_cursor(cursor: str | None) -> tuple[float | None, int | None]:
-    """Decode a search cursor. Returns ``(None, None)`` for absent/malformed input."""
+    """Decode a relevance cursor. Returns ``(None, None)`` for absent/malformed input."""
     if not cursor:
         return None, None
     try:
@@ -56,27 +66,15 @@ def decode_search_cursor(cursor: str | None) -> tuple[float | None, int | None]:
         return None, None
 
 
-def search_posts(
+def _relevance_hits(
     db: Session,
-    *,
     match: str,
     limit: int,
-    cursor_score: float | None = None,
-    cursor_id: int | None = None,
-    current_user_id: int,
-    exclude_author_ids: set[int] | None = None,
-) -> list[dict]:
-    """
-    Return posts (tweets and replies) matching ``match`` most-relevant first.
-
-    Fetches ``limit + 1`` rows so the caller can detect a next page. Excludes
-    deleted authors and, via ``exclude_author_ids``, blocked/blocking ones --
-    the same visibility rules the feeds apply.
-
-    Each returned row carries the post, its engagement stats (stat'd with the
-    method that matches its kind), ``is_reply`` / ``thread_id`` for linking, and
-    ``cursor_score`` / ``cursor_id`` for the next cursor.
-    """
+    cursor_score: float | None,
+    cursor_id: int | None,
+    exclude_author_ids: set[int] | None,
+) -> list[tuple[int, float]]:
+    """Matching post ids ordered by BM25 relevance, each with its score."""
     conditions = ["u.deleted_at IS NULL"]
     params: dict = {"match": match, "row_limit": limit + 1}
     expanding = []
@@ -111,12 +109,68 @@ def search_posts(
     if expanding:
         stmt = stmt.bindparams(*expanding)
 
-    hits = db.execute(stmt, params).all()
-    if not hits:
+    return [(row.id, row.score) for row in db.execute(stmt, params).all()]
+
+
+def _recent_hits(
+    db: Session,
+    match: str,
+    limit: int,
+    cursor_created_at: datetime | None,
+    cursor_id: int | None,
+    exclude_author_ids: set[int] | None,
+) -> list[tuple[int, datetime]]:
+    """Matching post ids ordered newest-first, each with its ``created_at``."""
+    # The FTS match feeds an ``IN`` subquery so the ordering and the datetime
+    # cursor run over the typed ``posts.created_at`` column (raw-SQL datetime
+    # binding against SQLite's stored string form is unreliable).
+    match_ids = (
+        select(literal_column("rowid"))
+        .select_from(text("posts_fts"))
+        .where(text("posts_fts MATCH :match").bindparams(match=match))
+    )
+
+    stmt = (
+        select(Post.id, Post.created_at)
+        .join(User, User.id == Post.user_id)
+        .where(Post.id.in_(match_ids), User.deleted_at.is_(None))
+        .order_by(Post.created_at.desc(), Post.id.desc())
+        .limit(limit + 1)
+    )
+    if exclude_author_ids:
+        stmt = stmt.where(Post.user_id.not_in(exclude_author_ids))
+    if cursor_created_at is not None and cursor_id is not None:
+        stmt = stmt.where(
+            or_(
+                Post.created_at < cursor_created_at,
+                and_(
+                    Post.created_at == cursor_created_at,
+                    Post.id < cursor_id,
+                ),
+            )
+        )
+
+    return [(row.id, row.created_at) for row in db.execute(stmt).all()]
+
+
+def _hydrate(
+    db: Session,
+    ordered: list[tuple[int, object]],
+    sort: SearchSort,
+    current_user_id: int,
+) -> list[dict]:
+    """
+    Load posts + engagement for the ordered hit ids and build result rows.
+
+    Preserves the incoming order and attaches the cursor field the caller's sort
+    pages by: ``cursor_created_at`` for ``recent``, ``cursor_score`` for
+    ``relevance``. Tweets and replies are stat'd with the method that matches
+    their kind so each keeps its correct counts.
+    """
+    if not ordered:
         return []
 
-    hit_ids = [row.id for row in hits]
-    score_by_id = {row.id: row.score for row in hits}
+    hit_ids = [pid for pid, _ in ordered]
 
     posts = db.scalars(
         select(Post).options(joinedload(Post.author)).where(Post.id.in_(hit_ids))
@@ -143,24 +197,56 @@ def search_posts(
         "liked_by_me": False,
     }
 
-    # hit_ids is already ordered by (score ASC, id ASC) from the query above.
     rows: list[dict] = []
-    for pid in hit_ids:
+    for pid, cursor_value in ordered:
         post = post_by_id.get(pid)
         if post is None:
             continue
         stats = stats_by_id.get(pid, empty)
-        rows.append(
-            {
-                "post": post,
-                "is_reply": post.reply_to_id is not None,
-                "thread_id": post.root_id or post.id,
-                "like_count": stats["like_count"],
-                "comment_count": stats["comment_count"],
-                "retweet_count": stats["retweet_count"],
-                "liked_by_me": stats["liked_by_me"],
-                "cursor_score": score_by_id[pid],
-                "cursor_id": pid,
-            }
-        )
+        row = {
+            "post": post,
+            "is_reply": post.reply_to_id is not None,
+            "thread_id": post.root_id or post.id,
+            "like_count": stats["like_count"],
+            "comment_count": stats["comment_count"],
+            "retweet_count": stats["retweet_count"],
+            "liked_by_me": stats["liked_by_me"],
+            "cursor_id": pid,
+        }
+        if sort == "recent":
+            row["cursor_created_at"] = cursor_value
+        else:
+            row["cursor_score"] = cursor_value
+        rows.append(row)
     return rows
+
+
+def search_posts(
+    db: Session,
+    *,
+    match: str,
+    limit: int,
+    sort: SearchSort = "relevance",
+    current_user_id: int,
+    exclude_author_ids: set[int] | None = None,
+    cursor_score: float | None = None,
+    cursor_created_at: datetime | None = None,
+    cursor_id: int | None = None,
+) -> list[dict]:
+    """
+    Return posts (tweets and replies) matching ``match``, ordered by ``sort``.
+
+    Fetches ``limit + 1`` rows so the caller can detect a next page. Excludes
+    deleted authors and, via ``exclude_author_ids``, blocked/blocking ones --
+    the same visibility rules the feeds apply.
+    """
+    if sort == "recent":
+        ordered = _recent_hits(
+            db, match, limit, cursor_created_at, cursor_id, exclude_author_ids
+        )
+    else:
+        ordered = _relevance_hits(
+            db, match, limit, cursor_score, cursor_id, exclude_author_ids
+        )
+
+    return _hydrate(db, ordered, sort, current_user_id)
