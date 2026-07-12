@@ -17,6 +17,7 @@ from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from app.db.database import Base
+from app.db.fts import include_name_excluding_fts
 from app.models import (  # noqa: F401  -- populates Base.metadata
     FeedItem,
     Follow,
@@ -25,6 +26,10 @@ from app.models import (  # noqa: F401  -- populates Base.metadata
     Post,
     User,
 )
+
+# The FTS5 virtual table and its shadow tables cannot be modelled, so filter them
+# out of the drift comparison exactly as env.py does for autogenerate.
+_COMPARE_OPTS = {"compare_type": True, "include_name": include_name_excluding_fts}
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,9 +59,7 @@ def test_migrations_produce_the_schema_the_models_describe(migrated_url: str) ->
     engine = sa.create_engine(migrated_url)
     try:
         with engine.connect() as connection:
-            context = MigrationContext.configure(
-                connection, opts={"compare_type": True}
-            )
+            context = MigrationContext.configure(connection, opts=_COMPARE_OPTS)
             difference = compare_metadata(context, Base.metadata)
     finally:
         engine.dispose()
@@ -239,9 +242,7 @@ def test_upgrade_adopts_a_pre_alembic_database(tmp_path: Path) -> None:
                 sa.text("SELECT version_num FROM alembic_version")
             ).scalar_one()
 
-            context = MigrationContext.configure(
-                connection, opts={"compare_type": True}
-            )
+            context = MigrationContext.configure(connection, opts=_COMPARE_OPTS)
             difference = compare_metadata(context, Base.metadata)
     finally:
         engine.dispose()

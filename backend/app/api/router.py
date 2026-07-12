@@ -9,6 +9,7 @@ from app.api.routes import (
     mutes,
     notifications,
     reports,
+    search,
     timeline,
     tweets,
     users,
@@ -23,6 +24,7 @@ api_router.include_router(reports.router)
 api_router.include_router(comments.router)
 api_router.include_router(users.router)
 api_router.include_router(follows.router)
+api_router.include_router(search.router)
 api_router.include_router(tweets.router)
 api_router.include_router(interactions.router)
 api_router.include_router(timeline.router)

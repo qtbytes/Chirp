@@ -82,6 +82,13 @@ def create_tweet(
             post_id=post.id,
         )
 
+    # Index the post's #hashtags / @mentions and notify anyone mentioned, in the
+    # same transaction as the post. Imported lazily to avoid an import cycle
+    # while the repositories package is still initialising.
+    from app.repositories import entity_repository
+
+    entity_repository.sync_post_entities(db, post, author_id)
+
     db.commit()
 
     return db.scalar(

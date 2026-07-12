@@ -107,6 +107,10 @@ class Settings(BaseSettings):
     rate_limit_report_window_seconds: int = 3600
     rate_limit_timeline_max_requests: int = 120
     rate_limit_timeline_window_seconds: int = 60
+    # Search runs an FTS match plus stat joins per request, heavier than a feed
+    # read, so it gets a tighter bucket. Authenticated -> bucketed by user.
+    rate_limit_search_max_requests: int = 60
+    rate_limit_search_window_seconds: int = 60
     rate_limit_link_preview_max_requests: int = 30
     rate_limit_link_preview_window_seconds: int = 60
 

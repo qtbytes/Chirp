@@ -181,6 +181,12 @@ def create_comment(
             post_id=post.id,
         )
 
+    # Index the reply's #hashtags / @mentions and notify anyone mentioned.
+    # Imported lazily to avoid a repositories-package import cycle.
+    from app.repositories import entity_repository
+
+    entity_repository.sync_post_entities(db, post, user_id)
+
     db.commit()
     db.refresh(post)
     return post, author

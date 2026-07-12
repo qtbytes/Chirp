@@ -12,6 +12,7 @@ import {
 } from "react-router-dom";
 import {
   ArrowLeft,
+  AtSign,
   Bell,
   Feather,
   Home,
@@ -48,12 +49,14 @@ import {
   markNotificationsRead,
   notificationStreamUrl,
   register,
+  searchPosts,
   toggleTweetLike,
   unfollowUser,
 } from "./api";
 import type {
   Comment,
   Notification,
+  SearchPost,
   TimelineKind,
   TimelinePage,
   Tweet,
@@ -202,7 +205,7 @@ function App() {
       >
         <Route path="/" element={<HomeView />} />
         <Route path="/following" element={<HomeView />} />
-        <Route path="/search" element={<PeopleRoute />} />
+        <Route path="/search" element={<SearchView />} />
         <Route path="/notifications" element={<NotificationsView />} />
         <Route
           path="/settings"
@@ -474,8 +477,11 @@ function AppLayout({
   );
 }
 
-function PeopleRoute() {
-  const { onDiscoveryChanged } = useOutletContext<LayoutContext>();
+type SearchTab = "posts" | "people";
+
+function SearchView() {
+  const { currentUser, onDiscoveryChanged } = useOutletContext<LayoutContext>();
+  const [tab, setTab] = useState<SearchTab>("posts");
 
   return (
     <>
@@ -483,9 +489,218 @@ function PeopleRoute() {
         <div className="feed-title-row">
           <h1>Search</h1>
         </div>
+        <div className="tab-list" role="tablist" aria-label="Search">
+          <button
+            className={tab === "posts" ? "tab active" : "tab"}
+            onClick={() => setTab("posts")}
+            role="tab"
+            aria-selected={tab === "posts"}
+          >
+            Posts
+          </button>
+          <button
+            className={tab === "people" ? "tab active" : "tab"}
+            onClick={() => setTab("people")}
+            role="tab"
+            aria-selected={tab === "people"}
+          >
+            People
+          </button>
+        </div>
       </header>
-      <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideHeading />
+      {tab === "posts" ? (
+        <SearchPostsPanel currentUser={currentUser} />
+      ) : (
+        <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideHeading />
+      )}
     </>
+  );
+}
+
+function SearchReplyCard({
+  post,
+  onOpen,
+}: {
+  post: SearchPost;
+  onOpen: () => void;
+}) {
+  return (
+    <article className="search-reply" onClick={onOpen}>
+      <div className="search-reply-head">
+        <Avatar user={post.author} size="small" />
+        <Link
+          to={`/${encodeURIComponent(post.author.username)}`}
+          className="author-link"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <strong>{displayName(post.author)}</strong>
+          <span>@{post.author.username}</span>
+        </Link>
+        <span className="search-reply-meta">
+          · reply · {formatCompactDate(post.created_at)}
+        </span>
+      </div>
+      <PostBody text={post.content} enablePreview={false} />
+    </article>
+  );
+}
+
+function SearchPostsPanel({ currentUser }: { currentUser: UserSummary }) {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [postById, setPostById] = useState<Record<number, SearchPost>>({});
+  const [ids, setIds] = useState<number[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [searched, setSearched] = useState(false);
+
+  const posts = useMemo(
+    () => ids.map((id) => postById[id]).filter((post): post is SearchPost => Boolean(post)),
+    [ids, postById],
+  );
+
+  const patchPost = useCallback((postId: number, patch: Partial<Tweet>) => {
+    setPostById((current) => {
+      const existing = current[postId];
+      if (!existing) {
+        return current;
+      }
+      return { ...current, [postId]: { ...existing, ...patch } };
+    });
+  }, []);
+
+  const removePost = useCallback((postId: number) => {
+    setIds((current) => current.filter((id) => id !== postId));
+    setPostById((current) => {
+      const next = { ...current };
+      delete next[postId];
+      return next;
+    });
+  }, []);
+
+  const removeByAuthor = useCallback(
+    (authorId: number) => {
+      setPostById((current) => {
+        const removed = new Set(
+          Object.values(current)
+            .filter((post) => post.author.id === authorId)
+            .map((post) => post.id),
+        );
+        setIds((currentIds) => currentIds.filter((id) => !removed.has(id)));
+        const next = { ...current };
+        removed.forEach((id) => delete next[id]);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const runSearch = useCallback(
+    async (term: string, nextCursor?: string | null, append = false) => {
+      setLoading(true);
+      setError("");
+      try {
+        const page = await searchPosts(term, nextCursor);
+        setPostById((current) => {
+          const next = append ? { ...current } : {};
+          for (const post of page.items) {
+            next[post.id] = post;
+          }
+          return next;
+        });
+        setIds((current) => {
+          const nextIds = page.items.map((post) => post.id);
+          if (!append) {
+            return nextIds;
+          }
+          const existing = new Set(current);
+          return [...current, ...nextIds.filter((id) => !existing.has(id))];
+        });
+        setCursor(page.next_cursor);
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  // Debounce the query, and skip the request until there is something to search.
+  useEffect(() => {
+    const term = query.trim();
+    if (!term) {
+      setIds([]);
+      setPostById({});
+      setCursor(null);
+      setSearched(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSearched(true);
+      void runSearch(term);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [query, runSearch]);
+
+  return (
+    <section className="discovery-panel" aria-label="Search posts">
+      <label className="search-box">
+        <Search size={18} aria-hidden="true" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search posts"
+          aria-label="Search posts"
+        />
+      </label>
+      {error ? <p className="form-error">{error}</p> : null}
+      {searched && !loading && posts.length === 0 && !error ? (
+        <div className="status-panel">No posts found.</div>
+      ) : null}
+      <section className="tweet-list" aria-live="polite">
+        {posts.map((post) =>
+          post.is_reply ? (
+            <SearchReplyCard
+              key={post.id}
+              post={post}
+              onOpen={() =>
+                navigate(`/tweet/${post.thread_id}`, {
+                  state: { scrollToPostId: post.id },
+                })
+              }
+            />
+          ) : (
+            <TweetCard
+              key={post.id}
+              tweet={post}
+              onOpen={() => navigate(`/tweet/${post.id}`)}
+              onTweetPatch={patchPost}
+              currentUserId={currentUser.id}
+              onDeleted={removePost}
+              onAuthorMuted={removeByAuthor}
+              onAuthorBlocked={removeByAuthor}
+            />
+          ),
+        )}
+      </section>
+      {loading ? (
+        <div className="loading-row">
+          <Loader2 className="spin" size={18} aria-hidden="true" />
+          <span>Searching</span>
+        </div>
+      ) : null}
+      {cursor ? (
+        <button
+          className="load-more"
+          onClick={() => void runSearch(query.trim(), cursor, true)}
+          disabled={loading}
+        >
+          Load more
+        </button>
+      ) : null}
+    </section>
   );
 }
 
@@ -495,6 +710,7 @@ const NOTIFICATION_TEXT: Record<Notification["type"], string> = {
   comment: "commented on your tweet",
   reply: "replied to your comment",
   follow: "followed you",
+  mention: "mentioned you",
 };
 
 function NotificationIcon({ type }: { type: Notification["type"] }) {
@@ -503,6 +719,9 @@ function NotificationIcon({ type }: { type: Notification["type"] }) {
   }
   if (type === "retweet") {
     return <Repeat2 size={16} className="notif-icon retweet" aria-hidden="true" />;
+  }
+  if (type === "mention") {
+    return <AtSign size={16} className="notif-icon mention" aria-hidden="true" />;
   }
   if (type === "comment" || type === "reply") {
     return <MessageCircle size={16} className="notif-icon comment" aria-hidden="true" />;

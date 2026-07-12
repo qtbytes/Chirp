@@ -15,6 +15,8 @@ from app.models.feed import FeedItem
 from app.models.like import Like
 from app.models.notification import Notification
 from app.models.post import Post
+from app.models.post_hashtag import PostHashtag
+from app.models.post_mention import PostMention
 
 
 def _utcnow() -> datetime:
@@ -44,6 +46,13 @@ def update_post(
     post.content = content
     post.media_urls = media_urls or None
     post.edited_at = _utcnow()
+
+    # Re-sync the post's #hashtags / @mentions against the edited text (and notify
+    # any newly mentioned user). Imported lazily to avoid an import cycle.
+    from app.repositories import entity_repository
+
+    entity_repository.sync_post_entities(db, post, user_id)
+
     db.commit()
 
     return db.scalar(
@@ -94,5 +103,7 @@ def delete_post(db: Session, post_id: int, user_id: int) -> None:
     db.execute(delete(Like).where(Like.post_id.in_(ids)))
     db.execute(delete(FeedItem).where(FeedItem.post_id.in_(ids)))
     db.execute(delete(Notification).where(Notification.post_id.in_(ids)))
+    db.execute(delete(PostHashtag).where(PostHashtag.post_id.in_(ids)))
+    db.execute(delete(PostMention).where(PostMention.post_id.in_(ids)))
     db.execute(delete(Post).where(Post.id.in_(ids)))
     db.commit()

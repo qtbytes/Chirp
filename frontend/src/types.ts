@@ -174,12 +174,27 @@ export type ProfileTweetsPage = {
   next_cursor: string | null;
 };
 
+/**
+ * A content-search hit. Shaped like a Tweet so a top-level result renders in a
+ * TweetCard, plus `is_reply`/`thread_id` so a reply hit can link into its thread.
+ */
+export type SearchPost = Tweet & {
+  is_reply: boolean;
+  thread_id: number;
+};
+
+export type SearchPage = {
+  items: SearchPost[];
+  next_cursor: string | null;
+};
+
 export type NotificationType =
   | "like"
   | "retweet"
   | "comment"
   | "reply"
-  | "follow";
+  | "follow"
+  | "mention";
 
 export type Notification = {
   id: number;

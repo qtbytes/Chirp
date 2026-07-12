@@ -7,6 +7,7 @@ from sqlalchemy import Connection, create_engine, inspect
 
 from app.core.config import settings
 from app.db.database import Base, engine
+from app.db.fts import include_name_excluding_fts
 
 # Importing the models is what populates Base.metadata, which autogenerate
 # diffs against the live database. Without this every revision comes out empty.
@@ -16,6 +17,8 @@ from app.models import (  # noqa: F401
     Like,
     Notification,
     Post,
+    PostHashtag,
+    PostMention,
     User,
 )
 
@@ -79,6 +82,9 @@ def run_migrations_offline() -> None:
         # instead. It is a no-op on backends that can, so both modes set it.
         render_as_batch=True,
         compare_type=True,
+        # The FTS5 virtual table and its shadow tables are not modelled, so keep
+        # autogenerate from proposing to drop them.
+        include_name=include_name_excluding_fts,
     )
 
     with context.begin_transaction():
@@ -102,6 +108,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             render_as_batch=True,
             compare_type=True,
+            include_name=include_name_excluding_fts,
         )
 
         with context.begin_transaction():

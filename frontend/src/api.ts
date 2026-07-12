@@ -13,6 +13,7 @@ import type {
   ReportReason,
   ProfileRepliesPage,
   ProfileTweetsPage,
+  SearchPage,
   Session,
   TimelineKind,
   TimelinePage,
@@ -339,6 +340,15 @@ export function listUsers(query: string): Promise<UserDiscovery[]> {
     params.set("query", query.trim());
   }
   return request<UserDiscovery[]>(`/users?${params.toString()}`);
+}
+
+/** Full-text search over post content (tweets and replies), most-relevant first. */
+export function searchPosts(query: string, cursor?: string | null): Promise<SearchPage> {
+  const params = new URLSearchParams({ q: query.trim(), limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<SearchPage>(`/search?${params.toString()}`);
 }
 
 export function getFollowers(

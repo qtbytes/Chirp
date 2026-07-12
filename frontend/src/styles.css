@@ -425,7 +425,8 @@ button.rail-link:disabled:hover {
 }
 
 .notif-icon.comment,
-.notif-icon.follow {
+.notif-icon.follow,
+.notif-icon.mention {
   color: var(--accent);
 }
 
@@ -798,6 +799,32 @@ button.rail-link:disabled:hover {
 
 .tweet-card:hover {
   background: var(--hover);
+}
+
+/* A compact reply hit in post search: lighter than a full TweetCard, links into
+   its thread when clicked. */
+.search-reply {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+}
+
+.search-reply:hover {
+  background: var(--hover);
+}
+
+.search-reply-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.search-reply-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .tweet-card.clickable {
