@@ -1,4 +1,4 @@
-import { ChangeEvent, useRef } from "react";
+import { ChangeEvent, useEffect, useRef } from "react";
 
 type Field = HTMLInputElement | HTMLTextAreaElement;
 
@@ -14,6 +14,21 @@ export function useEmojiField<T extends Field>(
 ) {
   const ref = useRef<T>(null);
   const caretRef = useRef<{ start: number; end: number } | null>(null);
+
+  // Auto-grow a <textarea> to fit its content: reset to the CSS min-height, then
+  // lock the height to the content's scroll height. Runs on every value change
+  // (typing, deletion, and emoji insertion). Inputs are left untouched.
+  useEffect(() => {
+    const el = ref.current;
+    if (!(el instanceof HTMLTextAreaElement)) {
+      return;
+    }
+    // Own the sizing so a manual resize handle / scrollbar can't fight the grow.
+    el.style.resize = "none";
+    el.style.overflowY = "hidden";
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
 
   function rememberCaret() {
     const el = ref.current;
