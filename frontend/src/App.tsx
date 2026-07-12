@@ -47,6 +47,7 @@ import {
   login,
   logout,
   markNotificationRead,
+  getHashtagPosts,
   markNotificationsRead,
   notificationStreamUrl,
   register,
@@ -57,6 +58,7 @@ import {
 import type {
   Comment,
   Notification,
+  ProfileTweetsPage,
   SearchPost,
   TimelineKind,
   TimelinePage,
@@ -207,6 +209,7 @@ function App() {
         <Route path="/" element={<HomeView />} />
         <Route path="/following" element={<HomeView />} />
         <Route path="/search" element={<SearchView />} />
+        <Route path="/hashtag/:tag" element={<HashtagView />} />
         <Route path="/notifications" element={<NotificationsView />} />
         <Route
           path="/settings"
@@ -717,6 +720,144 @@ function SearchPostsPanel({
         </button>
       ) : null}
     </section>
+  );
+}
+
+function HashtagView() {
+  const { tag } = useParams();
+  const navigate = useNavigate();
+  const { currentUser } = useOutletContext<LayoutContext>();
+  const [page, setPage] = useState<ProfileTweetsPage | null>(null);
+  const [tweetById, setTweetById] = useState<Record<number, Tweet>>({});
+  const [tweetIds, setTweetIds] = useState<number[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const tweets = useMemo(
+    () => tweetIds.map((id) => tweetById[id]).filter((tweet): tweet is Tweet => Boolean(tweet)),
+    [tweetById, tweetIds],
+  );
+
+  const patchTweet = useCallback((tweetId: number, patch: Partial<Tweet>) => {
+    setTweetById((current) => {
+      const existing = current[tweetId];
+      if (!existing) {
+        return current;
+      }
+      return { ...current, [tweetId]: { ...existing, ...patch } };
+    });
+  }, []);
+
+  const removeTweet = useCallback((tweetId: number) => {
+    setTweetIds((ids) => ids.filter((id) => id !== tweetId));
+    setTweetById((current) => {
+      const next = { ...current };
+      delete next[tweetId];
+      return next;
+    });
+  }, []);
+
+  const removeByAuthor = useCallback((authorId: number) => {
+    setTweetById((current) => {
+      const removed = new Set(
+        Object.values(current)
+          .filter((tweet) => tweet.author.id === authorId)
+          .map((tweet) => tweet.id),
+      );
+      setTweetIds((ids) => ids.filter((id) => !removed.has(id)));
+      const next = { ...current };
+      removed.forEach((id) => delete next[id]);
+      return next;
+    });
+  }, []);
+
+  const load = useCallback(
+    async (cursor?: string | null, append = false) => {
+      if (!tag) {
+        return;
+      }
+      setLoading(true);
+      setError("");
+      try {
+        const next = await getHashtagPosts(tag, cursor);
+        setPage(next);
+        setTweetById((current) => {
+          const map = append ? { ...current } : {};
+          for (const tweet of next.items) {
+            map[tweet.id] = tweet;
+          }
+          return map;
+        });
+        setTweetIds((current) => {
+          const ids = next.items.map((tweet) => tweet.id);
+          if (!append) {
+            return ids;
+          }
+          const existing = new Set(current);
+          return [...current, ...ids.filter((id) => !existing.has(id))];
+        });
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [tag],
+  );
+
+  // Reset when navigating to a different tag, then load its first page.
+  useEffect(() => {
+    setTweetIds([]);
+    setTweetById({});
+    setPage(null);
+    void load();
+  }, [load]);
+
+  return (
+    <>
+      <header className="feed-header">
+        <div className="detail-toolbar">
+          <button className="icon-button" onClick={() => navigate(-1)} aria-label="Back">
+            <ArrowLeft size={20} aria-hidden="true" />
+          </button>
+          <h1 className="hashtag-title">#{tag}</h1>
+        </div>
+      </header>
+
+      {error ? <div className="status-panel error">{error}</div> : null}
+      {!loading && tweets.length === 0 && !error ? (
+        <div className="status-panel">No posts with this hashtag yet.</div>
+      ) : null}
+      <section className="tweet-list" aria-live="polite">
+        {tweets.map((tweet) => (
+          <TweetCard
+            key={tweet.id}
+            tweet={tweet}
+            onOpen={() => navigate(`/tweet/${tweet.id}`)}
+            onTweetPatch={patchTweet}
+            currentUserId={currentUser.id}
+            onDeleted={removeTweet}
+            onAuthorMuted={removeByAuthor}
+            onAuthorBlocked={removeByAuthor}
+          />
+        ))}
+      </section>
+      {loading ? (
+        <div className="loading-row">
+          <Loader2 className="spin" size={18} aria-hidden="true" />
+          <span>Loading</span>
+        </div>
+      ) : null}
+      {page?.next_cursor ? (
+        <button
+          className="load-more"
+          onClick={() => void load(page.next_cursor, true)}
+          disabled={loading}
+        >
+          Load more
+        </button>
+      ) : null}
+    </>
   );
 }
 

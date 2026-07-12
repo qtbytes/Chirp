@@ -1178,6 +1178,12 @@ button.rail-link:disabled:hover {
   font-size: 20px;
 }
 
+.hashtag-title {
+  margin: 0;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
 .detail-tweet {
   /* Bottom padding matches .comment-card so the root tweet's action row does
      not sit in a noticeably deeper well than the replies below it. */

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.follow import Follow
 from app.models.like import Like
 from app.models.post import Post
+from app.models.post_hashtag import PostHashtag
 from app.models.user import User
 from app.repositories.block_repository import blocks_between
 from app.repositories.notification_repository import add_notification
@@ -265,6 +266,68 @@ def list_feed_with_retweets(
     ident_stmt = (
         select(Post.id, Post.created_at)
         .where(Post.user_id.in_(author_ids), Post.reply_to_id.is_(None))
+        .order_by(Post.created_at.desc(), Post.id.desc())
+        .limit(limit + 1)
+    )
+    if exclude_author_ids:
+        ident_stmt = ident_stmt.where(Post.user_id.not_in(exclude_author_ids))
+    if exclude_deleted_authors:
+        ident_stmt = ident_stmt.where(Post.user_id.not_in(deleted_author_ids()))
+    if cursor_created_at is not None and cursor_id is not None:
+        ident_stmt = ident_stmt.where(
+            or_(
+                Post.created_at < cursor_created_at,
+                and_(
+                    Post.created_at == cursor_created_at,
+                    Post.id < cursor_id,
+                ),
+            )
+        )
+
+    ident_rows = db.execute(ident_stmt).all()
+    tweet_rows = _load_tweet_rows_by_ids(
+        db, [row_id for row_id, _ in ident_rows], current_user_id
+    )
+
+    feed: list[dict] = []
+    for row_id, created_at in ident_rows:
+        base = tweet_rows.get(row_id)
+        if base is None:
+            continue
+        feed.append(
+            {
+                **base,
+                "cursor_created_at": created_at,
+                "cursor_id": row_id,
+            }
+        )
+    return feed
+
+
+def list_tweets_by_hashtag(
+    db: Session,
+    tag: str,
+    limit: int,
+    current_user_id: int | None = None,
+    cursor_created_at: datetime | None = None,
+    cursor_id: int | None = None,
+    exclude_author_ids: set[int] | None = None,
+    exclude_deleted_authors: bool = True,
+) -> list[dict]:
+    """
+    Return top-level posts carrying an exact ``#tag``, newest-first.
+
+    This is the hashtag feed. Unlike ``/search`` (an FTS text match that strips
+    the ``#`` and prefix-matches the word), membership is the structured
+    ``post_hashtags`` rows the write path recorded, so only posts that actually
+    used the tag appear. Same ``(created_at, id)`` cursor and visibility filters
+    as ``list_feed_with_retweets``; ``tag`` must already be normalised (lowercase,
+    no leading ``#``) to match how tags are stored.
+    """
+    ident_stmt = (
+        select(Post.id, Post.created_at)
+        .join(PostHashtag, PostHashtag.post_id == Post.id)
+        .where(PostHashtag.tag == tag, Post.reply_to_id.is_(None))
         .order_by(Post.created_at.desc(), Post.id.desc())
         .limit(limit + 1)
     )

@@ -3,6 +3,7 @@ from app.api.routes import (
     blocks,
     comments,
     follows,
+    hashtags,
     interactions,
     link_preview,
     media,
@@ -24,6 +25,7 @@ api_router.include_router(reports.router)
 api_router.include_router(comments.router)
 api_router.include_router(users.router)
 api_router.include_router(follows.router)
+api_router.include_router(hashtags.router)
 api_router.include_router(search.router)
 api_router.include_router(tweets.router)
 api_router.include_router(interactions.router)

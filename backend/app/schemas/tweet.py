@@ -74,3 +74,8 @@ class TimelinePage(BaseModel):
 class ProfileTweetsPage(BaseModel):
     items: list[TweetOut]
     next_cursor: str | None = None
+
+
+class HashtagPostsPage(BaseModel):
+    items: list[TweetOut]
+    next_cursor: str | None = None

@@ -218,7 +218,7 @@ export function RichContent({ text }: { text: string }) {
             <Link
               key={index}
               className="tweet-entity"
-              to={`/search?q=${encodeURIComponent(token.value)}`}
+              to={`/hashtag/${encodeURIComponent(token.value.slice(1))}`}
               onClick={(event) => event.stopPropagation()}
             >
               {token.value}

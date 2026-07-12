@@ -351,6 +351,20 @@ export function searchPosts(query: string, cursor?: string | null): Promise<Sear
   return request<SearchPage>(`/search?${params.toString()}`);
 }
 
+/** The hashtag feed: top-level posts carrying an exact #tag, newest-first. */
+export function getHashtagPosts(
+  tag: string,
+  cursor?: string | null,
+): Promise<ProfileTweetsPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<ProfileTweetsPage>(
+    `/hashtags/${encodeURIComponent(tag)}/posts?${params.toString()}`,
+  );
+}
+
 export function getFollowers(
   username: string,
   cursor?: string | null,
