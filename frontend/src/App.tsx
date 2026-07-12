@@ -1405,11 +1405,13 @@ function Composer({
         />
         <MediaPreview attachment={media} />
         {error ? <p className="form-error">{error}</p> : null}
+        <div className="composer-visibility">
+          <VisibilityPicker value={visibility} onChange={setVisibility} disabled={posting} />
+        </div>
         <div className="composer-actions">
           <div className="composer-tools">
             <EmojiPicker onSelect={insertEmoji} />
             <MediaButton attachment={media} />
-            <VisibilityPicker value={visibility} onChange={setVisibility} disabled={posting} />
           </div>
           <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
           <button className="primary-button compact" disabled={posting || media.uploading || !canPost}>

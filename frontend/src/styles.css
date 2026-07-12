@@ -594,34 +594,144 @@ button.rail-link:disabled:hover {
   margin-right: auto;
 }
 
-/* Audience selector in the composer: an icon + label with a transparent native
-   <select> stretched over it, so the whole chip is the click target. */
+/* Twitter-style audience row: the visibility control sits on its own line under
+   the text, above a hairline that separates it from the toolbar below. */
+.composer-visibility {
+  display: flex;
+  padding-bottom: 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Pull the pill left so its icon aligns with the text above rather than the
+   button's inner padding. */
+.composer-visibility .visibility-trigger {
+  margin-left: -8px;
+}
+
+/* Audience selector in the composer: a pill trigger plus a custom popover menu
+   (a native <select> can't be styled to match the app's other menus). */
 .visibility-picker {
   position: relative;
   display: inline-flex;
+}
+
+.visibility-trigger {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  margin-left: 4px;
-  border-radius: 999px;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.visibility-picker:hover {
-  background: var(--accent-soft, rgba(29, 155, 240, 0.1));
-}
-
-.visibility-picker select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
   border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
+}
+
+.visibility-trigger:hover:not(:disabled) {
+  /* Same hover wash as the emoji / media icon buttons, so it reads as one of
+     the composer tools. */
+  background: var(--soft);
+}
+
+.visibility-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.visibility-caret {
+  opacity: 0.7;
+}
+
+.visibility-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  min-width: 260px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.visibility-menu-header {
+  margin: 0;
+  padding: 8px 10px 6px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.visibility-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.visibility-option:hover {
+  background: var(--hover);
+}
+
+.visibility-option.active {
+  background: var(--soft);
+}
+
+/* The icon sits in a soft accent chip so the menu reads as a set of choices. */
+.visibility-option-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--accent);
+}
+
+.visibility-option.active .visibility-option-icon {
+  background: var(--accent);
+  color: #fff;
+}
+
+.visibility-option-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.visibility-option-text strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.visibility-option-text small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.visibility-check {
+  margin-left: auto;
+  flex: none;
+  color: var(--accent);
 }
 
 /* On-card marker that a tweet isn't public. */

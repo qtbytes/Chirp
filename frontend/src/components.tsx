@@ -11,6 +11,8 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import {
   Ban,
+  Check,
+  ChevronDown,
   Flag,
   Globe,
   Heart,
@@ -1209,20 +1211,48 @@ export function PostBody({
   );
 }
 
-// The three audiences, in the order the composer lists them, each with the icon
-// and labels the picker and the on-card badge share.
+// The three audiences, in the order the composer lists them. ``trigger`` is the
+// self-describing label on the composer button ("who can see this"); ``label`` /
+// ``short`` / ``hint`` are used in the menu and the on-card badge.
 const VISIBILITY_OPTIONS: {
   value: TweetVisibility;
   label: string;
   short: string;
+  trigger: string;
+  hint: string;
   Icon: typeof Globe;
 }[] = [
-  { value: "public", label: "Everyone", short: "Everyone", Icon: Globe },
-  { value: "followers", label: "Followers", short: "Followers", Icon: Users },
-  { value: "private", label: "Only you", short: "Only you", Icon: Lock },
+  {
+    value: "public",
+    label: "Everyone",
+    short: "Everyone",
+    trigger: "Everyone can see",
+    hint: "Anyone on Chirp",
+    Icon: Globe,
+  },
+  {
+    value: "followers",
+    label: "Followers",
+    short: "Followers",
+    trigger: "Followers can see",
+    hint: "Accounts that follow you",
+    Icon: Users,
+  },
+  {
+    value: "private",
+    label: "Only you",
+    short: "Only you",
+    trigger: "Only you can see",
+    hint: "Just you",
+    Icon: Lock,
+  },
 ];
 
-/** The composer's audience selector (Everyone / Followers / Only you). */
+/**
+ * The composer's audience selector (Everyone / Followers / Only you): a pill
+ * trigger and a custom popover menu, so it matches the app's other menus instead
+ * of a native <select>.
+ */
 export function VisibilityPicker({
   value,
   onChange,
@@ -1232,25 +1262,91 @@ export function VisibilityPicker({
   onChange: (value: TweetVisibility) => void;
   disabled?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
   const active =
     VISIBILITY_OPTIONS.find((option) => option.value === value) ?? VISIBILITY_OPTIONS[0];
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function onDocMouseDown(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  function pick(next: TweetVisibility) {
+    onChange(next);
+    setOpen(false);
+  }
+
   return (
-    <label className="visibility-picker" title="Who can see this?">
-      <active.Icon size={16} aria-hidden="true" />
-      <span className="visibility-picker-label">{active.short}</span>
-      <select
-        value={value}
+    <div className="visibility-picker" ref={ref}>
+      <button
+        type="button"
+        className="visibility-trigger"
         disabled={disabled}
-        aria-label="Who can see this?"
-        onChange={(event) => onChange(event.target.value as TweetVisibility)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Who can see this?"
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((current) => !current);
+        }}
       >
-        {VISIBILITY_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+        <active.Icon size={16} aria-hidden="true" />
+        <span>{active.trigger}</span>
+        <ChevronDown size={16} aria-hidden="true" className="visibility-caret" />
+      </button>
+      {open ? (
+        <div
+          className="visibility-menu"
+          role="menu"
+          aria-label="Who can see this?"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <p className="visibility-menu-header">Who can see this?</p>
+          {VISIBILITY_OPTIONS.map((option) => {
+            const selected = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={selected}
+                className={selected ? "visibility-option active" : "visibility-option"}
+                onClick={() => pick(option.value)}
+              >
+                <span className="visibility-option-icon">
+                  <option.Icon size={18} aria-hidden="true" />
+                </span>
+                <span className="visibility-option-text">
+                  <strong>{option.label}</strong>
+                  <small>{option.hint}</small>
+                </span>
+                {selected ? (
+                  <Check size={18} className="visibility-check" aria-hidden="true" />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
