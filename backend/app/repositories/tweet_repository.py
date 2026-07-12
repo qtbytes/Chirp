@@ -46,7 +46,7 @@ def create_tweet(
     content: str,
     media_urls: list[str] | None = None,
     quoted_post_id: int | None = None,
-    visibility: str = DEFAULT_VISIBILITY,
+    visibility: str | None = DEFAULT_VISIBILITY,
 ) -> Post | None:
     """
     Create a top-level post (tweet) and reload it with author information.

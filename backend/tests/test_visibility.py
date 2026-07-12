@@ -44,6 +44,13 @@ def _ids(items: list[dict]) -> set[int]:
     return {item["id"] for item in items}
 
 
+def _edit(client: TestClient, tweet_id: int, content: str, visibility: str | None = None):
+    body: dict = {"content": content}
+    if visibility is not None:
+        body["visibility"] = visibility
+    return client.patch(f"/api/v1/tweets/{tweet_id}", json=body)
+
+
 # --------------------------------------------------------------- the stored value
 
 
@@ -340,5 +347,53 @@ def test_public_tweet_mention_notifies_normally() -> None:
     bob, _ = _register("bob")
 
     _post(alice, "hello @bob")
+    mentions = [n for n in _notifications(bob) if n["type"] == "mention"]
+    assert len(mentions) == 1
+
+
+# ------------------------------------------------------------------ editing
+
+
+def test_editing_visibility_changes_who_can_see() -> None:
+    alice, _ = _register("alice")
+    stranger, _ = _register("stranger")
+    tweet = _post(alice, "hello world")["id"]
+
+    assert stranger.get(f"/api/v1/tweets/{tweet}").status_code == 200
+
+    # Narrow it: the stranger loses access, and the edit echoes the new audience.
+    narrowed = _edit(alice, tweet, "hello world", "followers")
+    assert narrowed.status_code == 200
+    assert narrowed.json()["visibility"] == "followers"
+    assert stranger.get(f"/api/v1/tweets/{tweet}").status_code == 404
+
+    # Widen it again: the stranger can see it once more.
+    widened = _edit(alice, tweet, "hello world", "public")
+    assert widened.status_code == 200
+    assert stranger.get(f"/api/v1/tweets/{tweet}").status_code == 200
+
+
+def test_content_only_edit_preserves_visibility() -> None:
+    # The footgun guard: editing text without sending an audience must not reset
+    # a restricted tweet back to public.
+    alice, _ = _register("alice")
+    stranger, _ = _register("stranger")
+    tweet = _post(alice, "first", "followers")["id"]
+
+    edited = _edit(alice, tweet, "first, revised")  # no visibility field
+    assert edited.status_code == 200
+    assert edited.json()["visibility"] == "followers"
+    assert stranger.get(f"/api/v1/tweets/{tweet}").status_code == 404
+
+
+def test_making_a_private_mention_public_notifies_the_mentioned_user() -> None:
+    alice, _ = _register("alice")
+    bob, _ = _register("bob")
+
+    tweet = _post(alice, "hey @bob", "private")["id"]
+    assert [n for n in _notifications(bob) if n["type"] == "mention"] == []
+
+    # Re-syncing entities on the edit fires the mention now that bob can see it.
+    assert _edit(alice, tweet, "hey @bob", "public").status_code == 200
     mentions = [n for n in _notifications(bob) if n["type"] == "mention"]
     assert len(mentions) == 1

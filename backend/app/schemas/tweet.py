@@ -11,8 +11,10 @@ class TweetCreate(BaseModel):
     content: str = Field(default="", max_length=280)
     media_urls: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
     quoted_post_id: int | None = None
-    # Audience for this tweet; ignored on edit (visibility is set at post time).
-    visibility: TweetVisibility = DEFAULT_VISIBILITY
+    # Audience for this tweet. Omitted (``None``) means "use the default" on
+    # create and "leave it unchanged" on edit -- so a plain content edit never
+    # silently resets a restricted tweet back to public.
+    visibility: TweetVisibility | None = None
 
     @field_validator("media_urls")
     @classmethod

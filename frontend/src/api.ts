@@ -251,10 +251,16 @@ export function editTweet(
   tweetId: number,
   content: string,
   mediaUrls: string[] = [],
+  visibility?: TweetVisibility,
 ): Promise<Tweet> {
   return request<Tweet>(`/tweets/${tweetId}`, {
     method: "PATCH",
-    body: JSON.stringify({ content, media_urls: mediaUrls }),
+    body: JSON.stringify({
+      content,
+      media_urls: mediaUrls,
+      // Omitted server-side means "leave the audience unchanged".
+      ...(visibility != null ? { visibility } : {}),
+    }),
   });
 }
 

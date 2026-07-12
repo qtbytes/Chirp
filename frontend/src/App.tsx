@@ -85,6 +85,7 @@ import {
   QuotedPostCard,
   ReplyComposer,
   TweetCard,
+  VisibilityBadge,
   VisibilityPicker,
   formatCompactDate,
   getErrorMessage,
@@ -1437,18 +1438,25 @@ function TweetDetail({
 }) {
   const [editing, setEditing] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editVisibility, setEditVisibility] = useState<TweetVisibility>(tweet.visibility);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const isOwn = tweet.author.id === currentUserId;
 
+  function startEditing() {
+    setEditVisibility(tweet.visibility);
+    setEditing(true);
+  }
+
   async function saveEdit(content: string) {
     setSavingEdit(true);
     try {
-      const updated = await editTweet(tweet.id, content, tweet.media_urls);
+      const updated = await editTweet(tweet.id, content, tweet.media_urls, editVisibility);
       onTweetPatch(tweet.id, {
         content: updated.content,
         media_urls: updated.media_urls,
         edited_at: updated.edited_at,
+        visibility: updated.visibility,
       });
       setEditing(false);
     } catch (err) {
@@ -1602,7 +1610,7 @@ function TweetDetail({
       <article id={`post-${tweet.id}`} className="detail-tweet">
         {isOwn ? (
           <PostMenu
-            onEdit={() => setEditing(true)}
+            onEdit={startEditing}
             onDelete={() => setConfirmingDelete(true)}
           />
         ) : null}
@@ -1623,6 +1631,7 @@ function TweetDetail({
             </Link>
             <span>{displayDate}</span>
             {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
+            <VisibilityBadge visibility={tweet.visibility} />
           </div>
         </div>
         {editing ? (
@@ -1633,6 +1642,8 @@ function TweetDetail({
             saving={savingEdit}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}
+            visibility={editVisibility}
+            onVisibilityChange={setEditVisibility}
           />
         ) : (
           <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />

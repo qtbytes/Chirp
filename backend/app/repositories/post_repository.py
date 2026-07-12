@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.feed import FeedItem
 from app.models.like import Like
 from app.models.notification import Notification
-from app.models.post import Post
+from app.models.post import VISIBILITY_VALUES, Post
 from app.models.post_hashtag import PostHashtag
 from app.models.post_mention import PostMention
 
@@ -29,9 +29,18 @@ def update_post(
     user_id: int,
     content: str,
     media_urls: list[str] | None,
+    visibility: str | None = None,
 ) -> Post:
     """
     Edit a post's content/media. Only the author may edit.
+
+    ``visibility`` changes the audience of a *top-level tweet*; ``None`` leaves it
+    unchanged (a plain content edit must not silently reset a restricted tweet to
+    public), and it is ignored for replies, which have no audience of their own.
+    An unrecognised value is ignored rather than stored.
+
+    Read paths gate on the current value, so no fan-out cleanup is needed when the
+    audience narrows or widens -- the change simply takes effect on the next read.
 
     Raises ValueError("post not found") if missing and PermissionError if the
     caller is not the author. Stamps ``edited_at`` and returns the post with its
@@ -45,6 +54,12 @@ def update_post(
 
     post.content = content
     post.media_urls = media_urls or None
+    if (
+        visibility is not None
+        and post.reply_to_id is None
+        and visibility in VISIBILITY_VALUES
+    ):
+        post.visibility = visibility
     post.edited_at = _utcnow()
 
     # Re-sync the post's #hashtags / @mentions against the edited text (and notify

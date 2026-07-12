@@ -196,6 +196,7 @@ def edit_tweet(
             user_id=current_user_id,
             content=payload.content,
             media_urls=payload.media_urls,
+            visibility=payload.visibility,
         )
     except ValueError:
         raise HTTPException(

@@ -732,6 +732,8 @@ export function PostEditor({
   saving,
   onSave,
   onCancel,
+  visibility,
+  onVisibilityChange,
 }: {
   initialContent: string;
   maxLength: number;
@@ -739,6 +741,10 @@ export function PostEditor({
   saving: boolean;
   onSave: (content: string) => void;
   onCancel: () => void;
+  // When both are given (tweet edit), the editor shows an audience selector.
+  // Omitted for comments, which have no audience of their own.
+  visibility?: TweetVisibility;
+  onVisibilityChange?: (value: TweetVisibility) => void;
 }) {
   const [value, setValue] = useState(initialContent);
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
@@ -768,6 +774,13 @@ export function PostEditor({
       />
       <div className="post-editor-actions">
         <EmojiPicker onSelect={insertEmoji} />
+        {visibility != null && onVisibilityChange ? (
+          <VisibilityPicker
+            value={visibility}
+            onChange={onVisibilityChange}
+            disabled={saving}
+          />
+        ) : null}
         <span className="post-editor-spacer" />
         <button
           type="button"
@@ -1287,6 +1300,7 @@ export function TweetCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editVisibility, setEditVisibility] = useState<TweetVisibility>(tweet.visibility);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
@@ -1325,11 +1339,12 @@ export function TweetCard({
     setSaving(true);
     setError("");
     try {
-      const updated = await editTweet(tweet.id, content, tweet.media_urls);
+      const updated = await editTweet(tweet.id, content, tweet.media_urls, editVisibility);
       onTweetPatch(tweet.id, {
         content: updated.content,
         media_urls: updated.media_urls,
         edited_at: updated.edited_at,
+        visibility: updated.visibility,
       });
       setEditing(false);
     } catch (err) {
@@ -1337,6 +1352,11 @@ export function TweetCard({
     } finally {
       setSaving(false);
     }
+  }
+
+  function startEditing() {
+    setEditVisibility(tweet.visibility);
+    setEditing(true);
   }
 
   async function confirmDelete() {
@@ -1424,7 +1444,7 @@ export function TweetCard({
       </Link>
       {isOwn ? (
         <PostMenu
-          onEdit={() => setEditing(true)}
+          onEdit={startEditing}
           onDelete={() => setConfirmingDelete(true)}
         />
       ) : (
@@ -1457,6 +1477,8 @@ export function TweetCard({
             saving={saving}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}
+            visibility={editVisibility}
+            onVisibilityChange={setEditVisibility}
           />
         ) : (
           <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
