@@ -59,7 +59,7 @@ def isolated_sessions(monkeypatch) -> None:
     Tests that want the real backend undo this (see test_sessions.py).
     """
     from app.core import session_store, tokens
-    from app.services import events
+    from app.services import events, trending_service
 
     monkeypatch.setattr(session_store, "get_redis_client", lambda: None)
     session_store._memory_sessions.clear()
@@ -70,3 +70,8 @@ def isolated_sessions(monkeypatch) -> None:
     # Keep notification nudges off the developer's real Redis; tests that want to
     # assert publishing patch this back with a fake recorder.
     monkeypatch.setattr(events, "get_redis_client", lambda: None)
+
+    # Trending is cached under a single global key; without this a value cached by
+    # one test would leak into the next (unlike the user-scoped timeline cache).
+    # Computing inline keeps each test hermetic.
+    monkeypatch.setattr(trending_service, "get_redis_client", lambda: None)

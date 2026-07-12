@@ -1363,6 +1363,39 @@ button.rail-link:disabled:hover {
   font-size: 22px;
 }
 
+.trend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.trend-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  margin: 0 -10px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.trend-row:hover {
+  background: var(--hover);
+}
+
+.trend-tag {
+  font-weight: 700;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+.trend-count {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .search-box {
   display: grid;
   grid-template-columns: 18px 1fr;

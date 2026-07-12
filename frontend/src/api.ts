@@ -17,6 +17,7 @@ import type {
   Session,
   TimelineKind,
   TimelinePage,
+  TrendingHashtag,
   Tweet,
   TweetStats,
   UserDiscovery,
@@ -349,6 +350,11 @@ export function searchPosts(query: string, cursor?: string | null): Promise<Sear
     params.set("cursor", cursor);
   }
   return request<SearchPage>(`/search?${params.toString()}`);
+}
+
+/** The most-used hashtags in the recent window (global, server-cached). */
+export function getTrending(): Promise<TrendingHashtag[]> {
+  return request<TrendingHashtag[]>(`/hashtags/trending`);
 }
 
 /** The hashtag feed: top-level posts carrying an exact #tag, newest-first. */

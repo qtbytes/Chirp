@@ -79,3 +79,8 @@ class ProfileTweetsPage(BaseModel):
 class HashtagPostsPage(BaseModel):
     items: list[TweetOut]
     next_cursor: str | None = None
+
+
+class TrendingHashtagOut(BaseModel):
+    tag: str
+    post_count: int

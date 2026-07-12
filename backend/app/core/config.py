@@ -47,6 +47,15 @@ class Settings(BaseSettings):
     default_timeline_strategy: str = "read"
     timeline_page_size: int = 20
 
+    # Trending hashtags: the top tags by post volume within a recent window.
+    # It is a global aggregate (not viewer-specific), so it is cached once for
+    # everyone and recomputed when the short TTL lapses -- the same cache-aside
+    # approach the timeline first page uses. Falls back to computing inline when
+    # Redis is unavailable.
+    trending_window_hours: int = 24
+    trending_limit: int = 10
+    trending_cache_ttl_seconds: int = 300
+
     # "For you" ranking. The home timeline is chronological; "for you" scores a
     # bounded pool of recent posts at read time -- engagement decayed by age and
     # lifted by the viewer's affinity for the author. Because the score depends on

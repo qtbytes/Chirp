@@ -1,7 +1,8 @@
 from app.api.deps import get_current_user_id
 from app.db.database import get_db
 from app.repositories import block_repository, tweet_repository
-from app.schemas.tweet import HashtagPostsPage
+from app.schemas.tweet import HashtagPostsPage, TrendingHashtagOut
+from app.services import trending_service
 from app.services.timeline_service import TimelineService, decode_cursor, encode_cursor
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -12,6 +13,17 @@ router = APIRouter(prefix="/hashtags", tags=["hashtags"])
 def _normalize_tag(raw: str) -> str:
     """Match how tags are stored (lowercase, no leading ``#``)."""
     return raw.strip().lstrip("#").lower()
+
+
+@router.get("/trending", response_model=list[TrendingHashtagOut])
+def list_trending_hashtags(
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> list[TrendingHashtagOut]:
+    """The most-used hashtags in the recent window (global, cached)."""
+    return [
+        TrendingHashtagOut(**row) for row in trending_service.get_trending(db)
+    ]
 
 
 @router.get("/{tag}/posts", response_model=HashtagPostsPage)

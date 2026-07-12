@@ -48,6 +48,7 @@ import {
   logout,
   markNotificationRead,
   getHashtagPosts,
+  getTrending,
   markNotificationsRead,
   notificationStreamUrl,
   register,
@@ -62,6 +63,7 @@ import type {
   SearchPost,
   TimelineKind,
   TimelinePage,
+  TrendingHashtag,
   Tweet,
   UserDiscovery,
   UserSummary,
@@ -474,6 +476,7 @@ function AppLayout({
 
       {hideDiscovery ? null : (
         <aside className="discovery-column">
+          <TrendingPanel />
           <UserDiscoveryPanel onChanged={onDiscoveryChanged} />
         </aside>
       )}
@@ -1692,6 +1695,58 @@ function TweetDetail({
           onQuoted={handleDetailQuoted}
         />
       ) : null}
+    </section>
+  );
+}
+
+function TrendingPanel() {
+  const [trends, setTrends] = useState<TrendingHashtag[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getTrending()
+      .then((items) => {
+        if (!cancelled) setTrends(items);
+      })
+      .catch(() => {
+        // Trending is a nicety; on failure the panel just stays empty.
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Nothing to show yet (fresh install, or the fetch failed): hide the panel
+  // rather than render an empty heading.
+  if (!loading && trends.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="discovery-panel trending-panel" aria-labelledby="trending-title">
+      <h2 id="trending-title">Trending</h2>
+      {loading ? (
+        <div className="loading-row small">
+          <Loader2 className="spin" size={16} aria-hidden="true" />
+        </div>
+      ) : (
+        <ul className="trend-list">
+          {trends.map((trend) => (
+            <li key={trend.tag}>
+              <Link className="trend-row" to={`/hashtag/${encodeURIComponent(trend.tag)}`}>
+                <span className="trend-tag">#{trend.tag}</span>
+                <span className="trend-count">
+                  {trend.post_count} {trend.post_count === 1 ? "post" : "posts"}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

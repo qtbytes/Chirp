@@ -188,6 +188,12 @@ export type SearchPage = {
   next_cursor: string | null;
 };
 
+/** A hot hashtag for the Trending panel. */
+export type TrendingHashtag = {
+  tag: string;
+  post_count: number;
+};
+
 export type NotificationType =
   | "like"
   | "retweet"
