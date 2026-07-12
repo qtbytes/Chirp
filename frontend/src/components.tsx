@@ -122,27 +122,43 @@ export function firstPreviewableUrl(text: string): string | null {
   return null;
 }
 
-type ContentToken = { type: "text" | "url"; value: string };
+type ContentToken = { type: "text" | "url" | "hashtag" | "mention"; value: string };
+
+// One pass over URLs, #hashtags and @mentions. URL is the first alternative so a
+// link's own "#fragment"/"@userinfo" is swallowed whole and not mistaken for an
+// entity. The hashtag/mention bodies mirror the backend extraction rules
+// (app/services/text_entities.py): word chars for tags, the username charset for
+// mentions, each only at a non-word boundary so "a@b" or "c#d" mid-word do not
+// count.
+const ENTITY_REGEX =
+  /(https?:\/\/[^\s]+)|(?<!\w)(#\w{1,140})|(?<!\w)(@[A-Za-z0-9_]{1,50})/g;
 
 function tokenizeContent(text: string): ContentToken[] {
   const tokens: ContentToken[] = [];
   let lastIndex = 0;
-  for (const match of text.matchAll(URL_REGEX)) {
+  for (const match of text.matchAll(ENTITY_REGEX)) {
     const start = match.index ?? 0;
-    let url = match[0];
-    // Keep trailing punctuation as plain text so "see http://x.com." works.
-    const trailing = url.match(TRAILING_PUNCTUATION)?.[0] ?? "";
-    if (trailing) {
-      url = url.slice(0, url.length - trailing.length);
-    }
+    const [full, urlMatch, hashtagMatch, mentionMatch] = match;
     if (start > lastIndex) {
       tokens.push({ type: "text", value: text.slice(lastIndex, start) });
     }
-    tokens.push({ type: "url", value: url });
-    if (trailing) {
-      tokens.push({ type: "text", value: trailing });
+    if (urlMatch !== undefined) {
+      let url = urlMatch;
+      // Keep trailing punctuation as plain text so "see http://x.com." works.
+      const trailing = url.match(TRAILING_PUNCTUATION)?.[0] ?? "";
+      if (trailing) {
+        url = url.slice(0, url.length - trailing.length);
+      }
+      tokens.push({ type: "url", value: url });
+      if (trailing) {
+        tokens.push({ type: "text", value: trailing });
+      }
+    } else if (hashtagMatch !== undefined) {
+      tokens.push({ type: "hashtag", value: hashtagMatch });
+    } else if (mentionMatch !== undefined) {
+      tokens.push({ type: "mention", value: mentionMatch });
     }
-    lastIndex = start + match[0].length;
+    lastIndex = start + full.length;
   }
   if (lastIndex < text.length) {
     tokens.push({ type: "text", value: text.slice(lastIndex) });
@@ -185,8 +201,9 @@ function InlineImage({ url }: { url: string }) {
   );
 }
 
-// Renders user content as text, turning URLs into links and image URLs into
-// inline images. Only http(s) URLs are matched, so no javascript: injection.
+// Renders user content as text, turning URLs into links, image URLs into inline
+// images, and #hashtags / @mentions into in-app links (to search / the profile).
+// Only http(s) URLs are matched, so no javascript: injection.
 export function RichContent({ text }: { text: string }) {
   const tokens = useMemo(() => tokenizeContent(text), [text]);
 
@@ -195,6 +212,30 @@ export function RichContent({ text }: { text: string }) {
       {tokens.map((token, index) => {
         if (token.type === "text") {
           return token.value;
+        }
+        if (token.type === "hashtag") {
+          return (
+            <Link
+              key={index}
+              className="tweet-entity"
+              to={`/search?q=${encodeURIComponent(token.value)}`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              {token.value}
+            </Link>
+          );
+        }
+        if (token.type === "mention") {
+          return (
+            <Link
+              key={index}
+              className="tweet-entity"
+              to={`/${encodeURIComponent(token.value.slice(1))}`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              {token.value}
+            </Link>
+          );
         }
         if (isImageUrl(token.value)) {
           return <InlineImage key={index} url={token.value} />;

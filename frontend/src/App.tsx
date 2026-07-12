@@ -9,6 +9,7 @@ import {
   useNavigate,
   useOutletContext,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 import {
   ArrowLeft,
@@ -481,6 +482,9 @@ type SearchTab = "posts" | "people";
 
 function SearchView() {
   const { currentUser, onDiscoveryChanged } = useOutletContext<LayoutContext>();
+  // A #hashtag link lands here as /search?q=%23tag; seed the Posts search from it.
+  const [searchParams] = useSearchParams();
+  const initialQuery = searchParams.get("q") ?? "";
   const [tab, setTab] = useState<SearchTab>("posts");
 
   return (
@@ -509,7 +513,7 @@ function SearchView() {
         </div>
       </header>
       {tab === "posts" ? (
-        <SearchPostsPanel currentUser={currentUser} />
+        <SearchPostsPanel currentUser={currentUser} initialQuery={initialQuery} />
       ) : (
         <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideHeading />
       )}
@@ -545,9 +549,15 @@ function SearchReplyCard({
   );
 }
 
-function SearchPostsPanel({ currentUser }: { currentUser: UserSummary }) {
+function SearchPostsPanel({
+  currentUser,
+  initialQuery = "",
+}: {
+  currentUser: UserSummary;
+  initialQuery?: string;
+}) {
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [postById, setPostById] = useState<Record<number, SearchPost>>({});
   const [ids, setIds] = useState<number[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -626,6 +636,12 @@ function SearchPostsPanel({ currentUser }: { currentUser: UserSummary }) {
     },
     [],
   );
+
+  // Arriving via a #hashtag link (or clicking another one while already here)
+  // changes the ?q= param; mirror it into the box, which reruns the search.
+  useEffect(() => {
+    setQuery(initialQuery);
+  }, [initialQuery]);
 
   // Debounce the query, and skip the request until there is something to search.
   useEffect(() => {

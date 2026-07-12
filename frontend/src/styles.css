@@ -1023,6 +1023,17 @@ button.rail-link:disabled:hover {
   text-decoration: underline;
 }
 
+/* In-post #hashtag and @mention links. */
+.tweet-entity {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.tweet-entity:hover {
+  text-decoration: underline;
+}
+
 .tweet-media-gallery {
   margin-top: 10px;
 }
