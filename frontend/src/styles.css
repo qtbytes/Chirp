@@ -1,6 +1,6 @@
 :root {
   color: #0f1419;
-  background: #f7f9f9;
+  background: #ffffff;
   color-scheme: light;
   font-family:
     ui-sans-serif,
@@ -16,12 +16,12 @@
   --accent-strong: #0f80d8;
   --like: #f91880;
   --retweet: #00ba7c;
-  --page: #f7f9f9;
+  --page: #ffffff;
   --panel: #ffffff;
   --panel-glass: rgba(255, 255, 255, 0.92);
   --input: #ffffff;
-  --soft: #eff3f4;
-  --hover: #f8fbfd;
+  --soft: #f7f9f9;
+  --hover: #f7f9f9;
   --avatar-bg: #0f1419;
   --avatar-ink: #ffffff;
   --button-ink: #ffffff;
@@ -310,14 +310,17 @@ textarea:focus {
   color: var(--ink);
   text-decoration: none;
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 400;
   border-radius: 999px;
   padding: 0 16px;
 }
 
-.rail-link:hover,
-.rail-link.active {
+.rail-link:hover {
   background: var(--soft);
+}
+
+.rail-link.active {
+  font-weight: 700;
 }
 
 .rail-link.muted {
