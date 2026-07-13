@@ -1526,6 +1526,15 @@ button.rail-link:disabled:hover {
   overscroll-behavior: contain;
 }
 
+.sidebar-search {
+  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-bottom: 4px;
+  background: var(--surface);
+}
+
 .discovery-panel {
   display: grid;
   gap: 14px;

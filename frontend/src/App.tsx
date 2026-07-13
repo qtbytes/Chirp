@@ -481,8 +481,9 @@ function AppLayout({
 
       {hideDiscovery ? null : (
         <aside className="discovery-column">
+          <SidebarSearchBar />
           <TrendingPanel />
-          <UserDiscoveryPanel onChanged={onDiscoveryChanged} />
+          <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideSearch />
         </aside>
       )}
     </div>
@@ -1856,6 +1857,65 @@ function TweetDetail({
         />
       ) : null}
     </section>
+  );
+}
+
+function SidebarSearchBar() {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyKey, setHistoryKey] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setShowHistory(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  function doSearch(term: string) {
+    if (!term.trim()) return;
+    addSearchHistory(term.trim());
+    setHistoryKey((k) => k + 1);
+    setQuery("");
+    setShowHistory(false);
+    navigate(`/search?q=${encodeURIComponent(term.trim())}`);
+  }
+
+  return (
+    <div className="sidebar-search" ref={containerRef}>
+      <label className="search-box">
+        <Search size={18} aria-hidden="true" />
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onFocus={() => setShowHistory(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              doSearch(query);
+            }
+          }}
+          placeholder="Search"
+          aria-label="Search"
+        />
+      </label>
+      {showHistory && !query.trim() ? (
+        <SearchHistoryPanel
+          key={historyKey}
+          onSelect={(term) => {
+            doSearch(term);
+          }}
+          onChanged={() => setHistoryKey((k) => k + 1)}
+        />
+      ) : null}
+    </div>
   );
 }
 
