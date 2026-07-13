@@ -1532,7 +1532,7 @@ button.rail-link:disabled:hover {
   top: 0;
   z-index: 10;
   padding-bottom: 4px;
-  background: var(--surface);
+  background: var(--panel);
 }
 
 .discovery-panel {
@@ -1619,10 +1619,10 @@ button.rail-link:disabled:hover {
   left: 0;
   right: 0;
   top: 100%;
-  background: var(--surface);
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 0 0 12px 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow);
   z-index: 20;
   overflow: hidden;
 }
