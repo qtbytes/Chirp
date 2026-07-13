@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   Navigate,
@@ -27,6 +27,7 @@ import {
   Settings,
   Sun,
   UserPlus,
+  X,
 } from "lucide-react";
 import {
   createComment,
@@ -490,31 +491,159 @@ function AppLayout({
 
 type SearchTab = "top" | "latest" | "people";
 
+const SEARCH_HISTORY_KEY = "chirp-search-history";
+const SEARCH_HISTORY_MAX = 20;
+
+function getSearchHistory(): string[] {
+  try {
+    const raw = window.localStorage.getItem(SEARCH_HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function addSearchHistory(term: string) {
+  const history = getSearchHistory().filter((item) => item !== term);
+  history.unshift(term);
+  if (history.length > SEARCH_HISTORY_MAX) history.length = SEARCH_HISTORY_MAX;
+  window.localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+}
+
+function removeSearchHistory(term: string) {
+  const history = getSearchHistory().filter((item) => item !== term);
+  window.localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+}
+
+function clearSearchHistory() {
+  window.localStorage.removeItem(SEARCH_HISTORY_KEY);
+}
+
+function SearchHistoryPanel({
+  onSelect,
+  onChanged,
+}: {
+  onSelect: (term: string) => void;
+  onChanged: () => void;
+}) {
+  const history = getSearchHistory();
+
+  if (history.length === 0) return null;
+
+  return (
+    <section className="search-history" aria-label="Recent searches">
+      <div className="search-history-header">
+        <h2>Recent</h2>
+        <button
+          className="text-button"
+          onClick={() => {
+            clearSearchHistory();
+            onChanged();
+          }}
+        >
+          Clear all
+        </button>
+      </div>
+      <ul className="search-history-list">
+        {history.map((term) => (
+          <li key={term} className="search-history-item">
+            <button
+              className="search-history-link"
+              onClick={() => onSelect(term)}
+            >
+              <Search size={18} aria-hidden="true" />
+              <span>{term}</span>
+            </button>
+            <button
+              className="search-history-remove"
+              onClick={() => {
+                removeSearchHistory(term);
+                onChanged();
+              }}
+              aria-label={`Remove ${term}`}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function SearchView() {
   const { currentUser, onDiscoveryChanged } = useOutletContext<LayoutContext>();
   const [searchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") ?? "";
   const [query, setQuery] = useState(initialQuery);
   const [tab, setTab] = useState<SearchTab>("top");
+  const [historyKey, setHistoryKey] = useState(0);
+  const [showHistory, setShowHistory] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const activeQuery = query.trim();
 
   useEffect(() => {
     setQuery(initialQuery);
   }, [initialQuery]);
 
+  // Save to history when a search is actually executed (debounce fires)
+  const committedQuery = useRef("");
+  useEffect(() => {
+    if (!activeQuery) return;
+    const timer = window.setTimeout(() => {
+      if (activeQuery && activeQuery !== committedQuery.current) {
+        committedQuery.current = activeQuery;
+        addSearchHistory(activeQuery);
+        setHistoryKey((k) => k + 1);
+      }
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [activeQuery]);
+
+  // Close history dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowHistory(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  function selectHistoryItem(term: string) {
+    setQuery(term);
+    setShowHistory(false);
+    inputRef.current?.focus();
+  }
+
+  const showHistoryPanel = showHistory && !activeQuery;
+
   return (
     <>
       <header className="feed-header">
-        <div className="search-header-bar">
+        <div className="search-header-bar" ref={searchRef}>
           <label className="search-box search-box--header">
             <Search size={18} aria-hidden="true" />
             <input
+              ref={inputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              onFocus={() => setShowHistory(true)}
               placeholder="Search"
               aria-label="Search"
             />
           </label>
+          {showHistoryPanel ? (
+            <SearchHistoryPanel
+              key={historyKey}
+              onSelect={selectHistoryItem}
+              onChanged={() => setHistoryKey((k) => k + 1)}
+            />
+          ) : null}
         </div>
         {activeQuery ? (
           <div className="tab-list tab-list--three" role="tablist" aria-label="Search results">

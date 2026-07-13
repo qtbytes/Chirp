@@ -1594,6 +1594,7 @@ button.rail-link:disabled:hover {
 
 .search-header-bar {
   padding: 8px 18px;
+  position: relative;
 }
 
 .search-box--header {
@@ -1602,6 +1603,91 @@ button.rail-link:disabled:hover {
 
 .search-results-panel {
   padding: 0;
+}
+
+.search-history {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.search-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px 8px;
+}
+
+.search-history-header h2 {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.search-history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.search-history-item {
+  display: flex;
+  align-items: center;
+}
+
+.search-history-link {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.search-history-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-history-link svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.search-history-item:hover {
+  background: var(--hover);
+}
+
+.search-history-remove {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-right: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.search-history-remove:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .user-list {
