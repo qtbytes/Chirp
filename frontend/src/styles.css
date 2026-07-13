@@ -1524,6 +1524,9 @@ button.rail-link:disabled:hover {
      must scroll within it rather than being clipped past the viewport bottom. */
   overflow-y: auto;
   overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .sidebar-search {
@@ -1537,12 +1540,17 @@ button.rail-link:disabled:hover {
 
 .discovery-panel {
   display: grid;
-  gap: 14px;
+  gap: 0;
+  background: var(--soft);
+  border-radius: 16px;
+  overflow: hidden;
+  padding: 12px 0;
 }
 
 .discovery-panel h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 1.25rem;
+  padding: 0 16px;
 }
 
 .trend-list {
@@ -1556,11 +1564,10 @@ button.rail-link:disabled:hover {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 8px 10px;
-  margin: 0 -10px;
-  border-radius: 10px;
+  padding: 10px 16px;
   text-decoration: none;
   color: inherit;
+  transition: background 0.15s;
 }
 
 .trend-row:hover {
@@ -1706,6 +1713,11 @@ button.rail-link:disabled:hover {
   overflow: hidden;
 }
 
+.discovery-panel .user-list {
+  border: 0;
+  border-radius: 0;
+}
+
 /* The follow lists reuse the discovery row, but as a full-width feed view
    rather than inside the narrow sidebar panel, so the bordered card needs an
    inset from the column edges. */
@@ -1722,6 +1734,18 @@ button.rail-link:disabled:hover {
   padding: 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+}
+
+.discovery-panel .user-row {
+  background: transparent;
+  border-bottom: 0;
+  padding: 8px 16px;
+  min-height: 56px;
+  transition: background 0.15s;
+}
+
+.discovery-panel .user-row:hover {
+  background: var(--hover);
 }
 
 .user-row:last-child {
