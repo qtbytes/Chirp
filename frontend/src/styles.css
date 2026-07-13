@@ -1712,7 +1712,8 @@ button.rail-link:disabled:hover {
   overflow: hidden;
 }
 
-.discovery-panel .user-list {
+.discovery-panel .user-list,
+.settings-card .user-list {
   border: 0;
   border-radius: 0;
 }
@@ -1735,7 +1736,8 @@ button.rail-link:disabled:hover {
   border-bottom: 1px solid var(--line);
 }
 
-.discovery-panel .user-row {
+.discovery-panel .user-row,
+.settings-card .user-row {
   background: transparent;
   border-bottom: 0;
   padding: 8px 16px;
@@ -1743,7 +1745,8 @@ button.rail-link:disabled:hover {
   transition: background 0.15s;
 }
 
-.discovery-panel .user-row:hover {
+.discovery-panel .user-row:hover,
+.settings-card .user-row:hover {
   background: var(--hover);
 }
 
@@ -1930,6 +1933,41 @@ button.rail-link:disabled:hover {
 
 /* Account settings page: a plain list of self-service rows (email, password),
    each an icon + label/status + an action button on the right. */
+.settings-card {
+  background: var(--soft);
+  border-radius: 16px;
+  margin: 16px;
+  padding: 16px 0;
+}
+
+.settings-card > h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  padding: 0 16px 8px;
+}
+
+.settings-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.settings-card-head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.settings-card-intro {
+  margin: 6px 0 4px;
+  padding: 0 16px;
+}
+
+.settings-card-error {
+  padding: 0 16px;
+}
+
 .settings-list {
   display: flex;
   flex-direction: column;
@@ -1939,8 +1977,12 @@ button.rail-link:disabled:hover {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 16px;
-  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
+  transition: background 0.15s;
+}
+
+.settings-row:hover {
+  background: var(--hover);
 }
 
 .settings-row-icon {
@@ -1968,27 +2010,6 @@ button.rail-link:disabled:hover {
   color: var(--danger);
 }
 
-.settings-section {
-  padding: 16px;
-  border-top: 8px solid var(--soft);
-}
-
-.settings-section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.settings-section-head h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.settings-section-intro {
-  margin: 6px 0 4px;
-}
-
 .session-list {
   list-style: none;
   margin: 8px 0 0;
@@ -1999,12 +2020,12 @@ button.rail-link:disabled:hover {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
+  transition: background 0.15s;
 }
 
-.session-row:last-child {
-  border-bottom: none;
+.session-row:hover {
+  background: var(--hover);
 }
 
 .session-icon {
@@ -2407,14 +2428,19 @@ a.tab {
   color: var(--danger);
 }
 
+.settings-card > .form-hint {
+  padding: 0 16px;
+}
+
+.settings-card > .danger-button {
+  margin: 8px 16px 0;
+}
+
 .profile-deleted-note {
   color: var(--muted);
   font-style: italic;
 }
 
-.settings-section > .danger-button {
-  margin-top: 8px;
-}
 
 .danger-button:hover:not(:disabled) {
   background: var(--danger-solid-strong);

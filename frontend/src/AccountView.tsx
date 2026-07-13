@@ -63,7 +63,7 @@ export function AccountView({
     <>
       <header className="feed-header">
         <div className="feed-title-row">
-          <h1>Account</h1>
+          <h1>Settings</h1>
         </div>
       </header>
 
@@ -77,43 +77,46 @@ export function AccountView({
       ) : null}
 
       {profile ? (
-        <div className="settings-list">
-          <div className="settings-row">
-            <span className="settings-row-icon" aria-hidden="true">
-              <Mail size={20} />
-            </span>
-            <div className="settings-row-copy">
-              <strong>Email</strong>
-              {profile.email ? (
-                <span>{profile.email} · confirmed</span>
-              ) : profile.pending_email ? (
-                <span className="settings-warn">
-                  {profile.pending_email} · awaiting confirmation
-                </span>
-              ) : (
-                <span className="settings-warn">
-                  Not set — required to reset a forgotten password
-                </span>
-              )}
+        <section className="settings-card" aria-labelledby="account-heading">
+          <h2 id="account-heading">Account</h2>
+          <div className="settings-list">
+            <div className="settings-row">
+              <span className="settings-row-icon" aria-hidden="true">
+                <Mail size={20} />
+              </span>
+              <div className="settings-row-copy">
+                <strong>Email</strong>
+                {profile.email ? (
+                  <span>{profile.email} · confirmed</span>
+                ) : profile.pending_email ? (
+                  <span className="settings-warn">
+                    {profile.pending_email} · awaiting confirmation
+                  </span>
+                ) : (
+                  <span className="settings-warn">
+                    Not set — required to reset a forgotten password
+                  </span>
+                )}
+              </div>
+              <button className="outline-button" onClick={() => setChangingEmail(true)}>
+                {profile.email || profile.pending_email ? "Change" : "Add"}
+              </button>
             </div>
-            <button className="outline-button" onClick={() => setChangingEmail(true)}>
-              {profile.email || profile.pending_email ? "Change" : "Add"}
-            </button>
-          </div>
 
-          <div className="settings-row">
-            <span className="settings-row-icon" aria-hidden="true">
-              <KeyRound size={20} />
-            </span>
-            <div className="settings-row-copy">
-              <strong>Password</strong>
-              <span>Changing it signs out every other device.</span>
+            <div className="settings-row">
+              <span className="settings-row-icon" aria-hidden="true">
+                <KeyRound size={20} />
+              </span>
+              <div className="settings-row-copy">
+                <strong>Password</strong>
+                <span>Changing it signs out every other device.</span>
+              </div>
+              <button className="outline-button" onClick={() => setChangingPassword(true)}>
+                Change
+              </button>
             </div>
-            <button className="outline-button" onClick={() => setChangingPassword(true)}>
-              Change
-            </button>
           </div>
-        </div>
+        </section>
       ) : null}
 
       <SessionsSection />
@@ -222,8 +225,8 @@ function SessionsSection() {
   const otherCount = sessions?.filter((s) => !s.current).length ?? 0;
 
   return (
-    <section className="settings-section" aria-labelledby="sessions-heading">
-      <div className="settings-section-head">
+    <section className="settings-card" aria-labelledby="sessions-heading">
+      <div className="settings-card-head">
         <h2 id="sessions-heading">Active sessions</h2>
         {otherCount > 0 ? (
           <button
@@ -236,12 +239,12 @@ function SessionsSection() {
         ) : null}
       </div>
 
-      <p className="form-hint settings-section-intro">
+      <p className="form-hint settings-card-intro">
         Each device that logs in gets its own session. Sign out any you don&apos;t
         recognise; the others keep working.
       </p>
 
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? <p className="form-error settings-card-error">{error}</p> : null}
 
       {sessions === null ? (
         <div className="loading-row">
@@ -325,11 +328,11 @@ function BlockedSection() {
   }
 
   return (
-    <section className="settings-section" aria-labelledby="blocked-heading">
-      <div className="settings-section-head">
+    <section className="settings-card" aria-labelledby="blocked-heading">
+      <div className="settings-card-head">
         <h2 id="blocked-heading">Blocked accounts</h2>
       </div>
-      <p className="form-hint settings-section-intro">
+      <p className="form-hint settings-card-intro">
         Blocked accounts can&apos;t see your Tweets or interact with you, and you
         won&apos;t see theirs.
       </p>
@@ -415,11 +418,11 @@ function MutedSection() {
   }
 
   return (
-    <section className="settings-section" aria-labelledby="muted-heading">
-      <div className="settings-section-head">
+    <section className="settings-card" aria-labelledby="muted-heading">
+      <div className="settings-card-head">
         <h2 id="muted-heading">Muted accounts</h2>
       </div>
-      <p className="form-hint settings-section-intro">
+      <p className="form-hint settings-card-intro">
         You won&apos;t see muted accounts in your timeline or notifications. They
         can still follow you and see your Tweets, and they aren&apos;t told.
       </p>
@@ -495,13 +498,13 @@ function DeleteAccountSection({ onLoggedOut }: { onLoggedOut: () => void }) {
   }
 
   return (
-    <section className="settings-section" aria-labelledby="delete-heading">
-      <div className="settings-section-head">
+    <section className="settings-card" aria-labelledby="delete-heading">
+      <div className="settings-card-head">
         <h2 id="delete-heading" className="settings-danger-heading">
           Delete account
         </h2>
       </div>
-      <p className="form-hint settings-section-intro">
+      <p className="form-hint settings-card-intro">
         This can&apos;t be undone. Your profile, follows, likes, and personal data
         are removed and you&apos;re signed out everywhere. Posts you&apos;ve made
         stay as &ldquo;Deleted account&rdquo; so replies others left on them keep
