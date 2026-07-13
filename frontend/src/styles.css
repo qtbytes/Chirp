@@ -1543,7 +1543,6 @@ button.rail-link:disabled:hover {
   gap: 0;
   background: var(--soft);
   border-radius: 16px;
-  overflow: hidden;
   padding: 12px 0;
 }
 
@@ -1740,7 +1739,7 @@ button.rail-link:disabled:hover {
   background: transparent;
   border-bottom: 0;
   padding: 8px 16px;
-  min-height: 56px;
+  min-height: auto;
   transition: background 0.15s;
 }
 
