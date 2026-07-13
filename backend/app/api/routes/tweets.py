@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
 from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.models.post import Post
+from app.models.post_view import PostView
 from app.repositories import (
     block_repository,
     post_repository,
@@ -144,11 +145,6 @@ def get_tweet(
             detail="tweet not found",
         )
 
-    db.execute(
-        update(Post).where(Post.id == tweet_id).values(view_count=Post.view_count + 1)
-    )
-    db.commit()
-
     stats_rows = tweet_repository.list_tweet_stats(
         db,
         tweet_ids=[tweet_id],
@@ -181,6 +177,27 @@ def get_tweet(
         ),
         visibility=tweet.visibility,
     )
+
+
+@router.post("/{tweet_id}/view", status_code=status.HTTP_204_NO_CONTENT)
+def record_view(
+    tweet_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    already = db.execute(
+        select(PostView).where(
+            PostView.user_id == current_user_id,
+            PostView.post_id == tweet_id,
+        )
+    ).first()
+    if already:
+        return
+    db.add(PostView(user_id=current_user_id, post_id=tweet_id))
+    db.execute(
+        update(Post).where(Post.id == tweet_id).values(view_count=Post.view_count + 1)
+    )
+    db.commit()
 
 
 @router.patch("/{tweet_id}", response_model=TweetOut)

@@ -471,6 +471,10 @@ export function getTweet(tweetId: number): Promise<Tweet> {
   return request<Tweet>(`/tweets/${tweetId}`);
 }
 
+export function recordTweetView(tweetId: number): Promise<void> {
+  return request<void>(`/tweets/${tweetId}/view`, { method: "POST" });
+}
+
 /**
  * Unfurl a URL into a preview card. Returns null when there is no usable
  * preview (unreachable, blocked, or no metadata) so callers just show the link.

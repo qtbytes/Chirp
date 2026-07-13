@@ -42,6 +42,7 @@ import {
   getTimeline,
   getTweet,
   getTweetStats,
+  recordTweetView,
   getUnreadNotificationCount,
   listComments,
   listNotifications,
@@ -1395,7 +1396,10 @@ function TweetDetailRoute() {
     setError("");
     getTweet(numericTweetId)
       .then((loaded) => {
-        if (!cancelled) setTweet(loaded);
+        if (!cancelled) {
+          setTweet(loaded);
+          void recordTweetView(numericTweetId);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(getErrorMessage(err));

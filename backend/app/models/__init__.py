@@ -6,6 +6,7 @@ from app.models.mute import Mute
 from app.models.notification import Notification
 from app.models.post import Post
 from app.models.post_hashtag import PostHashtag
+from app.models.post_view import PostView
 from app.models.post_mention import PostMention
 from app.models.report import Report
 from app.models.user import User
@@ -27,5 +28,6 @@ __all__ = [
     "Notification",
     "Block",
     "Mute",
+    "PostView",
     "Report",
 ]
