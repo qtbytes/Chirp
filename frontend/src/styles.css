@@ -544,6 +544,10 @@ button.rail-link:disabled:hover {
   grid-template-columns: 1fr 1fr;
 }
 
+.tab-list--three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
 .tab {
   min-height: 52px;
   color: var(--muted);
@@ -1588,31 +1592,16 @@ button.rail-link:disabled:hover {
   box-shadow: none;
 }
 
-/* Compact Top / Latest toggle under the post-search box. */
-.search-sort {
-  display: flex;
-  gap: 8px;
+.search-header-bar {
+  padding: 8px 18px;
 }
 
-.search-sort-btn {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  border-radius: 999px;
-  padding: 5px 14px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
+.search-box--header {
+  margin: 0;
 }
 
-.search-sort-btn:hover {
-  background: var(--hover);
-}
-
-.search-sort-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #ffffff;
+.search-results-panel {
+  padding: 0;
 }
 
 .user-list {

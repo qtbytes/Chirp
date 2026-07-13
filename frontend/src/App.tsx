@@ -488,45 +488,74 @@ function AppLayout({
   );
 }
 
-type SearchTab = "posts" | "people";
+type SearchTab = "top" | "latest" | "people";
 
 function SearchView() {
   const { currentUser, onDiscoveryChanged } = useOutletContext<LayoutContext>();
-  // A #hashtag link lands here as /search?q=%23tag; seed the Posts search from it.
   const [searchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") ?? "";
-  const [tab, setTab] = useState<SearchTab>("posts");
+  const [query, setQuery] = useState(initialQuery);
+  const [tab, setTab] = useState<SearchTab>("top");
+  const activeQuery = query.trim();
+
+  useEffect(() => {
+    setQuery(initialQuery);
+  }, [initialQuery]);
 
   return (
     <>
       <header className="feed-header">
-        <div className="feed-title-row">
-          <h1>Search</h1>
+        <div className="search-header-bar">
+          <label className="search-box search-box--header">
+            <Search size={18} aria-hidden="true" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search"
+              aria-label="Search"
+            />
+          </label>
         </div>
-        <div className="tab-list" role="tablist" aria-label="Search">
-          <button
-            className={tab === "posts" ? "tab active" : "tab"}
-            onClick={() => setTab("posts")}
-            role="tab"
-            aria-selected={tab === "posts"}
-          >
-            Posts
-          </button>
-          <button
-            className={tab === "people" ? "tab active" : "tab"}
-            onClick={() => setTab("people")}
-            role="tab"
-            aria-selected={tab === "people"}
-          >
-            People
-          </button>
-        </div>
+        {activeQuery ? (
+          <div className="tab-list tab-list--three" role="tablist" aria-label="Search results">
+            <button
+              className={tab === "top" ? "tab active" : "tab"}
+              onClick={() => setTab("top")}
+              role="tab"
+              aria-selected={tab === "top"}
+            >
+              Top
+            </button>
+            <button
+              className={tab === "latest" ? "tab active" : "tab"}
+              onClick={() => setTab("latest")}
+              role="tab"
+              aria-selected={tab === "latest"}
+            >
+              Latest
+            </button>
+            <button
+              className={tab === "people" ? "tab active" : "tab"}
+              onClick={() => setTab("people")}
+              role="tab"
+              aria-selected={tab === "people"}
+            >
+              People
+            </button>
+          </div>
+        ) : null}
       </header>
-      {tab === "posts" ? (
-        <SearchPostsPanel currentUser={currentUser} initialQuery={initialQuery} />
-      ) : (
-        <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideHeading />
-      )}
+      {activeQuery ? (
+        tab === "people" ? (
+          <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideHeading hideSearch initialQuery={activeQuery} />
+        ) : (
+          <SearchPostsPanel
+            currentUser={currentUser}
+            query={activeQuery}
+            sort={tab === "latest" ? "recent" : "relevance"}
+          />
+        )
+      ) : null}
     </>
   );
 }
@@ -561,14 +590,14 @@ function SearchReplyCard({
 
 function SearchPostsPanel({
   currentUser,
-  initialQuery = "",
+  query,
+  sort,
 }: {
   currentUser: UserSummary;
-  initialQuery?: string;
+  query: string;
+  sort: SearchSort;
 }) {
   const navigate = useNavigate();
-  const [query, setQuery] = useState(initialQuery);
-  const [sort, setSort] = useState<SearchSort>("relevance");
   const [postById, setPostById] = useState<Record<number, SearchPost>>({});
   const [ids, setIds] = useState<number[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -648,58 +677,20 @@ function SearchPostsPanel({
     [sort],
   );
 
-  // Arriving via a #hashtag link (or clicking another one while already here)
-  // changes the ?q= param; mirror it into the box, which reruns the search.
   useEffect(() => {
-    setQuery(initialQuery);
-  }, [initialQuery]);
-
-  // Debounce the query, and skip the request until there is something to search.
-  useEffect(() => {
-    const term = query.trim();
-    if (!term) {
-      setIds([]);
-      setPostById({});
-      setCursor(null);
-      setSearched(false);
-      return;
-    }
+    setIds([]);
+    setPostById({});
+    setCursor(null);
+    setSearched(false);
     const timer = window.setTimeout(() => {
       setSearched(true);
-      void runSearch(term);
+      void runSearch(query);
     }, 250);
     return () => window.clearTimeout(timer);
   }, [query, runSearch]);
 
   return (
-    <section className="discovery-panel" aria-label="Search posts">
-      <label className="search-box">
-        <Search size={18} aria-hidden="true" />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search posts"
-          aria-label="Search posts"
-        />
-      </label>
-      <div className="search-sort" role="tablist" aria-label="Sort results">
-        <button
-          className={sort === "relevance" ? "search-sort-btn active" : "search-sort-btn"}
-          onClick={() => setSort("relevance")}
-          role="tab"
-          aria-selected={sort === "relevance"}
-        >
-          Top
-        </button>
-        <button
-          className={sort === "recent" ? "search-sort-btn active" : "search-sort-btn"}
-          onClick={() => setSort("recent")}
-          role="tab"
-          aria-selected={sort === "recent"}
-        >
-          Latest
-        </button>
-      </div>
+    <section className="search-results-panel" aria-label="Search posts">
       {error ? <p className="form-error">{error}</p> : null}
       {searched && !loading && posts.length === 0 && !error ? (
         <div className="status-panel">No posts found.</div>
@@ -739,7 +730,7 @@ function SearchPostsPanel({
       {cursor ? (
         <button
           className="load-more"
-          onClick={() => void runSearch(query.trim(), cursor, true)}
+          onClick={() => void runSearch(query, cursor, true)}
           disabled={loading}
         >
           Load more
@@ -1794,11 +1785,19 @@ function TrendingPanel() {
 function UserDiscoveryPanel({
   onChanged,
   hideHeading = false,
+  hideSearch = false,
+  initialQuery = "",
 }: {
   onChanged: () => void;
   hideHeading?: boolean;
+  hideSearch?: boolean;
+  initialQuery?: string;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
+
+  useEffect(() => {
+    setQuery(initialQuery);
+  }, [initialQuery]);
   const [users, setUsers] = useState<UserDiscovery[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1843,15 +1842,17 @@ function UserDiscoveryPanel({
       aria-label={hideHeading ? "People" : undefined}
     >
       {hideHeading ? null : <h2 id="discover-title">People</h2>}
-      <label className="search-box">
-        <Search size={18} aria-hidden="true" />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search users"
-          aria-label="Search users"
-        />
-      </label>
+      {hideSearch ? null : (
+        <label className="search-box">
+          <Search size={18} aria-hidden="true" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search users"
+            aria-label="Search users"
+          />
+        </label>
+      )}
       {error ? <p className="form-error">{error}</p> : null}
       <div className="user-list">
         {users.map((user) => (
