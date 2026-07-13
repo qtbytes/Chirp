@@ -351,7 +351,7 @@ cat <<EOF
         expires 30d;
         add_header Cache-Control "public, immutable";
         add_header X-Content-Type-Options nosniff always;
-        add_header Content-Security-Policy "default-src 'none'; sandbox" always;
+        add_header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'" always;
     }
 
     # Vite emits content-hashed filenames here.
