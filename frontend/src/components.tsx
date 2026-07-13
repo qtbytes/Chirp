@@ -1687,12 +1687,14 @@ export function CommentCard({
   onReplyCreated,
   currentUserId,
   depth = 0,
+  onOpen,
 }: {
   comment: Comment;
   onChanged: () => void;
   onReplyCreated: () => void;
   currentUserId: number;
   depth?: number;
+  onOpen?: () => void;
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [localComment, setLocalComment] = useState(comment);
@@ -1804,11 +1806,23 @@ export function CommentCard({
     onChanged();
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (!onOpen || event.target !== event.currentTarget) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onOpen();
+    }
+  }
+
   return (
     <article
       id={`post-${localComment.id}`}
-      className={localComment.parent_comment_id ? "comment-card reply" : "comment-card"}
+      className={`${localComment.parent_comment_id ? "comment-card reply" : "comment-card"}${onOpen ? " clickable" : ""}`}
       style={depth > 0 ? { paddingLeft: 18 + Math.min(depth, 8) * 22 } : undefined}
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      onClick={onOpen}
+      onKeyDown={onOpen ? handleKeyDown : undefined}
     >
       <Link
         to={`/${encodeURIComponent(localComment.author.username)}`}
@@ -1868,7 +1882,10 @@ export function CommentCard({
         <footer className="tweet-actions comment-actions">
           <button
             className="tweet-action comment"
-            onClick={() => setReplyOpen(true)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setReplyOpen(true);
+            }}
             aria-label="Reply"
           >
             <MessageCircle size={16} aria-hidden="true" />
@@ -1876,7 +1893,10 @@ export function CommentCard({
           </button>
           <button
             className="tweet-action retweet"
-            onClick={() => setQuoting(true)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setQuoting(true);
+            }}
             aria-label="Quote"
           >
             <Repeat2 size={16} aria-hidden="true" />
@@ -1884,7 +1904,10 @@ export function CommentCard({
           </button>
           <button
             className={localComment.liked_by_me ? "tweet-action like active" : "tweet-action like"}
-            onClick={() => void toggleCommentLikeAction()}
+            onClick={(event) => {
+              event.stopPropagation();
+              void toggleCommentLikeAction();
+            }}
             disabled={acting === "like"}
             aria-pressed={localComment.liked_by_me}
           >

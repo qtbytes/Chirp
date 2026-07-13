@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -58,6 +59,40 @@ def list_tweet_stats(
             current_user_id=current_user_id,
         )
     ]
+
+
+class _RecordViewsRequest(BaseModel):
+    ids: list[int]
+
+
+@router.post("/views", status_code=status.HTTP_204_NO_CONTENT)
+def record_views(
+    payload: _RecordViewsRequest,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    if not payload.ids:
+        return
+    post_ids = list({pid for pid in payload.ids if pid > 0})[:100]
+    if not post_ids:
+        return
+    now = datetime.now(timezone.utc)
+    new_ids = []
+    for pid in post_ids:
+        result = db.execute(
+            sqlite_insert(PostView)
+            .values(user_id=current_user_id, post_id=pid, created_at=now)
+            .on_conflict_do_nothing()
+        )
+        if result.rowcount:
+            new_ids.append(pid)
+    if new_ids:
+        db.execute(
+            update(Post)
+            .where(Post.id.in_(new_ids))
+            .values(view_count=Post.view_count + 1)
+        )
+    db.commit()
 
 
 @router.post(
@@ -180,30 +215,6 @@ def get_tweet(
         ),
         visibility=tweet.visibility,
     )
-
-
-@router.post("/{tweet_id}/view", status_code=status.HTTP_204_NO_CONTENT)
-def record_view(
-    tweet_id: int,
-    current_user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-) -> None:
-    result = db.execute(
-        sqlite_insert(PostView)
-        .values(
-            user_id=current_user_id,
-            post_id=tweet_id,
-            created_at=datetime.now(timezone.utc),
-        )
-        .on_conflict_do_nothing()
-    )
-    if result.rowcount:
-        db.execute(
-            update(Post)
-            .where(Post.id == tweet_id)
-            .values(view_count=Post.view_count + 1)
-        )
-    db.commit()
 
 
 @router.patch("/{tweet_id}", response_model=TweetOut)

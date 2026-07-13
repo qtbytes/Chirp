@@ -18,6 +18,7 @@ import {
   getUserReplies,
   getUserTweets,
   muteUser,
+  recordPostViews,
   unblockUser,
   unfollowUser,
   unmuteUser,
@@ -98,6 +99,7 @@ export function ProfileView({
         const page = await getUserTweets(username, cursor);
         setTweets((current) => (append ? [...current, ...page.items] : page.items));
         setTweetsCursor(page.next_cursor);
+        void recordPostViews(page.items.map((t) => t.id));
       } catch (err) {
         setFeedError(getErrorMessage(err));
       } finally {
@@ -115,6 +117,8 @@ export function ProfileView({
         const page = await getUserReplies(username, cursor);
         setReplies((current) => (append ? [...current, ...page.items] : page.items));
         setRepliesCursor(page.next_cursor);
+        const ids = page.items.flatMap((item) => [item.parent_tweet.id, item.comment.id]);
+        void recordPostViews(ids);
       } catch (err) {
         setFeedError(getErrorMessage(err));
       } finally {
@@ -460,6 +464,11 @@ export function ProfileView({
                   currentUserId={currentUser.id}
                   onChanged={() => void loadReplies()}
                   onReplyCreated={() => void loadReplies()}
+                  onOpen={() =>
+                    navigate(`/tweet/${item.comment.tweet_id}`, {
+                      state: { scrollToPostId: item.comment.id },
+                    })
+                  }
                 />
               </div>
             ))}

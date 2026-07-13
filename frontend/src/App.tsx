@@ -42,7 +42,7 @@ import {
   getTimeline,
   getTweet,
   getTweetStats,
-  recordTweetView,
+  recordPostViews,
   getUnreadNotificationCount,
   listComments,
   listNotifications,
@@ -803,6 +803,7 @@ function SearchPostsPanel({
           return [...current, ...nextIds.filter((id) => !existing.has(id))];
         });
         setCursor(page.next_cursor);
+        void recordPostViews(page.items.map((post) => post.id));
       } catch (err) {
         setError(getErrorMessage(err));
       } finally {
@@ -948,6 +949,7 @@ function HashtagView() {
           const existing = new Set(current);
           return [...current, ...ids.filter((id) => !existing.has(id))];
         });
+        void recordPostViews(next.items.map((tweet) => tweet.id));
       } catch (err) {
         setError(getErrorMessage(err));
       } finally {
@@ -1258,6 +1260,7 @@ function HomeView() {
           const existing = new Set(current);
           return [...current, ...nextIds.filter((tweetId) => !existing.has(tweetId))];
         });
+        void recordPostViews(nextPage.items.map((tweet) => tweet.id));
       } catch (err) {
         setFeedError(getErrorMessage(err));
       } finally {
@@ -1384,7 +1387,6 @@ function TweetDetailRoute() {
   const [tweet, setTweet] = useState<Tweet | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const viewedIds = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     if (!Number.isInteger(numericTweetId) || numericTweetId <= 0) {
@@ -1399,10 +1401,7 @@ function TweetDetailRoute() {
       .then((loaded) => {
         if (!cancelled) {
           setTweet(loaded);
-          if (!viewedIds.current.has(numericTweetId)) {
-            viewedIds.current.add(numericTweetId);
-            void recordTweetView(numericTweetId);
-          }
+          void recordPostViews([numericTweetId]);
         }
       })
       .catch((err) => {
@@ -1648,7 +1647,9 @@ function TweetDetail({
     setLoading(true);
     setError("");
     try {
-      setComments(await listComments(tweet.id));
+      const loaded = await listComments(tweet.id);
+      setComments(loaded);
+      void recordPostViews(loaded.map((c) => c.id));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

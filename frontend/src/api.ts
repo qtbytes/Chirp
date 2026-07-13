@@ -471,8 +471,16 @@ export function getTweet(tweetId: number): Promise<Tweet> {
   return request<Tweet>(`/tweets/${tweetId}`);
 }
 
-export function recordTweetView(tweetId: number): Promise<void> {
-  return request<void>(`/tweets/${tweetId}/view`, { method: "POST" });
+const viewedPostIds = new Set<number>();
+
+export function recordPostViews(ids: number[]): Promise<void> {
+  const newIds = ids.filter((id) => !viewedPostIds.has(id));
+  if (newIds.length === 0) return Promise.resolve();
+  for (const id of newIds) viewedPostIds.add(id);
+  return request<void>("/tweets/views", {
+    method: "POST",
+    body: JSON.stringify({ ids: newIds }),
+  });
 }
 
 /**
