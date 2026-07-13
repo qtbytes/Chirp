@@ -2,11 +2,7 @@
   color: #0f1419;
   background: #ffffff;
   color-scheme: light;
-  font-family:
-    ui-sans-serif,
-    "Segoe UI",
-    "Helvetica Neue",
-    sans-serif;
+  font-family: ui-sans-serif, "Segoe UI", "Helvetica Neue", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --line: #d9e1e8;
@@ -125,8 +121,7 @@ button {
 .auth-page {
   background:
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    var(--page);
+    linear-gradient(var(--grid-line) 1px, transparent 1px), var(--page);
   background-size: 42px 42px;
 }
 
@@ -277,7 +272,10 @@ textarea:focus {
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(76px, 280px) minmax(0, 640px) minmax(280px, 360px);
+  grid-template-columns: minmax(76px, 280px) minmax(0, 640px) minmax(
+      280px,
+      360px
+    );
   justify-content: center;
   background: var(--panel);
 }
@@ -948,7 +946,7 @@ button.rail-link:disabled:hover {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   gap: 12px;
-  padding: 16px 18px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--line);
   align-items: start;
 }
@@ -1163,7 +1161,7 @@ button.rail-link:disabled:hover {
 }
 
 .tweet-body p {
-  margin: 6px 0 12px;
+  margin: 4px 0 2px;
   line-height: 1.45;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -1341,9 +1339,7 @@ button.rail-link:disabled:hover {
 }
 
 .detail-tweet {
-  /* Bottom padding matches .comment-card so the root tweet's action row does
-     not sit in a noticeably deeper well than the replies below it. */
-  padding: 18px 18px 14px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1404,13 +1400,13 @@ button.rail-link:disabled:hover {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
   gap: 12px;
-  padding: 14px 18px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--line);
   align-items: start;
 }
 
 .comment-card.reply {
-  padding-left: 38px;
+  padding-left: 34px;
   background: color-mix(in srgb, var(--soft) 34%, transparent);
 }
 
@@ -1426,7 +1422,7 @@ button.rail-link:disabled:hover {
 }
 
 .comment-card p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   line-height: 1.45;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -2446,7 +2442,6 @@ a.tab {
   color: var(--muted);
   font-style: italic;
 }
-
 
 .danger-button:hover:not(:disabled) {
   background: var(--danger-solid-strong);
