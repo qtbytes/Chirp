@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  Ban,
   Calendar,
   Loader2,
   MoreHorizontal,
@@ -317,16 +318,11 @@ export function ProfileView({
             <div className="profile-actions">
               <ProfileOverflowMenu
                 isMuted={profile.is_muted}
-                busy={muteBusy}
+                muteBusy={muteBusy}
+                blockBusy={blockBusy}
                 onToggleMute={() => void toggleMute()}
+                onBlock={() => setConfirmingBlock(true)}
               />
-              <button
-                className="outline-button"
-                onClick={() => setConfirmingBlock(true)}
-                disabled={blockBusy}
-              >
-                Block
-              </button>
               <button
                 className={profile.is_following ? "outline-button following" : "primary-button compact"}
                 onClick={() => void toggleFollow()}
@@ -360,6 +356,19 @@ export function ProfileView({
         </p>
         {profileError ? <p className="form-error">{profileError}</p> : null}
       </header>
+
+      {!profile.is_current_user && profile.is_muted && !profile.is_blocked ? (
+        <div className="muted-notice">
+          You have muted posts from this account.{" "}
+          <button
+            className="text-button inline"
+            onClick={() => void toggleMute()}
+            disabled={muteBusy}
+          >
+            Unmute
+          </button>
+        </div>
+      ) : null}
 
       {profile.is_blocked ? null : (
         <div className="tab-list" role="tablist" aria-label="Profile content">
@@ -507,17 +516,18 @@ export function ProfileView({
   );
 }
 
-// The "..." menu beside Follow, holding the mute toggle -- mute is a quieter,
-// one-directional action than block, so like Twitter it lives here rather than
-// as its own button.
 function ProfileOverflowMenu({
   isMuted,
-  busy,
+  muteBusy,
+  blockBusy,
   onToggleMute,
+  onBlock,
 }: {
   isMuted: boolean;
-  busy: boolean;
+  muteBusy: boolean;
+  blockBusy: boolean;
   onToggleMute: () => void;
+  onBlock: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -544,7 +554,7 @@ function ProfileOverflowMenu({
         aria-label="More options"
         aria-haspopup="menu"
         aria-expanded={open}
-        disabled={busy}
+        disabled={muteBusy || blockBusy}
       >
         <MoreHorizontal size={18} aria-hidden="true" />
       </button>
@@ -564,6 +574,18 @@ function ProfileOverflowMenu({
               <VolumeX size={16} aria-hidden="true" />
             )}
             <span>{isMuted ? "Unmute" : "Mute"}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="danger-menu-item"
+            onClick={() => {
+              setOpen(false);
+              onBlock();
+            }}
+          >
+            <Ban size={16} aria-hidden="true" />
+            <span>Block</span>
           </button>
         </div>
       ) : null}

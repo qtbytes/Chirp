@@ -1449,6 +1449,17 @@ button.rail-link:disabled:hover {
   color: var(--danger);
 }
 
+.muted-notice {
+  padding: 12px 18px;
+  color: var(--muted);
+  font-size: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.danger-menu-item {
+  color: var(--danger);
+}
+
 /* Twitter-style "@user is blocked" panel: a big heading, muted explanation,
    and a prominent action, all left-aligned in the content column. */
 .blocked-notice {
