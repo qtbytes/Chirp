@@ -1609,13 +1609,18 @@ button.rail-link:disabled:hover {
 }
 
 .search-title-row {
-  display: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.search-feed-header {
+  border-bottom: 0;
 }
 
 .search-header-bar {
   padding: 8px 18px;
   position: relative;
 }
+
 
 .search-box--header {
   margin: 0;
@@ -1904,10 +1909,6 @@ button.rail-link:disabled:hover {
     margin-bottom: 4px;
   }
 
-  .search-title-row {
-    display: flex;
-    border-bottom: 1px solid var(--line);
-  }
 
   .auth-panel {
     padding: 26px;

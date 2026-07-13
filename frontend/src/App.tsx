@@ -625,7 +625,7 @@ function SearchView() {
 
   return (
     <>
-      <header className="feed-header">
+      <header className="feed-header search-feed-header">
         <div className="feed-title-row search-title-row">
           <h1>Search</h1>
         </div>
