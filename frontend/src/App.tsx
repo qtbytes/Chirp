@@ -1384,6 +1384,7 @@ function TweetDetailRoute() {
   const [tweet, setTweet] = useState<Tweet | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const viewedIds = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     if (!Number.isInteger(numericTweetId) || numericTweetId <= 0) {
@@ -1398,7 +1399,10 @@ function TweetDetailRoute() {
       .then((loaded) => {
         if (!cancelled) {
           setTweet(loaded);
-          void recordTweetView(numericTweetId);
+          if (!viewedIds.current.has(numericTweetId)) {
+            viewedIds.current.add(numericTweetId);
+            void recordTweetView(numericTweetId);
+          }
         }
       })
       .catch((err) => {

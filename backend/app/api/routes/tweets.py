@@ -1,5 +1,8 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, update
+from sqlalchemy import update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
@@ -185,18 +188,21 @@ def record_view(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> None:
-    already = db.execute(
-        select(PostView).where(
-            PostView.user_id == current_user_id,
-            PostView.post_id == tweet_id,
+    result = db.execute(
+        sqlite_insert(PostView)
+        .values(
+            user_id=current_user_id,
+            post_id=tweet_id,
+            created_at=datetime.now(timezone.utc),
         )
-    ).first()
-    if already:
-        return
-    db.add(PostView(user_id=current_user_id, post_id=tweet_id))
-    db.execute(
-        update(Post).where(Post.id == tweet_id).values(view_count=Post.view_count + 1)
+        .on_conflict_do_nothing()
     )
+    if result.rowcount:
+        db.execute(
+            update(Post)
+            .where(Post.id == tweet_id)
+            .values(view_count=Post.view_count + 1)
+        )
     db.commit()
 
 
