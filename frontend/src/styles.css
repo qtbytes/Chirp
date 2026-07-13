@@ -1544,9 +1544,10 @@ button.rail-link:disabled:hover {
 .discovery-panel {
   display: grid;
   gap: 0;
-  background: var(--soft);
+  background: var(--panel);
   border-radius: 16px;
   padding: 12px 0;
+  border: 1px solid var(--line);
 }
 
 .discovery-panel h2 {
@@ -1594,7 +1595,8 @@ button.rail-link:disabled:hover {
   gap: 10px;
   min-height: 44px;
   border-radius: 999px;
-  background: var(--soft);
+  background: var(--panel);
+  border: 1px solid var(--line);
   color: var(--muted);
   padding: 0 14px;
 }
@@ -1937,7 +1939,8 @@ button.rail-link:disabled:hover {
 /* Account settings page: a plain list of self-service rows (email, password),
    each an icon + label/status + an action button on the right. */
 .settings-card {
-  background: var(--soft);
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 16px;
   margin: 16px;
   padding: 16px 0;
