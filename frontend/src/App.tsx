@@ -1397,11 +1397,12 @@ function TweetDetailRoute() {
     let cancelled = false;
     setLoading(true);
     setError("");
-    getTweet(numericTweetId)
+    // Record the detail expand first so the count we fetch includes it.
+    recordPostViews([numericTweetId])
+      .then(() => getTweet(numericTweetId))
       .then((loaded) => {
         if (!cancelled) {
           setTweet(loaded);
-          void recordPostViews([numericTweetId]);
         }
       })
       .catch((err) => {

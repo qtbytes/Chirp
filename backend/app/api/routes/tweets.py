@@ -2,8 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy import insert, select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
@@ -71,27 +70,33 @@ def record_views(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> None:
+    """Record one impression per post.
+
+    Twitter-style views: every render or click counts again, so there is no
+    per-user deduplication -- each call adds one view to every post in the
+    batch.
+    """
     if not payload.ids:
         return
-    post_ids = list({pid for pid in payload.ids if pid > 0})[:100]
+    requested = list({pid for pid in payload.ids if pid > 0})[:100]
+    if not requested:
+        return
+    post_ids = db.scalars(select(Post.id).where(Post.id.in_(requested))).all()
     if not post_ids:
         return
     now = datetime.now(timezone.utc)
-    new_ids = []
-    for pid in post_ids:
-        result = db.execute(
-            sqlite_insert(PostView)
-            .values(user_id=current_user_id, post_id=pid, created_at=now)
-            .on_conflict_do_nothing()
-        )
-        if result.rowcount:
-            new_ids.append(pid)
-    if new_ids:
-        db.execute(
-            update(Post)
-            .where(Post.id.in_(new_ids))
-            .values(view_count=Post.view_count + 1)
-        )
+    db.execute(
+        insert(PostView),
+        [
+            {"user_id": current_user_id, "post_id": pid, "created_at": now}
+            for pid in post_ids
+        ],
+    )
+    db.execute(
+        update(Post)
+        .where(Post.id.in_(post_ids))
+        .values(view_count=Post.view_count + 1)
+    )
     db.commit()
 
 

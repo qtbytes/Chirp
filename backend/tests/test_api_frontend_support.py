@@ -272,6 +272,7 @@ def test_tweet_stats_endpoint_returns_counts_and_current_user_state() -> None:
             "like_count": 1,
             "comment_count": 1,
             "retweet_count": 1,
+            "view_count": 0,
             "liked_by_me": True,
         }
     ]
@@ -310,9 +311,34 @@ def test_comment_stats_endpoint_returns_counts_and_current_user_state() -> None:
             "like_count": 1,
             "comment_count": 1,
             "retweet_count": 1,
+            "view_count": 0,
             "liked_by_me": True,
         }
     ]
+
+
+def test_record_views_counts_every_impression() -> None:
+    """Views are Twitter-style: the same user viewing again counts again."""
+    alice = TestClient(app)
+    bob = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
+    )
+    bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
+    )
+    tweet = alice.post("/api/v1/tweets", json={"content": "views"}).json()
+
+    for _ in range(2):
+        response = bob.post("/api/v1/tweets/views", json={"ids": [tweet["id"]]})
+        assert response.status_code == 204
+    # Unknown ids are ignored; the author's own view counts too.
+    alice.post("/api/v1/tweets/views", json={"ids": [tweet["id"], 999999]})
+
+    stats = alice.get(f"/api/v1/tweets/stats?ids={tweet['id']}").json()
+    assert stats[0]["view_count"] == 3
 
 
 def test_thread_comments_are_nested_in_preorder() -> None:

@@ -471,16 +471,18 @@ export function getTweet(tweetId: number): Promise<Tweet> {
   return request<Tweet>(`/tweets/${tweetId}`);
 }
 
-const viewedPostIds = new Set<number>();
-
+/**
+ * Fire-and-forget impression tracking. Views are Twitter-style: every render
+ * or click counts again, so the same id can be reported many times. Failures
+ * are swallowed -- losing a view must never break the UI.
+ */
 export function recordPostViews(ids: number[]): Promise<void> {
-  const newIds = ids.filter((id) => !viewedPostIds.has(id));
-  if (newIds.length === 0) return Promise.resolve();
-  for (const id of newIds) viewedPostIds.add(id);
+  const postIds = [...new Set(ids.filter((id) => id > 0))];
+  if (postIds.length === 0) return Promise.resolve();
   return request<void>("/tweets/views", {
     method: "POST",
-    body: JSON.stringify({ ids: newIds }),
-  });
+    body: JSON.stringify({ ids: postIds }),
+  }).catch(() => undefined);
 }
 
 /**

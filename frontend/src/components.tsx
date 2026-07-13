@@ -41,6 +41,7 @@ import {
   editComment,
   editTweet,
   isVideoUrl,
+  recordPostViews,
   replyToComment,
   reportPost,
   resolveMediaUrl,
@@ -1532,6 +1533,15 @@ export function TweetCard({
     }
   }
 
+  // Twitter-style views: any click on the post -- hashtags, links, avatar,
+  // username, expansion, reply/repost/like -- counts as an engagement and
+  // bumps the view count again.
+  function recordEngagement() {
+    if (editing) return;
+    void recordPostViews([tweet.id]);
+    onTweetPatch(tweet.id, { view_count: tweet.view_count + 1 });
+  }
+
   return (
     <article
       className="tweet-card clickable"
@@ -1544,7 +1554,10 @@ export function TweetCard({
       <Link
         to={`/${encodeURIComponent(tweet.author.username)}`}
         className="author-link"
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          recordEngagement();
+        }}
         aria-label={`View profile of ${tweet.author.username}`}
       >
         <Avatar user={tweet.author} />
@@ -1562,7 +1575,7 @@ export function TweetCard({
           onReport={() => setReporting(true)}
         />
       )}
-      <div className="tweet-body">
+      <div className="tweet-body" onClickCapture={recordEngagement}>
         <header>
           <Link
             to={`/${encodeURIComponent(tweet.author.username)}`}
@@ -1814,6 +1827,14 @@ export function CommentCard({
     }
   }
 
+  // Twitter-style views: any click on the comment counts as an engagement
+  // and bumps the view count again.
+  function recordEngagement() {
+    if (editing) return;
+    void recordPostViews([localComment.id]);
+    setLocalComment((value) => ({ ...value, view_count: value.view_count + 1 }));
+  }
+
   return (
     <article
       id={`post-${localComment.id}`}
@@ -1827,7 +1848,10 @@ export function CommentCard({
       <Link
         to={`/${encodeURIComponent(localComment.author.username)}`}
         className="author-link"
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          recordEngagement();
+        }}
         aria-label={`View profile of ${localComment.author.username}`}
       >
         <Avatar user={localComment.author} size="small" />
@@ -1845,7 +1869,7 @@ export function CommentCard({
           onReport={() => setReporting(true)}
         />
       )}
-      <div className="comment-body">
+      <div className="comment-body" onClickCapture={recordEngagement}>
         <header>
           <Link
             to={`/${encodeURIComponent(localComment.author.username)}`}
