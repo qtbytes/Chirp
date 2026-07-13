@@ -264,6 +264,7 @@ class TimelineService:
             like_count=row["like_count"],
             comment_count=row["comment_count"],
             retweet_count=row["retweet_count"],
+            view_count=tweet.view_count,
             liked_by_me=row.get("liked_by_me", False),
             quoted_post=(
                 serialize_quoted_post(tweet.quoted_post)

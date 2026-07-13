@@ -11,6 +11,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import {
   Ban,
+  BarChart2,
   Check,
   ChevronDown,
   Flag,
@@ -1627,6 +1628,10 @@ export function TweetCard({
             <Heart size={18} aria-hidden="true" fill={tweet.liked_by_me ? "currentColor" : "none"} />
             <span>{tweet.like_count}</span>
           </button>
+          <span className="tweet-action views" aria-label="Views">
+            <BarChart2 size={18} aria-hidden="true" />
+            <span>{tweet.view_count}</span>
+          </span>
         </footer>
       </div>
       {commentOpen ? (
@@ -1890,6 +1895,10 @@ export function CommentCard({
             />
             <span>{localComment.like_count}</span>
           </button>
+          <span className="tweet-action views" aria-label="Views">
+            <BarChart2 size={16} aria-hidden="true" />
+            <span>{localComment.view_count}</span>
+          </span>
         </footer>
       </div>
       {replyOpen ? (
@@ -1956,6 +1965,7 @@ export function mergeTweetStats(
       tweet.like_count !== item.like_count ||
       tweet.comment_count !== item.comment_count ||
       tweet.retweet_count !== item.retweet_count ||
+      tweet.view_count !== item.view_count ||
       tweet.liked_by_me !== item.liked_by_me
     ) {
       next[item.id] = {
@@ -1963,6 +1973,7 @@ export function mergeTweetStats(
         like_count: item.like_count,
         comment_count: item.comment_count,
         retweet_count: item.retweet_count,
+        view_count: item.view_count,
         liked_by_me: item.liked_by_me,
       };
       changed = true;
@@ -1989,6 +2000,7 @@ export function mergeCommentStats(current: Comment[], stats: CommentStats[]): Co
       comment.like_count === item.like_count &&
       comment.comment_count === item.comment_count &&
       comment.retweet_count === item.retweet_count &&
+      comment.view_count === item.view_count &&
       comment.liked_by_me === item.liked_by_me
     ) {
       return comment;
@@ -2000,6 +2012,7 @@ export function mergeCommentStats(current: Comment[], stats: CommentStats[]): Co
       like_count: item.like_count,
       comment_count: item.comment_count,
       retweet_count: item.retweet_count,
+      view_count: item.view_count,
       liked_by_me: item.liked_by_me,
     };
   });

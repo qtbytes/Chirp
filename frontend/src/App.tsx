@@ -14,6 +14,7 @@ import {
 import {
   ArrowLeft,
   AtSign,
+  BarChart2,
   Bell,
   Feather,
   Home,
@@ -1809,6 +1810,10 @@ function TweetDetail({
             />
             <span>{tweet.like_count}</span>
           </button>
+          <span className="tweet-action views" aria-label="Views">
+            <BarChart2 size={18} aria-hidden="true" />
+            <span>{tweet.view_count}</span>
+          </span>
         </div>
       </article>
 

@@ -47,6 +47,7 @@ export type Tweet = {
   like_count: number;
   comment_count: number;
   retweet_count: number;
+  view_count: number;
   liked_by_me: boolean;
   quoted_post: QuotedPost | null;
   visibility: TweetVisibility;
@@ -63,6 +64,7 @@ export type TweetStats = {
   like_count: number;
   comment_count: number;
   retweet_count: number;
+  view_count: number;
   liked_by_me: boolean;
 };
 
@@ -77,6 +79,7 @@ export type CommentStats = {
   like_count: number;
   comment_count: number;
   retweet_count: number;
+  view_count: number;
   liked_by_me: boolean;
 };
 
@@ -92,6 +95,7 @@ export type Comment = {
   like_count: number;
   comment_count: number;
   retweet_count: number;
+  view_count: number;
   liked_by_me: boolean;
   quoted_post: QuotedPost | null;
 };

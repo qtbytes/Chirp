@@ -216,6 +216,7 @@ def _hydrate(
         "like_count": 0,
         "comment_count": 0,
         "retweet_count": 0,
+        "view_count": 0,
         "liked_by_me": False,
     }
 
@@ -232,6 +233,7 @@ def _hydrate(
             "like_count": stats["like_count"],
             "comment_count": stats["comment_count"],
             "retweet_count": stats["retweet_count"],
+            "view_count": stats["view_count"],
             "liked_by_me": stats["liked_by_me"],
             "cursor_id": pid,
         }

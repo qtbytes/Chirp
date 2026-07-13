@@ -72,6 +72,9 @@ class Post(Base):
         server_default=DEFAULT_VISIBILITY,
         nullable=False,
     )
+    view_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
 
     author = relationship("User", back_populates="posts")
     quoted_post = relationship(

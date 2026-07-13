@@ -82,6 +82,7 @@ def search_posts(
             like_count=row["like_count"],
             comment_count=row["comment_count"],
             retweet_count=row["retweet_count"],
+            view_count=row["view_count"],
             liked_by_me=row["liked_by_me"],
             quoted_post=(
                 serialize_quoted_post(row["post"].quoted_post)

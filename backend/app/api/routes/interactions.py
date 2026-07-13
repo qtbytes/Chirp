@@ -162,6 +162,7 @@ def create_comment(
         like_count=0,
         comment_count=0,
         retweet_count=0,
+        view_count=0,
         liked_by_me=False,
     )
 
@@ -211,6 +212,7 @@ def list_comments(
             like_count=like_count,
             comment_count=comment_count,
             retweet_count=retweet_count,
+            view_count=comment.view_count,
             liked_by_me=liked_by_me,
         )
         for comment, author, like_count, comment_count, retweet_count, liked_by_me in rows

@@ -10,6 +10,7 @@
     "generate:emoji": "node scripts/generate-emoji-data.mjs"
   },
   "dependencies": {
+    "@playwright/test": "^1.61.1",
     "@vitejs/plugin-react": "^5.1.1",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",

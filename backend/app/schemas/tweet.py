@@ -56,6 +56,7 @@ class TweetOut(BaseModel):
     like_count: int = 0
     comment_count: int = 0
     retweet_count: int = 0
+    view_count: int = 0
     liked_by_me: bool = False
     quoted_post: QuotedPostOut | None = None
     visibility: TweetVisibility = DEFAULT_VISIBILITY
@@ -68,6 +69,7 @@ class TweetStatsOut(BaseModel):
     like_count: int = 0
     comment_count: int = 0
     retweet_count: int = 0
+    view_count: int = 0
     liked_by_me: bool = False
 
 

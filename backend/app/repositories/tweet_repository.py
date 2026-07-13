@@ -160,6 +160,7 @@ def list_tweet_stats(
     rows = db.execute(
         select(
             Post.id,
+            Post.view_count,
             func.coalesce(like_counts.c.like_count, 0).label("like_count"),
             func.coalesce(comment_counts.c.comment_count, 0).label("comment_count"),
             func.coalesce(retweet_counts.c.retweet_count, 0).label("retweet_count"),
@@ -186,9 +187,10 @@ def list_tweet_stats(
             "like_count": int(like_count),
             "comment_count": int(comment_count),
             "retweet_count": int(retweet_count),
+            "view_count": int(view_count),
             "liked_by_me": post_id in liked_ids,
         }
-        for post_id, like_count, comment_count, retweet_count in rows
+        for post_id, view_count, like_count, comment_count, retweet_count in rows
     }
     return [stats_by_id[pid] for pid in ordered_ids if pid in stats_by_id]
 
@@ -245,6 +247,7 @@ def _load_tweet_rows_by_ids(
             "like_count": int(like_count),
             "comment_count": int(comment_count),
             "retweet_count": int(retweet_count),
+            "view_count": post.view_count,
             "liked_by_me": post.id in liked_ids,
         }
         for post, like_count, comment_count, retweet_count in rows
@@ -499,6 +502,7 @@ def fetch_for_you_candidates(
             "like_count": int(like_count),
             "comment_count": int(comment_count),
             "retweet_count": int(retweet_count),
+            "view_count": post.view_count,
             "liked_by_me": post.id in liked_ids,
             "follows_author": post.user_id in followed_authors,
             "viewer_like_affinity": likes_on_author.get(post.user_id, 0),

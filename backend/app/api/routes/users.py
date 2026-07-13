@@ -222,7 +222,7 @@ def list_user_replies(
     ):
         parent_stats[stats["id"]] = stats
 
-    empty = {"like_count": 0, "comment_count": 0, "retweet_count": 0, "liked_by_me": False}
+    empty = {"like_count": 0, "comment_count": 0, "retweet_count": 0, "view_count": 0, "liked_by_me": False}
 
     items = []
     for row in page_rows:
@@ -244,6 +244,7 @@ def list_user_replies(
                     like_count=c_stats["like_count"],
                     comment_count=c_stats["comment_count"],
                     retweet_count=c_stats["retweet_count"],
+                    view_count=c_stats["view_count"],
                     liked_by_me=c_stats["liked_by_me"],
                 ),
                 parent_tweet=TweetOut(
@@ -257,6 +258,7 @@ def list_user_replies(
                     comment_count=t_stats["comment_count"],
                     liked_by_me=t_stats["liked_by_me"],
                     retweet_count=t_stats["retweet_count"],
+                    view_count=t_stats["view_count"],
                     quoted_post=(
                         serialize_quoted_post(tweet.quoted_post)
                         if can_view_post(db, current_user_id, tweet.quoted_post)

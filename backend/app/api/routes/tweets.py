@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
@@ -143,6 +144,11 @@ def get_tweet(
             detail="tweet not found",
         )
 
+    db.execute(
+        update(Post).where(Post.id == tweet_id).values(view_count=Post.view_count + 1)
+    )
+    db.commit()
+
     stats_rows = tweet_repository.list_tweet_stats(
         db,
         tweet_ids=[tweet_id],
@@ -152,6 +158,7 @@ def get_tweet(
         "like_count": 0,
         "comment_count": 0,
         "retweet_count": 0,
+        "view_count": 0,
         "liked_by_me": False,
     }
 
@@ -165,6 +172,7 @@ def get_tweet(
         like_count=stats["like_count"],
         comment_count=stats["comment_count"],
         retweet_count=stats["retweet_count"],
+        view_count=stats["view_count"],
         liked_by_me=stats["liked_by_me"],
         quoted_post=(
             serialize_quoted_post(tweet.quoted_post)
@@ -215,6 +223,7 @@ def edit_tweet(
         "like_count": 0,
         "comment_count": 0,
         "retweet_count": 0,
+        "view_count": 0,
         "liked_by_me": False,
     }
     return TweetOut(
@@ -227,6 +236,7 @@ def edit_tweet(
         like_count=stats["like_count"],
         comment_count=stats["comment_count"],
         retweet_count=stats["retweet_count"],
+        view_count=stats["view_count"],
         liked_by_me=stats["liked_by_me"],
         quoted_post=(
             serialize_quoted_post(tweet.quoted_post)

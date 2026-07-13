@@ -1271,7 +1271,7 @@ button.rail-link:disabled:hover {
 }
 
 .tweet-actions {
-  max-width: 360px;
+  max-width: 425px;
   justify-content: space-between;
 }
 
@@ -1311,6 +1311,10 @@ button.rail-link:disabled:hover {
 
 .tweet-action.like.active {
   color: var(--like);
+}
+
+.tweet-action.views {
+  cursor: default;
 }
 
 .tweet-detail {
