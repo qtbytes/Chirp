@@ -626,6 +626,9 @@ function SearchView() {
   return (
     <>
       <header className="feed-header">
+        <div className="feed-title-row search-title-row">
+          <h1>Search</h1>
+        </div>
         <div className="search-header-bar" ref={searchRef}>
           <label className="search-box search-box--header">
             <Search size={18} aria-hidden="true" />

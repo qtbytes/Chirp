@@ -1608,6 +1608,10 @@ button.rail-link:disabled:hover {
   box-shadow: none;
 }
 
+.search-title-row {
+  display: none;
+}
+
 .search-header-bar {
   padding: 8px 18px;
   position: relative;
@@ -1898,6 +1902,11 @@ button.rail-link:disabled:hover {
   .composer-visibility {
     padding-bottom: 6px;
     margin-bottom: 4px;
+  }
+
+  .search-title-row {
+    display: flex;
+    border-bottom: 1px solid var(--line);
   }
 
   .auth-panel {
