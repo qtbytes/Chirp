@@ -1539,13 +1539,20 @@ export function TweetCard({
   // counted here: the detail page records that view itself. The capture
   // handler fires before we know whether an inner element stops propagation,
   // so the post is deferred a tick and cancelled when the detail opens.
+  //
+  // A user's view counts once per post (the server collapses repeats, like
+  // notifications collapse re-likes), so only the first engagement this card
+  // sees reports and optimistically bumps -- hammering like/unlike does not
+  // pump the counter.
   const pendingEngagement = useRef(false);
+  const viewRecorded = useRef(false);
   function queueEngagement() {
-    if (editing) return;
+    if (editing || viewRecorded.current) return;
     pendingEngagement.current = true;
     window.setTimeout(() => {
       if (!pendingEngagement.current) return;
       pendingEngagement.current = false;
+      viewRecorded.current = true;
       void recordPostViews([tweet.id]);
       onTweetPatch(tweet.id, { view_count: tweet.view_count + 1 });
     }, 0);
@@ -1553,6 +1560,9 @@ export function TweetCard({
 
   function openDetail() {
     pendingEngagement.current = false;
+    // The detail page records this view; a later engagement on this card
+    // would be the same user again anyway.
+    viewRecorded.current = true;
     onOpen();
   }
 
@@ -1846,13 +1856,20 @@ export function CommentCard({
   // the detail page records that view. The capture handler fires before we
   // know whether an inner element stops propagation, so the post is deferred
   // a tick and cancelled when the thread opens.
+  //
+  // A user's view counts once per post (the server collapses repeats, like
+  // notifications collapse re-likes), so only the first engagement this card
+  // sees reports and optimistically bumps -- hammering like/unlike does not
+  // pump the counter.
   const pendingEngagement = useRef(false);
+  const viewRecorded = useRef(false);
   function queueEngagement() {
-    if (editing) return;
+    if (editing || viewRecorded.current) return;
     pendingEngagement.current = true;
     window.setTimeout(() => {
       if (!pendingEngagement.current) return;
       pendingEngagement.current = false;
+      viewRecorded.current = true;
       void recordPostViews([localComment.id]);
       setLocalComment((value) => ({ ...value, view_count: value.view_count + 1 }));
     }, 0);
@@ -1861,6 +1878,9 @@ export function CommentCard({
   function openThread() {
     if (!onOpen) return;
     pendingEngagement.current = false;
+    // The detail page records this view; a later engagement on this card
+    // would be the same user again anyway.
+    viewRecorded.current = true;
     onOpen();
   }
 

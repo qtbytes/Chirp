@@ -317,8 +317,9 @@ def test_comment_stats_endpoint_returns_counts_and_current_user_state() -> None:
     ]
 
 
-def test_record_views_counts_every_impression() -> None:
-    """Views are Twitter-style: the same user viewing again counts again."""
+def test_record_views_counts_each_user_once() -> None:
+    """Repeat views by the same user are collapsed -- like re-like
+    notifications -- so hammering an engagement can't inflate the count."""
     alice = TestClient(app)
     bob = TestClient(app)
     alice.post(
@@ -331,14 +332,15 @@ def test_record_views_counts_every_impression() -> None:
     )
     tweet = alice.post("/api/v1/tweets", json={"content": "views"}).json()
 
-    for _ in range(2):
+    for _ in range(3):
         response = bob.post("/api/v1/tweets/views", json={"ids": [tweet["id"]]})
         assert response.status_code == 204
-    # Unknown ids are ignored; the author's own view counts too.
+    # Unknown ids are ignored; the author's own view counts too, once.
     alice.post("/api/v1/tweets/views", json={"ids": [tweet["id"], 999999]})
+    alice.post("/api/v1/tweets/views", json={"ids": [tweet["id"]]})
 
     stats = alice.get(f"/api/v1/tweets/stats?ids={tweet['id']}").json()
-    assert stats[0]["view_count"] == 3
+    assert stats[0]["view_count"] == 2
 
 
 def test_thread_comments_are_nested_in_preorder() -> None:

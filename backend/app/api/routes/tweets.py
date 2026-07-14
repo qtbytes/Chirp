@@ -73,8 +73,10 @@ def record_views(
     """Record one view per post.
 
     Views count engagements only (detail opens, clicks) -- the frontend does
-    not report feed/list renders. There is no per-user deduplication: each
-    call adds one view to every post in the batch.
+    not report feed/list renders. Repeats are collapsed per user, the same way
+    notifications collapse re-likes: the first engagement writes a post_views
+    row, and any later report for a (user, post) pair that already has one is
+    ignored -- so hammering the like button doesn't inflate the count.
     """
     if not payload.ids:
         return
@@ -84,17 +86,28 @@ def record_views(
     post_ids = db.scalars(select(Post.id).where(Post.id.in_(requested))).all()
     if not post_ids:
         return
+    already_viewed = set(
+        db.scalars(
+            select(PostView.post_id).where(
+                PostView.user_id == current_user_id,
+                PostView.post_id.in_(post_ids),
+            )
+        )
+    )
+    new_ids = [pid for pid in post_ids if pid not in already_viewed]
+    if not new_ids:
+        return
     now = datetime.now(timezone.utc)
     db.execute(
         insert(PostView),
         [
             {"user_id": current_user_id, "post_id": pid, "created_at": now}
-            for pid in post_ids
+            for pid in new_ids
         ],
     )
     db.execute(
         update(Post)
-        .where(Post.id.in_(post_ids))
+        .where(Post.id.in_(new_ids))
         .values(view_count=Post.view_count + 1)
     )
     db.commit()
