@@ -33,6 +33,7 @@ def get_trending(db: Session) -> list[dict]:
         baseline_hours=settings.trending_baseline_hours,
         min_posts=settings.trending_min_posts,
         limit=settings.trending_limit,
+        view_weight=settings.trending_view_weight,
     )
 
     redis_client.setex(

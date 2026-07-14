@@ -60,6 +60,7 @@ import {
   toggleTweetLike,
   unfollowUser,
 } from "./api";
+import type { HashtagSort } from "./api";
 import type {
   Comment,
   Notification,
@@ -882,6 +883,7 @@ function HashtagView() {
   const [tweetIds, setTweetIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [sort, setSort] = useState<HashtagSort>("top");
 
   const tweets = useMemo(
     () => tweetIds.map((id) => tweetById[id]).filter((tweet): tweet is Tweet => Boolean(tweet)),
@@ -929,7 +931,7 @@ function HashtagView() {
       setLoading(true);
       setError("");
       try {
-        const next = await getHashtagPosts(tag, cursor);
+        const next = await getHashtagPosts(tag, cursor, sort);
         setPage(next);
         setTweetById((current) => {
           const map = append ? { ...current } : {};
@@ -952,10 +954,11 @@ function HashtagView() {
         setLoading(false);
       }
     },
-    [tag],
+    [tag, sort],
   );
 
-  // Reset when navigating to a different tag, then load its first page.
+  // Reset when navigating to a different tag (or switching the sort), then
+  // load the first page.
   useEffect(() => {
     setTweetIds([]);
     setTweetById({});
@@ -971,6 +974,24 @@ function HashtagView() {
             <ArrowLeft size={20} aria-hidden="true" />
           </button>
           <h1 className="hashtag-title">#{tag}</h1>
+        </div>
+        <div className="tab-list" role="tablist" aria-label="Hashtag feed sort">
+          <button
+            className={sort === "top" ? "tab active" : "tab"}
+            onClick={() => setSort("top")}
+            role="tab"
+            aria-selected={sort === "top"}
+          >
+            Top
+          </button>
+          <button
+            className={sort === "recent" ? "tab active" : "tab"}
+            onClick={() => setSort("recent")}
+            role="tab"
+            aria-selected={sort === "recent"}
+          >
+            Latest
+          </button>
         </div>
       </header>
 

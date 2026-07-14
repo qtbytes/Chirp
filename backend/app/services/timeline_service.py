@@ -179,6 +179,7 @@ class TimelineService:
         limit: int,
         cursor: str | None,
         user_id: int | None = None,
+        tag: str | None = None,
     ) -> TimelinePage:
         """
         Rank a bounded pool of recent posts for this viewer, newest scroll first.
@@ -188,6 +189,9 @@ class TimelineService:
         computed here, at read time. Pagination pins the decay clock into the
         cursor so one scroll stays stable even as the score of each post keeps
         decaying in real time.
+
+        ``tag`` scopes the candidate pool to posts carrying that hashtag: the
+        hashtag feed's "Top" sort is this same ranker over a smaller pool.
         """
         reference_time, cursor_score, cursor_id = decode_rank_cursor(cursor)
         if cursor and (
@@ -208,6 +212,7 @@ class TimelineService:
             current_user_id=user_id,
             exclude_author_ids=hidden,
             exclude_deleted_authors=True,
+            tag=tag,
         )
 
         weights = weights_from_settings()

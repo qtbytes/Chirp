@@ -1,3 +1,5 @@
+from typing import Literal
+
 from app.api.deps import get_current_user_id
 from app.db.database import get_db
 from app.repositories import block_repository, tweet_repository
@@ -31,15 +33,22 @@ def list_hashtag_posts(
     tag: str,
     limit: int = Query(default=20, ge=1, le=50),
     cursor: str | None = None,
+    sort: Literal["recent", "top"] = "recent",
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> HashtagPostsPage:
     """
-    The hashtag feed: top-level posts tagged ``#{tag}``, newest-first.
+    The hashtag feed: top-level posts tagged ``#{tag}``.
 
     Membership comes from the ``post_hashtags`` rows recorded on write, not from
-    a text search, so only posts that actually used the tag appear. Same
-    cursor-pagination and block/deleted-author visibility as the timelines.
+    a text search, so only posts that actually used the tag appear.
+
+    ``sort=recent`` (default) is newest-first with the timelines'
+    ``(created_at, id)`` cursor. ``sort=top`` reuses the "for you" ranker over a
+    tag-scoped pool -- engagement (likes, retweets, comments, views) decayed by
+    age, lifted by the viewer's affinity -- and pages on its rank cursor. The
+    cursor is opaque and sort-specific, so keep ``sort`` fixed across one
+    pagination run.
     """
     normalized = _normalize_tag(tag)
     if not normalized:
@@ -47,6 +56,22 @@ def list_hashtag_posts(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid hashtag",
         )
+
+    if sort == "top":
+        service = TimelineService(db, viewer_id=current_user_id)
+        try:
+            page = service.get_for_you_timeline(
+                limit=limit,
+                cursor=cursor,
+                user_id=current_user_id,
+                tag=normalized,
+            )
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="invalid cursor",
+            )
+        return HashtagPostsPage(items=page.items, next_cursor=page.next_cursor)
 
     cursor_created_at, cursor_id = decode_cursor(cursor)
     if cursor and (cursor_created_at is None or cursor_id is None):

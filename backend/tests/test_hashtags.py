@@ -112,3 +112,38 @@ def test_unknown_tag_is_empty_and_blank_tag_is_rejected() -> None:
     assert _feed(alice, "doesnotexist")["items"] == []
     # A tag that normalizes to empty (just "#") is a bad request.
     assert alice.get("/api/v1/hashtags/%23/posts").status_code == 400
+
+
+def test_top_sort_ranks_a_viewed_post_over_a_fresher_untouched_one() -> None:
+    alice, _ = _register("alice")
+    bob, _ = _register("bob")
+
+    # The viewed post is older, so recency alone would rank it second.
+    viewed = _post(alice, "older but read #rank")
+    fresh = _post(alice, "fresh but untouched #rank")
+    assert bob.post("/api/v1/tweets/views", json={"ids": [viewed]}).status_code == 200
+
+    top_ids = [item["id"] for item in _feed(alice, "rank", sort="top")["items"]]
+    assert top_ids == [viewed, fresh]
+
+    # The default recent sort is unaffected: newest-first.
+    recent_ids = [item["id"] for item in _feed(alice, "rank")["items"]]
+    assert recent_ids == [fresh, viewed]
+
+    # Top sort still keys on the structured tag rows: a viewed post without
+    # the tag never enters the pool.
+    outside = _post(alice, "no tag here at all")
+    bob.post("/api/v1/tweets/views", json={"ids": [outside]})
+    assert outside not in [
+        item["id"] for item in _feed(alice, "rank", sort="top")["items"]
+    ]
+
+
+def test_top_sort_rejects_a_malformed_cursor() -> None:
+    alice, _ = _register("alice")
+    _post(alice, "#cursors")
+    response = alice.get(
+        "/api/v1/hashtags/cursors/posts",
+        params={"sort": "top", "cursor": "garbage"},
+    )
+    assert response.status_code == 400

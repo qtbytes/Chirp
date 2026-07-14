@@ -401,6 +401,7 @@ def fetch_for_you_candidates(
     current_user_id: int | None = None,
     exclude_author_ids: set[int] | None = None,
     exclude_deleted_authors: bool = False,
+    tag: str | None = None,
 ) -> list[dict]:
     """
     A bounded pool of recent top-level posts, with the engagement and
@@ -416,6 +417,10 @@ def fetch_for_you_candidates(
     - ``follows_author`` -- whether the viewer follows the author,
     - ``viewer_like_affinity`` -- how many of that author's posts the viewer has
       liked (an affinity signal, capped later by the scorer).
+
+    ``tag`` restricts the pool to posts carrying that hashtag (normalised,
+    no leading ``#``) -- the hashtag feed's "Top" sort reuses this ranker over
+    a tag-scoped pool.
     """
     like_counts = (
         select(Like.post_id, func.count().label("like_count"))
@@ -443,6 +448,10 @@ def fetch_for_you_candidates(
         .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
         .where(Post.reply_to_id.is_(None))
     )
+    if tag is not None:
+        stmt = stmt.join(PostHashtag, PostHashtag.post_id == Post.id).where(
+            PostHashtag.tag == tag
+        )
     # Filter hidden authors and audience-restricted tweets out of the pool
     # *before* the limit, so a blocked/deleted author -- or a followers-only tweet
     # the viewer can't see -- cannot consume candidate slots the viewer should

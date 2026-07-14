@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     trending_min_posts: int = 2
     trending_limit: int = 10
     trending_cache_ttl_seconds: int = 300
+    # Views landing on a tag's posts count toward its velocity alongside the
+    # posts themselves (activity = posts + weight·views), so a tag people are
+    # suddenly *reading* can trend before many new posts use it. Views are
+    # windowed by when they happened and deduplicated per user at write time.
+    trending_view_weight: float = 0.25
 
     # "For you" ranking. The home timeline is chronological; "for you" scores a
     # bounded pool of recent posts at read time -- engagement decayed by age and

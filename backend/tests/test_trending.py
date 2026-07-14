@@ -148,3 +148,32 @@ def test_trending_is_empty_with_no_hashtags() -> None:
     alice, _ = _register("alice")
     _post(alice, "just a plain post, no tags")
     assert _trending(alice) == []
+
+
+def test_views_lift_a_tags_velocity(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "trending_window_hours", 24)
+    monkeypatch.setattr(settings, "trending_baseline_hours", 24)
+    monkeypatch.setattr(settings, "trending_min_posts", 1)
+    monkeypatch.setattr(settings, "trending_view_weight", 0.25)
+    alice, _ = _register("alice")
+    bob, _ = _register("bob")
+
+    # Two tags with identical posting activity. The viewed tag is named to
+    # lose every tie-break (later alphabetically), so only its views can put
+    # it first.
+    read_post = _post(alice, "everyone reads #zzread")
+    _post(alice, "nobody reads #aquiet")
+    assert bob.post("/api/v1/tweets/views", json={"ids": [read_post]}).status_code == 200
+
+    # Drop any cached snapshot so this call reflects the view just recorded.
+    from app.db.redis_client import get_redis_client
+
+    get_redis_client().delete("hashtags:trending")
+
+    trending = _trending(alice)
+    tags = [row["tag"] for row in trending]
+    assert tags.index("zzread") < tags.index("aquiet"), (
+        "reading velocity should lift the viewed tag over the equally-posted quiet one"
+    )
+    # post_count still displays posting volume, not view-weighted activity.
+    assert next(r for r in trending if r["tag"] == "zzread")["post_count"] == 1

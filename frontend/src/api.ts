@@ -375,12 +375,20 @@ export function getTrending(): Promise<TrendingHashtag[]> {
   return request<TrendingHashtag[]>(`/hashtags/trending`);
 }
 
-/** The hashtag feed: top-level posts carrying an exact #tag, newest-first. */
+export type HashtagSort = "top" | "recent";
+
+/**
+ * The hashtag feed: top-level posts carrying an exact #tag. "recent" is
+ * newest-first; "top" is ranked like For-you (engagement incl. views, decayed
+ * by age, lifted by affinity). Cursors are sort-specific -- keep the sort
+ * fixed across one pagination run.
+ */
 export function getHashtagPosts(
   tag: string,
   cursor?: string | null,
+  sort: HashtagSort = "recent",
 ): Promise<ProfileTweetsPage> {
-  const params = new URLSearchParams({ limit: "20" });
+  const params = new URLSearchParams({ limit: "20", sort });
   if (cursor) {
     params.set("cursor", cursor);
   }
