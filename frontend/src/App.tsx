@@ -1385,6 +1385,10 @@ function TweetDetailRoute() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // React 18+ mounts effects twice in StrictMode; without this guard a single
+  // detail open would record two views in dev.
+  const viewRecordedFor = useRef<number | null>(null);
+
   useEffect(() => {
     if (!Number.isInteger(numericTweetId) || numericTweetId <= 0) {
       setError("Tweet not found.");
@@ -1394,8 +1398,10 @@ function TweetDetailRoute() {
     let cancelled = false;
     setLoading(true);
     setError("");
+    const alreadyRecorded = viewRecordedFor.current === numericTweetId;
+    viewRecordedFor.current = numericTweetId;
     // Record the detail expand first so the count we fetch includes it.
-    recordPostViews([numericTweetId])
+    (alreadyRecorded ? Promise.resolve() : recordPostViews([numericTweetId]))
       .then(() => getTweet(numericTweetId))
       .then((loaded) => {
         if (!cancelled) {
