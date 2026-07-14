@@ -70,11 +70,11 @@ def record_views(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> None:
-    """Record one impression per post.
+    """Record one view per post.
 
-    Twitter-style views: every render or click counts again, so there is no
-    per-user deduplication -- each call adds one view to every post in the
-    batch.
+    Views count engagements only (detail opens, clicks) -- the frontend does
+    not report feed/list renders. There is no per-user deduplication: each
+    call adds one view to every post in the batch.
     """
     if not payload.ids:
         return

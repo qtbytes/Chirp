@@ -472,8 +472,9 @@ export function getTweet(tweetId: number): Promise<Tweet> {
 }
 
 /**
- * Fire-and-forget impression tracking. Views are Twitter-style: every render
- * or click counts again, so the same id can be reported many times. Failures
+ * Fire-and-forget view tracking. Views count only on engagement -- opening a
+ * detail page or clicking a post -- never on feed/list renders. The same id
+ * can still be reported many times (each engagement counts again). Failures
  * are swallowed -- losing a view must never break the UI.
  */
 export function recordPostViews(ids: number[]): Promise<void> {

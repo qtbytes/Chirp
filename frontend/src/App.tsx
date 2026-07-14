@@ -803,7 +803,6 @@ function SearchPostsPanel({
           return [...current, ...nextIds.filter((id) => !existing.has(id))];
         });
         setCursor(page.next_cursor);
-        void recordPostViews(page.items.map((post) => post.id));
       } catch (err) {
         setError(getErrorMessage(err));
       } finally {
@@ -949,7 +948,6 @@ function HashtagView() {
           const existing = new Set(current);
           return [...current, ...ids.filter((id) => !existing.has(id))];
         });
-        void recordPostViews(next.items.map((tweet) => tweet.id));
       } catch (err) {
         setError(getErrorMessage(err));
       } finally {
@@ -1260,7 +1258,6 @@ function HomeView() {
           const existing = new Set(current);
           return [...current, ...nextIds.filter((tweetId) => !existing.has(tweetId))];
         });
-        void recordPostViews(nextPage.items.map((tweet) => tweet.id));
       } catch (err) {
         setFeedError(getErrorMessage(err));
       } finally {
@@ -1650,7 +1647,6 @@ function TweetDetail({
     try {
       const loaded = await listComments(tweet.id);
       setComments(loaded);
-      void recordPostViews(loaded.map((c) => c.id));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
