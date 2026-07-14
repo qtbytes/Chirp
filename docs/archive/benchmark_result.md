@@ -1,8 +1,8 @@
-> **Archived.** These numbers were produced against the pre-refactor schema by
-> `scripts/benchmark_celebrity_fanout.py`, which has since been deleted — it
-> broke against the unified `Post` model. Kept for historical reference only;
-> reproducing these results would mean rewriting the benchmark. See the root
-> [`readme.md`](../../readme.md).
+> **Archived.** These numbers were produced against the pre-refactor schema.
+> The benchmark has since been rewritten for the unified `Post` model
+> (`backend/scripts/benchmark_celebrity_fanout.py`); current results live in
+> [`docs/benchmark_result_2026-07-14.md`](../benchmark_result_2026-07-14.md).
+> Kept for historical comparison. See the root [`readme.md`](../../readme.md).
 
 ## Database Write
 
