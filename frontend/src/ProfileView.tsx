@@ -460,11 +460,7 @@ export function ProfileView({
                   currentUserId={currentUser.id}
                   onChanged={() => void loadReplies()}
                   onReplyCreated={() => void loadReplies()}
-                  onOpen={() =>
-                    navigate(`/tweet/${item.comment.tweet_id}`, {
-                      state: { scrollToPostId: item.comment.id },
-                    })
-                  }
+                  onOpen={() => navigate(`/comment/${item.comment.id}`)}
                 />
               </div>
             ))}

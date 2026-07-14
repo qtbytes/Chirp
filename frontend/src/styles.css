@@ -1400,6 +1400,20 @@ button.rail-link:disabled:hover {
   display: grid;
 }
 
+.thread-context-link {
+  display: block;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.thread-context-link:hover {
+  background: var(--hover);
+  text-decoration: underline;
+}
+
 .comment-card {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);

@@ -295,6 +295,10 @@ export function listComments(tweetId: number, limit = 100): Promise<Comment[]> {
   return request<Comment[]>(`/tweets/${tweetId}/comments?${params.toString()}`);
 }
 
+export function getComment(commentId: number): Promise<Comment> {
+  return request<Comment>(`/comments/${commentId}`);
+}
+
 export function editComment(
   commentId: number,
   content: string,

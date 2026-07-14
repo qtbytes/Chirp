@@ -421,3 +421,84 @@ def test_comment_interactions_update_comment_counts() -> None:
         comment["id"],
         reply_response.json()["id"],
     ]
+
+
+def test_get_comment_detail_returns_comment_with_stats() -> None:
+    alice = TestClient(app)
+    bob = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
+    )
+    bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
+    )
+
+    tweet = alice.post("/api/v1/tweets", json={"content": "root"}).json()
+    comment = bob.post(
+        f"/api/v1/tweets/{tweet['id']}/comments",
+        json={"content": "a comment"},
+    ).json()
+    alice.post(f"/api/v1/comments/{comment['id']}/likes/toggle")
+    alice.post(
+        f"/api/v1/comments/{comment['id']}/comments",
+        json={"content": "a reply"},
+    )
+    alice.post("/api/v1/tweets/views", json={"ids": [comment["id"]]})
+
+    response = alice.get(f"/api/v1/comments/{comment['id']}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == comment["id"]
+    assert body["tweet_id"] == tweet["id"]
+    assert body["parent_comment_id"] is None
+    assert body["content"] == "a comment"
+    assert body["author"]["username"] == "bob"
+    assert body["like_count"] == 1
+    assert body["liked_by_me"] is True
+    assert body["comment_count"] == 1
+    assert body["view_count"] == 1
+
+    # A top-level tweet is not a comment.
+    assert alice.get(f"/api/v1/comments/{tweet['id']}").status_code == 404
+    assert alice.get("/api/v1/comments/999999").status_code == 404
+
+
+def test_get_comment_detail_hides_blocked_and_invisible_threads() -> None:
+    alice = TestClient(app)
+    bob = TestClient(app)
+    carol = TestClient(app)
+    alice.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "email": "alice@example.com", "password": "password123"},
+    )
+    bob_id = bob.post(
+        "/api/v1/auth/register",
+        json={"username": "bob", "email": "bob@example.com", "password": "password123"},
+    ).json()["id"]
+    carol.post(
+        "/api/v1/auth/register",
+        json={"username": "carol", "email": "carol@example.com", "password": "password123"},
+    )
+
+    # A block in either direction hides the comment as 404, not 403.
+    tweet = alice.post("/api/v1/tweets", json={"content": "public root"}).json()
+    comment = bob.post(
+        f"/api/v1/tweets/{tweet['id']}/comments",
+        json={"content": "from bob"},
+    ).json()
+    carol.post(f"/api/v1/blocks/{bob_id}")
+    assert carol.get(f"/api/v1/comments/{comment['id']}").status_code == 404
+    assert alice.get(f"/api/v1/comments/{comment['id']}").status_code == 200
+
+    # A reply in a private thread is only visible to the thread's author.
+    private_tweet = alice.post(
+        "/api/v1/tweets", json={"content": "just mine", "visibility": "private"}
+    ).json()
+    private_comment = alice.post(
+        f"/api/v1/tweets/{private_tweet['id']}/comments",
+        json={"content": "note to self"},
+    ).json()
+    assert alice.get(f"/api/v1/comments/{private_comment['id']}").status_code == 200
+    assert carol.get(f"/api/v1/comments/{private_comment['id']}").status_code == 404

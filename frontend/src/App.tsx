@@ -37,6 +37,7 @@ import {
   displayName,
   editTweet,
   followUser,
+  getComment,
   getCommentStats,
   getCurrentUser,
   getTimeline,
@@ -230,6 +231,7 @@ function App() {
           }
         />
         <Route path="/tweet/:tweetId" element={<TweetDetailRoute />} />
+        <Route path="/comment/:commentId" element={<CommentDetailRoute />} />
         <Route
           path="/:username"
           element={<ProfileView currentUser={currentUser} onCurrentUserChange={setCurrentUser} />}
@@ -836,11 +838,7 @@ function SearchPostsPanel({
             <SearchReplyCard
               key={post.id}
               post={post}
-              onOpen={() =>
-                navigate(`/tweet/${post.thread_id}`, {
-                  state: { scrollToPostId: post.id },
-                })
-              }
+              onOpen={() => navigate(`/comment/${post.id}`)}
             />
           ) : (
             <TweetCard
@@ -1463,6 +1461,184 @@ function TweetDetailRoute() {
   );
 }
 
+function CommentDetailRoute() {
+  const { commentId } = useParams();
+  const navigate = useNavigate();
+  const { currentUser } = useOutletContext<LayoutContext>();
+  const numericCommentId = Number(commentId);
+  const [comment, setComment] = useState<Comment | null>(null);
+  const [thread, setThread] = useState<Comment[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadingReplies, setLoadingReplies] = useState(true);
+
+  // React 18+ mounts effects twice in StrictMode; without this guard a single
+  // detail open would record two views in dev.
+  const viewRecordedFor = useRef<number | null>(null);
+
+  // The replies API is thread-scoped, so load the focal comment's whole
+  // thread and pick out its subtree below.
+  const loadThread = useCallback(async (tweetId: number) => {
+    setLoadingReplies(true);
+    try {
+      setThread(await listComments(tweetId));
+    } catch {
+      // Replies are secondary; the focal comment is already on screen.
+    } finally {
+      setLoadingReplies(false);
+    }
+  }, []);
+
+  const reload = useCallback(async () => {
+    try {
+      const loaded = await getComment(numericCommentId);
+      setComment(loaded);
+      await loadThread(loaded.tweet_id);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }, [numericCommentId, loadThread]);
+
+  useEffect(() => {
+    if (!Number.isInteger(numericCommentId) || numericCommentId <= 0) {
+      setError("Comment not found.");
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    const alreadyRecorded = viewRecordedFor.current === numericCommentId;
+    viewRecordedFor.current = numericCommentId;
+    // Record the detail expand first so the count we fetch includes it.
+    (alreadyRecorded ? Promise.resolve() : recordPostViews([numericCommentId]))
+      .then(() => getComment(numericCommentId))
+      .then((loaded) => {
+        if (cancelled) return;
+        setComment(loaded);
+        void loadThread(loaded.tweet_id);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(getErrorMessage(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericCommentId, loadThread]);
+
+  // The focal comment's subtree, with depth relative to it. The thread arrives
+  // in pre-order, so a reply's parent is always seen before the reply.
+  const replies = useMemo(() => {
+    const depths = new Map<number, number>();
+    const subtree: { item: Comment; depth: number }[] = [];
+    for (const item of thread) {
+      if (item.parent_comment_id === numericCommentId) {
+        depths.set(item.id, 0);
+        subtree.push({ item, depth: 0 });
+      } else if (
+        item.parent_comment_id != null &&
+        depths.has(item.parent_comment_id)
+      ) {
+        const depth = (depths.get(item.parent_comment_id) ?? 0) + 1;
+        depths.set(item.id, depth);
+        subtree.push({ item, depth });
+      }
+    }
+    return subtree;
+  }, [thread, numericCommentId]);
+
+  const statsIdsKey = useMemo(() => {
+    if (!comment) return "";
+    return [comment.id, ...replies.map(({ item }) => item.id)].join(",");
+  }, [comment, replies]);
+
+  useEffect(() => {
+    if (!statsIdsKey) {
+      return;
+    }
+    const idsToSync = statsIdsKey.split(",").map(Number);
+    let cancelled = false;
+
+    async function syncStats() {
+      try {
+        const stats = await getCommentStats(idsToSync);
+        if (cancelled) {
+          return;
+        }
+        setComment((current) =>
+          current ? mergeCommentStats([current], stats)[0] : current,
+        );
+        setThread((current) => mergeCommentStats(current, stats));
+      } catch {
+        // background sync; ignore failures
+      }
+    }
+
+    const timer = window.setInterval(() => void syncStats(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [statsIdsKey]);
+
+  if (loading) {
+    return (
+      <div className="loading-row">
+        <Loader2 className="spin" size={18} aria-hidden="true" />
+        <span>Loading</span>
+      </div>
+    );
+  }
+  if (error || !comment) {
+    return <div className="status-panel error">{error || "Comment not found."}</div>;
+  }
+  return (
+    <section className="tweet-detail" aria-labelledby="comment-detail-title">
+      <div className="detail-toolbar">
+        <button className="icon-button" onClick={() => navigate(-1)} aria-label="Back">
+          <ArrowLeft size={20} aria-hidden="true" />
+        </button>
+        <h2 id="comment-detail-title">Comment</h2>
+      </div>
+      <Link
+        className="thread-context-link"
+        to={`/tweet/${comment.tweet_id}`}
+        state={{ scrollToPostId: comment.id }}
+      >
+        View in full thread
+      </Link>
+      <CommentCard
+        comment={comment}
+        currentUserId={currentUser.id}
+        onChanged={() => void reload()}
+        onReplyCreated={() => void reload()}
+      />
+      <section className="comment-list" aria-label="Replies">
+        {loadingReplies ? (
+          <div className="loading-row">
+            <Loader2 className="spin" size={18} aria-hidden="true" />
+            <span>Loading replies</span>
+          </div>
+        ) : null}
+        {replies.map(({ item, depth }) => (
+          <CommentCard
+            key={item.id}
+            comment={item}
+            depth={depth}
+            currentUserId={currentUser.id}
+            onChanged={() => void reload()}
+            onReplyCreated={() => void reload()}
+            onOpen={() => navigate(`/comment/${item.id}`)}
+          />
+        ))}
+      </section>
+    </section>
+  );
+}
+
 function ThemeToggle({
   theme,
   onToggleTheme,
@@ -1574,6 +1750,7 @@ function TweetDetail({
   currentUserId: number;
   onDeleted: () => void;
 }) {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editVisibility, setEditVisibility] = useState<TweetVisibility>(tweet.visibility);
@@ -1856,6 +2033,7 @@ function TweetDetail({
             onReplyCreated={() => {
               onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
             }}
+            onOpen={() => navigate(`/comment/${item.id}`)}
           />
         ))}
       </section>

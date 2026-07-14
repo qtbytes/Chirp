@@ -2,7 +2,13 @@ from app.api.deps import get_current_user_id
 from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.models.post import Post
-from app.repositories import engagement_repository, post_repository
+from app.repositories import (
+    block_repository,
+    engagement_repository,
+    post_repository,
+    tweet_repository,
+)
+from app.repositories.visibility import can_view_thread
 from app.schemas.comment import CommentCreate, CommentOut, CommentStatsOut
 from app.schemas.user import UserSummary
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -44,6 +50,60 @@ def list_comment_stats(
             current_user_id=current_user_id,
         )
     ]
+
+
+@router.get("/{comment_id}", response_model=CommentOut)
+def get_comment(
+    comment_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> CommentOut:
+    """Load one comment with stats -- backs the comment detail page."""
+    comment = tweet_repository.get_tweet(db, comment_id)
+    if comment is None or comment.reply_to_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="comment not found",
+        )
+
+    # Same non-disclosure rules as GET /tweets/{id}: a block in either
+    # direction and a thread audience the viewer can't see both read as 404.
+    if block_repository.blocks_between(db, current_user_id, comment.author.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="comment not found",
+        )
+    if not can_view_thread(db, current_user_id, comment):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="comment not found",
+        )
+
+    stats_rows = engagement_repository.list_comment_stats(
+        db, comment_ids=[comment_id], current_user_id=current_user_id
+    )
+    stats = stats_rows[0] if stats_rows else {
+        "like_count": 0,
+        "comment_count": 0,
+        "retweet_count": 0,
+        "view_count": 0,
+        "liked_by_me": False,
+    }
+    return CommentOut(
+        id=comment.id,
+        tweet_id=comment.tweet_id,
+        parent_comment_id=comment.parent_comment_id,
+        content=comment.content,
+        media_urls=comment.media_urls or [],
+        created_at=comment.created_at,
+        edited_at=comment.edited_at,
+        author=UserSummary.model_validate(comment.author),
+        like_count=stats["like_count"],
+        comment_count=stats["comment_count"],
+        retweet_count=stats["retweet_count"],
+        view_count=stats["view_count"],
+        liked_by_me=stats["liked_by_me"],
+    )
 
 
 @router.post(
