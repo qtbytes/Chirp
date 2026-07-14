@@ -1613,6 +1613,13 @@ button.rail-link:disabled:hover {
   color: var(--muted);
 }
 
+.trend-empty {
+  margin: 0;
+  padding: 10px 16px 14px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
 .search-box {
   display: grid;
   grid-template-columns: 18px 1fr;

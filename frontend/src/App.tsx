@@ -2159,12 +2159,6 @@ function TrendingPanel() {
     };
   }, []);
 
-  // Nothing to show yet (fresh install, or the fetch failed): hide the panel
-  // rather than render an empty heading.
-  if (!loading && trends.length === 0) {
-    return null;
-  }
-
   return (
     <section className="discovery-panel trending-panel" aria-labelledby="trending-title">
       <h2 id="trending-title">Trending</h2>
@@ -2172,6 +2166,8 @@ function TrendingPanel() {
         <div className="loading-row small">
           <Loader2 className="spin" size={16} aria-hidden="true" />
         </div>
+      ) : trends.length === 0 ? (
+        <p className="trend-empty">Nothing trending yet.</p>
       ) : (
         <ul className="trend-list">
           {trends.map((trend) => (
