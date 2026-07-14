@@ -1529,17 +1529,31 @@ export function TweetCard({
     }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onOpen();
+      openDetail();
     }
   }
 
-  // Twitter-style views: any click on the post -- hashtags, links, avatar,
-  // username, expansion, reply/repost/like -- counts as an engagement and
-  // bumps the view count again.
-  function recordEngagement() {
+  // Clicks inside the post -- hashtags, links, avatar, username,
+  // reply/repost/like -- count as engagements and bump the view count. A
+  // plain click that bubbles up to the card and opens the detail page is not
+  // counted here: the detail page records that view itself. The capture
+  // handler fires before we know whether an inner element stops propagation,
+  // so the post is deferred a tick and cancelled when the detail opens.
+  const pendingEngagement = useRef(false);
+  function queueEngagement() {
     if (editing) return;
-    void recordPostViews([tweet.id]);
-    onTweetPatch(tweet.id, { view_count: tweet.view_count + 1 });
+    pendingEngagement.current = true;
+    window.setTimeout(() => {
+      if (!pendingEngagement.current) return;
+      pendingEngagement.current = false;
+      void recordPostViews([tweet.id]);
+      onTweetPatch(tweet.id, { view_count: tweet.view_count + 1 });
+    }, 0);
+  }
+
+  function openDetail() {
+    pendingEngagement.current = false;
+    onOpen();
   }
 
   return (
@@ -1547,7 +1561,7 @@ export function TweetCard({
       className="tweet-card clickable"
       role="button"
       tabIndex={0}
-      onClick={onOpen}
+      onClick={openDetail}
       onKeyDown={handleKeyDown}
       aria-label={`Open tweet by ${tweet.author.username}`}
     >
@@ -1556,7 +1570,7 @@ export function TweetCard({
         className="author-link"
         onClick={(event) => {
           event.stopPropagation();
-          recordEngagement();
+          queueEngagement();
         }}
         aria-label={`View profile of ${tweet.author.username}`}
       >
@@ -1575,7 +1589,7 @@ export function TweetCard({
           onReport={() => setReporting(true)}
         />
       )}
-      <div className="tweet-body" onClickCapture={recordEngagement}>
+      <div className="tweet-body" onClickCapture={queueEngagement}>
         <header>
           <Link
             to={`/${encodeURIComponent(tweet.author.username)}`}
@@ -1823,16 +1837,31 @@ export function CommentCard({
     if (!onOpen || event.target !== event.currentTarget) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onOpen();
+      openThread();
     }
   }
 
-  // Twitter-style views: any click on the comment counts as an engagement
-  // and bumps the view count again.
-  function recordEngagement() {
+  // Clicks inside the comment count as engagements and bump the view count.
+  // A plain click that bubbles up and opens the thread is not counted here:
+  // the detail page records that view. The capture handler fires before we
+  // know whether an inner element stops propagation, so the post is deferred
+  // a tick and cancelled when the thread opens.
+  const pendingEngagement = useRef(false);
+  function queueEngagement() {
     if (editing) return;
-    void recordPostViews([localComment.id]);
-    setLocalComment((value) => ({ ...value, view_count: value.view_count + 1 }));
+    pendingEngagement.current = true;
+    window.setTimeout(() => {
+      if (!pendingEngagement.current) return;
+      pendingEngagement.current = false;
+      void recordPostViews([localComment.id]);
+      setLocalComment((value) => ({ ...value, view_count: value.view_count + 1 }));
+    }, 0);
+  }
+
+  function openThread() {
+    if (!onOpen) return;
+    pendingEngagement.current = false;
+    onOpen();
   }
 
   return (
@@ -1842,7 +1871,7 @@ export function CommentCard({
       style={depth > 0 ? { paddingLeft: 18 + Math.min(depth, 8) * 22 } : undefined}
       role={onOpen ? "button" : undefined}
       tabIndex={onOpen ? 0 : undefined}
-      onClick={onOpen}
+      onClick={onOpen ? openThread : undefined}
       onKeyDown={onOpen ? handleKeyDown : undefined}
     >
       <Link
@@ -1850,7 +1879,7 @@ export function CommentCard({
         className="author-link"
         onClick={(event) => {
           event.stopPropagation();
-          recordEngagement();
+          queueEngagement();
         }}
         aria-label={`View profile of ${localComment.author.username}`}
       >
@@ -1869,7 +1898,7 @@ export function CommentCard({
           onReport={() => setReporting(true)}
         />
       )}
-      <div className="comment-body" onClickCapture={recordEngagement}>
+      <div className="comment-body" onClickCapture={queueEngagement}>
         <header>
           <Link
             to={`/${encodeURIComponent(localComment.author.username)}`}
