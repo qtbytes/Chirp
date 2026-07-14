@@ -4,7 +4,8 @@
 The home timeline is chronological. "For you" is *ranked*: a post's score is its
 engagement, decayed by age, lifted by the viewer's affinity for the author.
 
-    score = (base + w_like·likes + w_rt·retweets + w_cmt·comments)   # engagement
+    score = (base + w_like·likes + w_rt·retweets + w_cmt·comments
+                  + w_view·views)                                    # engagement
             * 0.5 ** (age / half_life)                               # time decay
             * (1 + follow_boost·follows                              # affinity
                  + like_affinity · min(likes_on_author, cap))
@@ -39,6 +40,7 @@ class RankingWeights:
     like: float
     retweet: float
     comment: float
+    view: float
     half_life_seconds: float
     follow_boost: float
     like_affinity: float
@@ -51,6 +53,7 @@ def weights_from_settings() -> RankingWeights:
         like=settings.ranking_like_weight,
         retweet=settings.ranking_retweet_weight,
         comment=settings.ranking_comment_weight,
+        view=settings.ranking_view_weight,
         half_life_seconds=settings.ranking_half_life_hours * 3600.0,
         follow_boost=settings.ranking_follow_boost,
         like_affinity=settings.ranking_like_affinity_weight,
@@ -63,6 +66,7 @@ def score_tweet(
     like_count: int,
     retweet_count: int,
     comment_count: int,
+    view_count: int,
     age_seconds: float,
     follows_author: bool,
     viewer_likes_on_author: int,
@@ -74,6 +78,7 @@ def score_tweet(
         + weights.like * like_count
         + weights.retweet * retweet_count
         + weights.comment * comment_count
+        + weights.view * view_count
     )
 
     # Exponential decay: the engagement term halves every half-life. A negative

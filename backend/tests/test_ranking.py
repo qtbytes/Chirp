@@ -22,6 +22,7 @@ W = RankingWeights(
     like=3.0,
     retweet=4.0,
     comment=5.0,
+    view=0.5,
     half_life_seconds=3600.0,
     follow_boost=1.5,
     like_affinity=0.1,
@@ -34,6 +35,7 @@ def score(**overrides) -> float:
         like_count=0,
         retweet_count=0,
         comment_count=0,
+        view_count=0,
         age_seconds=0.0,
         follows_author=False,
         viewer_likes_on_author=0,
@@ -47,6 +49,12 @@ def test_engagement_raises_the_score_by_its_weights() -> None:
     assert score(like_count=1) > score()
     # comment is weighted heavier than like, which is heavier than nothing.
     assert score(comment_count=1) > score(like_count=1) > score()
+
+
+def test_views_raise_the_score_but_weigh_less_than_likes() -> None:
+    assert score(view_count=1) > score()
+    # A view is the weakest signal: one like outranks one view.
+    assert score(like_count=1) > score(view_count=1)
 
 
 def test_engagement_halves_at_one_half_life() -> None:
@@ -83,6 +91,7 @@ def test_a_future_timestamp_is_clamped_not_amplified() -> None:
 def test_weights_come_from_settings() -> None:
     weights = weights_from_settings()
     assert weights.like == settings.ranking_like_weight
+    assert weights.view == settings.ranking_view_weight
     assert weights.half_life_seconds == settings.ranking_half_life_hours * 3600.0
     assert weights.like_affinity_cap == settings.ranking_like_affinity_cap
 
@@ -156,6 +165,28 @@ def test_for_you_surfaces_an_old_but_engaged_post_over_a_fresh_empty_one() -> No
     assert order.index(loved["id"]) < order.index(fresh["id"]), (
         "decayed engagement should still beat a fresh post nobody touched"
     )
+
+
+def test_for_you_lifts_a_viewed_post_over_an_untouched_one() -> None:
+    viewer, bob, carol, dave = (
+        TestClient(app),
+        TestClient(app),
+        TestClient(app),
+        TestClient(app),
+    )
+    register(viewer, "viewer")  # follows nobody, likes nobody: affinity is neutral
+    register(bob, "bob")
+    register(carol, "carol")
+    register(dave, "dave")
+
+    # The viewed post is *older*, so recency alone would rank it second; the
+    # views are the only signal that can put it first.
+    viewed = bob.post("/api/v1/tweets", json={"content": "people looked at this"}).json()
+    untouched = carol.post("/api/v1/tweets", json={"content": "nobody has seen this"}).json()
+    dave.post("/api/v1/tweets/views", json={"ids": [viewed["id"]]})
+
+    order = _for_you_ids(viewer)
+    assert order.index(viewed["id"]) < order.index(untouched["id"])
 
 
 def test_for_you_paginates_a_stable_ranked_order() -> None:

@@ -412,7 +412,7 @@ def fetch_for_you_candidates(
     carries, for the viewer:
 
     - ``like_count`` / ``comment_count`` / ``retweet_count`` -- the post's
-      engagement,
+      engagement (``view_count`` rides on the Post row itself),
     - ``follows_author`` -- whether the viewer follows the author,
     - ``viewer_like_affinity`` -- how many of that author's posts the viewer has
       liked (an affinity signal, capped later by the scorer).

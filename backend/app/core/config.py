@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     ranking_like_weight: float = 3.0
     ranking_retweet_weight: float = 4.0
     ranking_comment_weight: float = 5.0
+    # Views are the weakest engagement signal -- a click, not an explicit
+    # endorsement -- so they carry a fraction of a like's weight. They are
+    # deduplicated per user (see record_views), so this roughly counts
+    # distinct engaged viewers rather than raw impressions.
+    ranking_view_weight: float = 0.5
     # Engagement halves every this-many hours of age. Shorter = more like a
     # chronological feed; longer = engagement outweighs recency for longer.
     ranking_half_life_hours: float = 18.0

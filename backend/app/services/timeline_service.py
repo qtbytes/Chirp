@@ -219,6 +219,7 @@ class TimelineService:
                 like_count=candidate["like_count"],
                 retweet_count=candidate["retweet_count"],
                 comment_count=candidate["comment_count"],
+                view_count=post.view_count,
                 age_seconds=age_seconds,
                 follows_author=candidate["follows_author"],
                 viewer_likes_on_author=candidate["viewer_like_affinity"],
