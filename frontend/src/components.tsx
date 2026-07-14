@@ -1540,10 +1540,11 @@ export function TweetCard({
   // handler fires before we know whether an inner element stops propagation,
   // so the post is deferred a tick and cancelled when the detail opens.
   //
-  // A user's view counts once per post (the server collapses repeats, like
-  // notifications collapse re-likes), so only the first engagement this card
-  // sees reports and optimistically bumps -- hammering like/unlike does not
-  // pump the counter.
+  // The server collapses a user's repeat views inside a recent window, so
+  // only the first engagement this card sees reports a view. The counter
+  // shows the count the server persisted -- an optimistic +1 would lie
+  // whenever this user had recently viewed the post, reverting on the next
+  // refresh.
   const pendingEngagement = useRef(false);
   const viewRecorded = useRef(false);
   function queueEngagement() {
@@ -1553,8 +1554,12 @@ export function TweetCard({
       if (!pendingEngagement.current) return;
       pendingEngagement.current = false;
       viewRecorded.current = true;
-      void recordPostViews([tweet.id]);
-      onTweetPatch(tweet.id, { view_count: tweet.view_count + 1 });
+      void recordPostViews([tweet.id]).then((counts) => {
+        const updated = counts.find((item) => item.id === tweet.id);
+        if (updated) {
+          onTweetPatch(tweet.id, { view_count: updated.view_count });
+        }
+      });
     }, 0);
   }
 
@@ -1857,10 +1862,11 @@ export function CommentCard({
   // know whether an inner element stops propagation, so the post is deferred
   // a tick and cancelled when the thread opens.
   //
-  // A user's view counts once per post (the server collapses repeats, like
-  // notifications collapse re-likes), so only the first engagement this card
-  // sees reports and optimistically bumps -- hammering like/unlike does not
-  // pump the counter.
+  // The server collapses a user's repeat views inside a recent window, so
+  // only the first engagement this card sees reports a view. The counter
+  // shows the count the server persisted -- an optimistic +1 would lie
+  // whenever this user had recently viewed the comment, reverting on the
+  // next refresh.
   const pendingEngagement = useRef(false);
   const viewRecorded = useRef(false);
   function queueEngagement() {
@@ -1870,8 +1876,12 @@ export function CommentCard({
       if (!pendingEngagement.current) return;
       pendingEngagement.current = false;
       viewRecorded.current = true;
-      void recordPostViews([localComment.id]);
-      setLocalComment((value) => ({ ...value, view_count: value.view_count + 1 }));
+      void recordPostViews([localComment.id]).then((counts) => {
+        const updated = counts.find((item) => item.id === localComment.id);
+        if (updated) {
+          setLocalComment((value) => ({ ...value, view_count: updated.view_count }));
+        }
+      });
     }, 0);
   }
 

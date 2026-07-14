@@ -317,30 +317,52 @@ def test_comment_stats_endpoint_returns_counts_and_current_user_state() -> None:
     ]
 
 
-def test_record_views_counts_each_user_once() -> None:
-    """Repeat views by the same user are collapsed -- like re-like
-    notifications -- so hammering an engagement can't inflate the count."""
+def test_record_views_collapses_repeats_but_counts_revisits() -> None:
+    """Rapid repeat views by the same user are collapsed -- click-spamming an
+    engagement can't inflate the count -- but a view older than the dedup
+    window doesn't suppress a fresh one."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import update as sa_update
+
+    from app.models.post_view import PostView
+
     alice = TestClient(app)
     bob = TestClient(app)
     alice.post(
         "/api/v1/auth/register",
         json={"username": "alice", "email": "alice@example.com", "password": "password123"},
     )
-    bob.post(
+    bob_id = bob.post(
         "/api/v1/auth/register",
         json={"username": "bob", "email": "bob@example.com", "password": "password123"},
-    )
+    ).json()["id"]
     tweet = alice.post("/api/v1/tweets", json={"content": "views"}).json()
 
+    # Every call returns the persisted count; repeats don't move it.
     for _ in range(3):
         response = bob.post("/api/v1/tweets/views", json={"ids": [tweet["id"]]})
-        assert response.status_code == 204
+        assert response.status_code == 200
+        assert response.json() == [{"id": tweet["id"], "view_count": 1}]
     # Unknown ids are ignored; the author's own view counts too, once.
-    alice.post("/api/v1/tweets/views", json={"ids": [tweet["id"], 999999]})
-    alice.post("/api/v1/tweets/views", json={"ids": [tweet["id"]]})
+    first = alice.post("/api/v1/tweets/views", json={"ids": [tweet["id"], 999999]})
+    assert first.json() == [{"id": tweet["id"], "view_count": 2}]
+    repeat = alice.post("/api/v1/tweets/views", json={"ids": [tweet["id"]]})
+    assert repeat.json() == [{"id": tweet["id"], "view_count": 2}]
+
+    # Age bob's view out of the dedup window; his next view counts again.
+    with TestingSessionLocal() as db:
+        db.execute(
+            sa_update(PostView)
+            .where(PostView.user_id == bob_id, PostView.post_id == tweet["id"])
+            .values(created_at=datetime.now(timezone.utc) - timedelta(hours=1))
+        )
+        db.commit()
+    revisit = bob.post("/api/v1/tweets/views", json={"ids": [tweet["id"]]})
+    assert revisit.json() == [{"id": tweet["id"], "view_count": 3}]
 
     stats = alice.get(f"/api/v1/tweets/stats?ids={tweet['id']}").json()
-    assert stats[0]["view_count"] == 2
+    assert stats[0]["view_count"] == 3
 
 
 def test_thread_comments_are_nested_in_preorder() -> None:

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -23,6 +23,10 @@ from app.services.serializers import serialize_quoted_post
 from app.services.timeline_service import TimelineService, enqueue_feed_fanout_job
 
 router = APIRouter(prefix="/tweets", tags=["tweets"])
+
+# A user's repeat views of the same post inside this window are collapsed into
+# one; after it passes, viewing the post again counts as a fresh view.
+VIEW_DEDUP_WINDOW = timedelta(minutes=30)
 
 
 @router.get("/stats", response_model=list[TweetStatsOut])
@@ -64,53 +68,72 @@ class _RecordViewsRequest(BaseModel):
     ids: list[int]
 
 
-@router.post("/views", status_code=status.HTTP_204_NO_CONTENT)
+class PostViewCountOut(BaseModel):
+    id: int
+    view_count: int
+
+
+@router.post("/views", response_model=list[PostViewCountOut])
 def record_views(
     payload: _RecordViewsRequest,
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
-) -> None:
-    """Record one view per post.
+) -> list[PostViewCountOut]:
+    """Record one view per post and return the authoritative counts.
 
     Views count engagements only (detail opens, clicks) -- the frontend does
-    not report feed/list renders. Repeats are collapsed per user, the same way
-    notifications collapse re-likes: the first engagement writes a post_views
-    row, and any later report for a (user, post) pair that already has one is
-    ignored -- so hammering the like button doesn't inflate the count.
+    not report feed/list renders. Repeats by the same user are collapsed
+    inside VIEW_DEDUP_WINDOW: the first engagement writes a post_views row,
+    and further reports for that (user, post) pair are ignored while a row
+    that recent exists -- so hammering the like button can't inflate the
+    count, but coming back to the post later counts as a fresh view,
+    Twitter-style.
+
+    The response carries the resulting view_count for every requested post
+    that exists, so the client can display the persisted value instead of an
+    optimistic guess (which would be wrong whenever the view was a repeat).
     """
     if not payload.ids:
-        return
+        return []
     requested = list({pid for pid in payload.ids if pid > 0})[:100]
     if not requested:
-        return
+        return []
     post_ids = db.scalars(select(Post.id).where(Post.id.in_(requested))).all()
     if not post_ids:
-        return
+        return []
+    window_start = datetime.now(timezone.utc) - VIEW_DEDUP_WINDOW
     already_viewed = set(
         db.scalars(
             select(PostView.post_id).where(
                 PostView.user_id == current_user_id,
                 PostView.post_id.in_(post_ids),
+                PostView.created_at >= window_start,
             )
         )
     )
     new_ids = [pid for pid in post_ids if pid not in already_viewed]
-    if not new_ids:
-        return
-    now = datetime.now(timezone.utc)
-    db.execute(
-        insert(PostView),
-        [
-            {"user_id": current_user_id, "post_id": pid, "created_at": now}
-            for pid in new_ids
-        ],
-    )
-    db.execute(
-        update(Post)
-        .where(Post.id.in_(new_ids))
-        .values(view_count=Post.view_count + 1)
-    )
-    db.commit()
+    if new_ids:
+        now = datetime.now(timezone.utc)
+        db.execute(
+            insert(PostView),
+            [
+                {"user_id": current_user_id, "post_id": pid, "created_at": now}
+                for pid in new_ids
+            ],
+        )
+        db.execute(
+            update(Post)
+            .where(Post.id.in_(new_ids))
+            .values(view_count=Post.view_count + 1)
+        )
+        db.commit()
+    rows = db.execute(
+        select(Post.id, Post.view_count).where(Post.id.in_(post_ids))
+    ).all()
+    return [
+        PostViewCountOut(id=post_id, view_count=view_count)
+        for post_id, view_count in rows
+    ]
 
 
 @router.post(

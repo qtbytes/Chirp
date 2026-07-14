@@ -475,19 +475,24 @@ export function getTweet(tweetId: number): Promise<Tweet> {
   return request<Tweet>(`/tweets/${tweetId}`);
 }
 
+export type PostViewCount = { id: number; view_count: number };
+
 /**
  * Fire-and-forget view tracking. Views count only on engagement -- opening a
  * detail page or clicking a post -- never on feed/list renders. The server
- * collapses repeats per user, so re-reporting an id is harmless and counts
- * once. Failures are swallowed -- losing a view must never break the UI.
+ * collapses a user's repeats inside a recent window, so re-reporting an id is
+ * harmless: spam can't inflate the count, while a later revisit counts again.
+ * It returns the persisted view_count per post; callers should render that
+ * instead of an optimistic +1, which is wrong for a collapsed repeat.
+ * Failures resolve to an empty list -- losing a view must never break the UI.
  */
-export function recordPostViews(ids: number[]): Promise<void> {
+export function recordPostViews(ids: number[]): Promise<PostViewCount[]> {
   const postIds = [...new Set(ids.filter((id) => id > 0))];
-  if (postIds.length === 0) return Promise.resolve();
-  return request<void>("/tweets/views", {
+  if (postIds.length === 0) return Promise.resolve([]);
+  return request<PostViewCount[]>("/tweets/views", {
     method: "POST",
     body: JSON.stringify({ ids: postIds }),
-  }).catch(() => undefined);
+  }).catch(() => []);
 }
 
 /**

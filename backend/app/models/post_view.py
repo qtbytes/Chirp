@@ -11,8 +11,9 @@ def utcnow() -> datetime:
 
 
 class PostView(Base):
-    """One row per (user, post) view. Repeat views by the same user are
-    collapsed at write time (see record_views), so a user counts once."""
+    """One row per counted (user, post) view. Repeat views by the same user
+    are collapsed at write time inside a recent window (see record_views), so
+    click-spamming can't inflate the count but a later revisit counts again."""
 
     __tablename__ = "post_views"
 
