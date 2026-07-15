@@ -342,6 +342,29 @@ button.rail-link:disabled:hover {
   background: none;
 }
 
+/* Twitter-style "Post" pill under the nav: a full-width label on wide rails,
+   collapsing to an icon-only circle when the rail narrows. */
+.rail-post-button {
+  border: 0;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.rail-post-button:hover {
+  background: var(--accent-strong);
+}
+
+.rail-post-button .rail-post-icon {
+  display: none;
+}
+
 .app-shell--no-discovery {
   grid-template-columns: minmax(76px, 280px) minmax(0, 640px);
 }
@@ -1116,6 +1139,26 @@ button.rail-link:disabled:hover {
   overflow: hidden;
 }
 
+/* Compose modal: the rail's "Post" button reuses the home composer inside a
+   dialog card, so the composer's feed-divider border has to go. */
+.compose-modal {
+  background: var(--panel);
+  border-radius: 16px;
+  width: min(600px, calc(100vw - 32px));
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.compose-modal-head {
+  display: flex;
+  padding: 8px 10px;
+}
+
+.compose-modal .composer {
+  border-bottom: 0;
+  padding-top: 4px;
+}
+
 /* Quote composer modal */
 .quote-composer {
   background: var(--panel);
@@ -1848,6 +1891,20 @@ button.rail-link:disabled:hover {
     display: none;
   }
 
+  .rail-post-button {
+    width: 48px;
+    align-self: center;
+    padding: 0;
+  }
+
+  .rail-post-button .rail-post-label {
+    display: none;
+  }
+
+  .rail-post-button .rail-post-icon {
+    display: block;
+  }
+
   .rail-user {
     flex-direction: column;
     gap: 8px;
@@ -1895,7 +1952,9 @@ button.rail-link:disabled:hover {
 
   .rail-brand,
   .rail-user,
-  .rail-link.muted {
+  .rail-link.muted,
+  /* The bottom bar has no room for a post pill; Home's inline composer covers it. */
+  .rail-post-button {
     display: none;
   }
 

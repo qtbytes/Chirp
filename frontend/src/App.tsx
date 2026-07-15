@@ -374,6 +374,7 @@ function AppLayout({
 }) {
   const [refreshToken, setRefreshToken] = useState(0);
   const [unread, setUnread] = useState(0);
+  const [composing, setComposing] = useState(false);
   const location = useLocation();
   const isSearchRoute = location.pathname === "/search";
   const isNotificationsRoute = location.pathname === "/notifications";
@@ -458,6 +459,10 @@ function AppLayout({
             <span>Settings</span>
           </Link>
         </nav>
+        <button className="rail-post-button" onClick={() => setComposing(true)}>
+          <Feather className="rail-post-icon" size={20} aria-hidden="true" />
+          <span className="rail-post-label">Post</span>
+        </button>
         <div className="rail-user">
           <Link
             to={`/${encodeURIComponent(currentUser.username)}`}
@@ -491,6 +496,43 @@ function AppLayout({
           <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideSearch />
         </aside>
       )}
+
+      {composing ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setComposing(false)}
+        >
+          <div
+            className="compose-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Compose post"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="compose-modal-head">
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setComposing(false)}
+                aria-label="Close"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </div>
+            <Composer
+              currentUser={currentUser}
+              autoFocus
+              onPosted={() => {
+                setComposing(false);
+                // Bump the shared refresh token so an open timeline picks the
+                // new post up (the modal has no feed of its own to insert into).
+                onDiscoveryChanged();
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1691,9 +1733,11 @@ function ThemeToggle({
 function Composer({
   currentUser,
   onPosted,
+  autoFocus = false,
 }: {
   currentUser: UserSummary;
   onPosted: (tweet: Tweet) => void;
+  autoFocus?: boolean;
 }) {
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
@@ -1735,6 +1779,7 @@ function Composer({
           maxLength={280}
           placeholder="What is happening?"
           aria-label="Tweet content"
+          autoFocus={autoFocus}
         />
         <MediaPreview attachment={media} />
         {error ? <p className="form-error">{error}</p> : null}
