@@ -1783,19 +1783,21 @@ function Composer({
         />
         <MediaPreview attachment={media} />
         {error ? <p className="form-error">{error}</p> : null}
-        <div className="composer-visibility">
-          <VisibilityPicker value={visibility} onChange={setVisibility} disabled={posting} />
+      </div>
+      {/* Direct grid children so the modal can stretch these rows across the
+          avatar column too, the way Twitter's compose dialog does. */}
+      <div className="composer-visibility">
+        <VisibilityPicker value={visibility} onChange={setVisibility} disabled={posting} />
+      </div>
+      <div className="composer-actions">
+        <div className="composer-tools">
+          <EmojiPicker onSelect={insertEmoji} />
+          <MediaButton attachment={media} />
         </div>
-        <div className="composer-actions">
-          <div className="composer-tools">
-            <EmojiPicker onSelect={insertEmoji} />
-            <MediaButton attachment={media} />
-          </div>
-          <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
-          <button className="primary-button compact" disabled={posting || media.uploading || !canPost}>
-            {posting ? "Posting..." : "Post"}
-          </button>
-        </div>
+        <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
+        <button className="primary-button compact" disabled={posting || media.uploading || !canPost}>
+          {posting ? "Posting..." : "Post"}
+        </button>
       </div>
     </form>
   );

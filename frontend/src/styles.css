@@ -608,6 +608,18 @@ button.rail-link:disabled:hover {
   min-width: 0;
 }
 
+/* Twitter keeps the text area on the card's own background. */
+.composer textarea {
+  background: transparent;
+}
+
+/* The audience row and toolbar run the composer's full width, under the
+   avatar column too. */
+.composer-visibility,
+.composer-actions {
+  grid-column: 1 / -1;
+}
+
 .composer-actions {
   display: flex;
   align-items: center;
@@ -1146,7 +1158,8 @@ button.rail-link:disabled:hover {
   border-radius: 16px;
   width: min(600px, calc(100vw - 32px));
   box-shadow: var(--shadow);
-  overflow: hidden;
+  /* No overflow clipping: the visibility menu and emoji picker pop out past
+     the card's bottom edge. */
 }
 
 .compose-modal-head {
