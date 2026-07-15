@@ -43,6 +43,7 @@ import {
   getTimeline,
   getTweet,
   getTweetStats,
+  getUserProfile,
   recordPostViews,
   getUnreadNotificationCount,
   listComments,
@@ -73,6 +74,7 @@ import type {
   Tweet,
   TweetVisibility,
   UserDiscovery,
+  UserProfile,
   UserSummary,
 } from "./types";
 import {
@@ -114,6 +116,9 @@ type LayoutContext = {
   refreshToken: number;
   onDiscoveryChanged: () => void;
   refreshUnread: () => void;
+  /** Detail views publish the post's participants here; the sidebar swaps its
+      generic People list for a Twitter-style "Relevant people" panel. */
+  setRelevantPeople: (users: UserSummary[]) => void;
 };
 
 const THEME_STORAGE_KEY = "twitter-system-theme";
@@ -375,6 +380,7 @@ function AppLayout({
   const [refreshToken, setRefreshToken] = useState(0);
   const [unread, setUnread] = useState(0);
   const [composing, setComposing] = useState(false);
+  const [relevantPeople, setRelevantPeople] = useState<UserSummary[]>([]);
   const location = useLocation();
   const isSearchRoute = location.pathname === "/search";
   const isNotificationsRoute = location.pathname === "/notifications";
@@ -485,15 +491,20 @@ function AppLayout({
 
       <main className="feed-column">
         <Outlet
-          context={{ currentUser, refreshToken, onDiscoveryChanged, refreshUnread } satisfies LayoutContext}
+          context={{ currentUser, refreshToken, onDiscoveryChanged, refreshUnread, setRelevantPeople } satisfies LayoutContext}
         />
       </main>
 
       {hideDiscovery ? null : (
         <aside className="discovery-column">
           <SidebarSearchBar />
+          {relevantPeople.length > 0 ? (
+            <RelevantPeoplePanel users={relevantPeople} onChanged={onDiscoveryChanged} />
+          ) : null}
           <TrendingPanel />
-          <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideSearch />
+          {relevantPeople.length > 0 ? null : (
+            <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideSearch />
+          )}
         </aside>
       )}
 
@@ -1438,7 +1449,7 @@ function TweetDetailRoute() {
   const { tweetId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser } = useOutletContext<LayoutContext>();
+  const { currentUser, setRelevantPeople } = useOutletContext<LayoutContext>();
   const scrollToPostId = (location.state as { scrollToPostId?: number } | null)
     ?.scrollToPostId;
   const numericTweetId = Number(tweetId);
@@ -1484,6 +1495,15 @@ function TweetDetailRoute() {
     setTweet((current) => (current ? { ...current, ...patch } : current));
   }, []);
 
+  // Sidebar "Relevant people": the tweet's author while this detail is open.
+  const author = tweet?.author;
+  useEffect(() => {
+    if (author && !author.is_deleted) {
+      setRelevantPeople([author]);
+    }
+    return () => setRelevantPeople([]);
+  }, [author?.id, setRelevantPeople]);
+
   useEffect(() => {
     if (!tweet) return;
     const timer = window.setInterval(async () => {
@@ -1527,9 +1547,10 @@ function TweetDetailRoute() {
 function CommentDetailRoute() {
   const { commentId } = useParams();
   const navigate = useNavigate();
-  const { currentUser } = useOutletContext<LayoutContext>();
+  const { currentUser, setRelevantPeople } = useOutletContext<LayoutContext>();
   const numericCommentId = Number(commentId);
   const [comment, setComment] = useState<Comment | null>(null);
+  const [rootAuthor, setRootAuthor] = useState<UserSummary | null>(null);
   const [thread, setThread] = useState<Comment[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1580,6 +1601,15 @@ function CommentDetailRoute() {
         if (cancelled) return;
         setComment(loaded);
         void loadThread(loaded.tweet_id);
+        // The root post's author feeds the sidebar's "Relevant people" panel;
+        // the thread itself doesn't need the root tweet.
+        getTweet(loaded.tweet_id)
+          .then((rootTweet) => {
+            if (!cancelled) setRootAuthor(rootTweet.author);
+          })
+          .catch(() => {
+            // Sidebar nicety only; the comment view works without it.
+          });
       })
       .catch((err) => {
         if (!cancelled) setError(getErrorMessage(err));
@@ -1591,6 +1621,22 @@ function CommentDetailRoute() {
       cancelled = true;
     };
   }, [numericCommentId, loadThread]);
+
+  // Sidebar "Relevant people": the comment's author first, then the root
+  // post's author, deduplicated when someone replies to their own thread.
+  const commentAuthor = comment?.author;
+  useEffect(() => {
+    const people = [commentAuthor, rootAuthor].filter(
+      (user, index, list): user is UserSummary =>
+        user != null &&
+        !user.is_deleted &&
+        list.findIndex((other) => other?.id === user.id) === index,
+    );
+    if (people.length > 0) {
+      setRelevantPeople(people);
+    }
+    return () => setRelevantPeople([]);
+  }, [commentAuthor?.id, rootAuthor?.id, setRelevantPeople]);
 
   // The focal comment's subtree, with depth relative to it. The thread arrives
   // in pre-order, so a reply's parent is always seen before the reply.
@@ -2229,6 +2275,103 @@ function TrendingPanel() {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/**
+ * Twitter-style "Relevant people" sidebar card for detail views: the post's
+ * participants with their bio and a follow button, instead of the generic
+ * suggestion list. Full profiles are fetched here because a UserSummary
+ * carries neither the bio nor the follow state.
+ */
+function RelevantPeoplePanel({
+  users,
+  onChanged,
+}: {
+  users: UserSummary[];
+  onChanged: () => void;
+}) {
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const usernamesKey = users.map((user) => user.username).join(",");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    Promise.all(
+      // A profile that fails to load (e.g. its account just got deleted)
+      // silently drops out rather than blanking the whole panel.
+      users.map((user) => getUserProfile(user.username).catch(() => null)),
+    )
+      .then((loaded) => {
+        if (!cancelled) {
+          setProfiles(loaded.filter((profile): profile is UserProfile => profile != null));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // users is rebuilt each render by callers; the usernames are the identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usernamesKey]);
+
+  async function toggleFollow(profile: UserProfile) {
+    try {
+      if (profile.is_following) {
+        await unfollowUser(profile.id);
+      } else {
+        await followUser(profile.id);
+      }
+      setProfiles((current) =>
+        current.map((item) =>
+          item.id === profile.id ? { ...item, is_following: !profile.is_following } : item,
+        ),
+      );
+      onChanged();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  return (
+    <section className="discovery-panel" aria-labelledby="relevant-title">
+      <h2 id="relevant-title">Relevant people</h2>
+      {error ? <p className="form-error">{error}</p> : null}
+      <div className="user-list">
+        {profiles.map((profile) => (
+          <div className="user-row relevant-person" key={profile.id}>
+            <Link
+              to={`/${encodeURIComponent(profile.username)}`}
+              className="author-link user-row-link"
+              aria-label={`View profile of ${profile.username}`}
+            >
+              <Avatar user={profile} size="small" />
+              <div className="user-copy">
+                <strong>{displayName(profile)}</strong>
+                <span>@{profile.username}</span>
+                {profile.bio ? <p className="user-bio">{profile.bio}</p> : null}
+              </div>
+            </Link>
+            {!profile.is_current_user ? (
+              <button className="follow-button" onClick={() => void toggleFollow(profile)}>
+                <UserPlus size={15} aria-hidden="true" />
+                {profile.is_following ? "Following" : "Follow"}
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {loading ? (
+        <div className="loading-row small">
+          <Loader2 className="spin" size={16} aria-hidden="true" />
+        </div>
+      ) : null}
     </section>
   );
 }
