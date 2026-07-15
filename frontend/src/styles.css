@@ -613,11 +613,11 @@ button.rail-link:disabled:hover {
   background: transparent;
 }
 
-/* The audience row and toolbar run the composer's full width, under the
-   avatar column too. */
+/* The audience row and toolbar are direct grid children: in the feed they stay
+   in the text column, but the compose modal stretches them full width. */
 .composer-visibility,
 .composer-actions {
-  grid-column: 1 / -1;
+  grid-column: 2;
 }
 
 .composer-actions {
@@ -1160,6 +1160,13 @@ button.rail-link:disabled:hover {
   box-shadow: var(--shadow);
   /* No overflow clipping: the visibility menu and emoji picker pop out past
      the card's bottom edge. */
+}
+
+/* Twitter's compose dialog runs the audience row and toolbar edge to edge,
+   under the avatar column too. */
+.compose-modal .composer-visibility,
+.compose-modal .composer-actions {
+  grid-column: 1 / -1;
 }
 
 .compose-modal-head {
