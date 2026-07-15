@@ -1533,6 +1533,29 @@ button.rail-link:disabled:hover {
   color: var(--danger);
 }
 
+/* Twitter-style dead end for missing posts: quiet copy, centered, with a
+   search escape hatch instead of an alarming error banner. */
+.not-found-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 30px;
+  padding: 72px 32px;
+  text-align: center;
+}
+
+.not-found-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.not-found-panel .primary-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 .muted-notice {
   padding: 12px 18px;
   color: var(--muted);

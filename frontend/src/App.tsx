@@ -31,6 +31,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  ApiError,
   createComment,
   createTweet,
   deleteTweet,
@@ -1445,6 +1446,18 @@ function HomeView() {
   );
 }
 
+/** Twitter-style dead-end for content that doesn't exist (deleted or bad id). */
+function NotFoundPanel() {
+  return (
+    <div className="not-found-panel">
+      <p>Hmm...this page doesn&rsquo;t exist. Try searching for something else.</p>
+      <Link className="primary-button" to="/search">
+        Search
+      </Link>
+    </div>
+  );
+}
+
 function TweetDetailRoute() {
   const { tweetId } = useParams();
   const navigate = useNavigate();
@@ -1455,6 +1468,7 @@ function TweetDetailRoute() {
   const numericTweetId = Number(tweetId);
   const [tweet, setTweet] = useState<Tweet | null>(null);
   const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // React 18+ mounts effects twice in StrictMode; without this guard a single
@@ -1463,13 +1477,14 @@ function TweetDetailRoute() {
 
   useEffect(() => {
     if (!Number.isInteger(numericTweetId) || numericTweetId <= 0) {
-      setError("Tweet not found.");
+      setNotFound(true);
       setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
     setError("");
+    setNotFound(false);
     const alreadyRecorded = viewRecordedFor.current === numericTweetId;
     viewRecordedFor.current = numericTweetId;
     // Record the detail expand first so the count we fetch includes it.
@@ -1481,7 +1496,12 @@ function TweetDetailRoute() {
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(getErrorMessage(err));
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setNotFound(true);
+        } else {
+          setError(getErrorMessage(err));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1529,8 +1549,11 @@ function TweetDetailRoute() {
       </div>
     );
   }
+  if (notFound || (!error && !tweet)) {
+    return <NotFoundPanel />;
+  }
   if (error || !tweet) {
-    return <div className="status-panel error">{error || "Tweet not found."}</div>;
+    return <div className="status-panel error">{error}</div>;
   }
   return (
     <TweetDetail
@@ -1553,6 +1576,7 @@ function CommentDetailRoute() {
   const [rootAuthor, setRootAuthor] = useState<UserSummary | null>(null);
   const [thread, setThread] = useState<Comment[]>([]);
   const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingReplies, setLoadingReplies] = useState(true);
 
@@ -1585,13 +1609,14 @@ function CommentDetailRoute() {
 
   useEffect(() => {
     if (!Number.isInteger(numericCommentId) || numericCommentId <= 0) {
-      setError("Comment not found.");
+      setNotFound(true);
       setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
     setError("");
+    setNotFound(false);
     const alreadyRecorded = viewRecordedFor.current === numericCommentId;
     viewRecordedFor.current = numericCommentId;
     // Record the detail expand first so the count we fetch includes it.
@@ -1612,7 +1637,12 @@ function CommentDetailRoute() {
           });
       })
       .catch((err) => {
-        if (!cancelled) setError(getErrorMessage(err));
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setNotFound(true);
+        } else {
+          setError(getErrorMessage(err));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1701,8 +1731,11 @@ function CommentDetailRoute() {
       </div>
     );
   }
+  if (notFound || (!error && !comment)) {
+    return <NotFoundPanel />;
+  }
   if (error || !comment) {
-    return <div className="status-panel error">{error || "Comment not found."}</div>;
+    return <div className="status-panel error">{error}</div>;
   }
   return (
     <section className="tweet-detail" aria-labelledby="comment-detail-title">
