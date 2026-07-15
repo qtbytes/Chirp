@@ -1552,9 +1552,15 @@ button.rail-link:disabled:hover {
      must scroll within it rather than being clipped past the viewport bottom. */
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Scroll without showing a scrollbar. */
+  scrollbar-width: none;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.discovery-column::-webkit-scrollbar {
+  display: none;
 }
 
 .sidebar-search {
