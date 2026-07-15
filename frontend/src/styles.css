@@ -598,9 +598,12 @@ button.rail-link:disabled:hover {
 .composer {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
-  gap: 12px;
+  /* Column gap only: the visibility and toolbar rows sit tight under the text,
+     spaced by their own padding, the way Twitter's composer is. */
+  gap: 0 12px;
   align-items: start;
-  padding: 18px;
+  /* Slimmer bottom padding so the toolbar hugs the composer's lower edge. */
+  padding: 18px 18px 10px;
   border-bottom: 1px solid var(--line);
 }
 
