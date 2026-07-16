@@ -1432,19 +1432,22 @@ button.rail-link:disabled:hover {
   font-size: 14px;
 }
 
-/* The @handle sits on its own line; the date, edit marker and visibility badge
-   share one meta row below it instead of each stacking (the rule above blocks
-   every span). Placed after it so these spans win and lay out inline. */
-.detail-meta {
+/* Twitter-style timestamp row between the tweet body and the action bar:
+   time · date · view count, plus the edit marker and visibility badge. */
+.detail-timestamp {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
+  color: var(--muted);
+  font-size: 15px;
+  padding: 12px 0 12px;
+  border-bottom: 1px solid var(--line);
 }
 
-.detail-meta span {
-  display: inline-flex;
-  align-items: center;
+.detail-timestamp strong {
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .detail-tweet > p {

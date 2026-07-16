@@ -14,7 +14,6 @@ import {
 import {
   ArrowLeft,
   AtSign,
-  BarChart2,
   Bell,
   Feather,
   Home,
@@ -1965,10 +1964,10 @@ function TweetDetail({
   }, [comments]);
 
   const displayDate = useMemo(() => {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(parseBackendDate(tweet.created_at));
+    const created = parseBackendDate(tweet.created_at);
+    const time = new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(created);
+    const date = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(created);
+    return `${time} · ${date}`;
   }, [tweet.created_at]);
 
   const loadTweetComments = useCallback(async () => {
@@ -2090,13 +2089,9 @@ function TweetDetail({
               to={`/${encodeURIComponent(tweet.author.username)}`}
               className="author-link"
             >
-              <strong>@{tweet.author.username}</strong>
+              <strong>{displayName(tweet.author)}</strong>
             </Link>
-            <div className="detail-meta">
-              <span>{displayDate}</span>
-              {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
-              <VisibilityBadge visibility={tweet.visibility} />
-            </div>
+            <span>@{tweet.author.username}</span>
           </div>
         </div>
         {editing ? (
@@ -2116,6 +2111,14 @@ function TweetDetail({
         {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
         {tweet.quoted_post ? <QuotedPostCard post={tweet.quoted_post} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
+        <div className="detail-timestamp">
+          <span>{displayDate}</span>
+          <span>
+            · <strong>{tweet.view_count}</strong> Views
+          </span>
+          {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
+          <VisibilityBadge visibility={tweet.visibility} />
+        </div>
         <div className="tweet-actions detail-actions">
           <button
             className="tweet-action comment"
@@ -2146,10 +2149,6 @@ function TweetDetail({
             />
             <span>{tweet.like_count}</span>
           </button>
-          <span className="tweet-action views" aria-label="Views">
-            <BarChart2 size={18} aria-hidden="true" />
-            <span>{tweet.view_count}</span>
-          </span>
         </div>
       </article>
 
