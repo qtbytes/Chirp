@@ -1325,6 +1325,116 @@ button.rail-link:disabled:hover {
   background: #000;
 }
 
+/* Media links are buttons (they open the lightbox, not a new tab). */
+button.tweet-media-link,
+button.media-grid__cell {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+/* Bluesky-style fullscreen image viewer. */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.93);
+}
+
+.lightbox-image {
+  max-width: 100vw;
+  max-height: 100vh;
+  object-fit: contain;
+}
+
+.lightbox-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.lightbox-button:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.lightbox-actions {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  gap: 10px;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.lightbox-prev {
+  left: 16px;
+}
+
+.lightbox-next {
+  right: 16px;
+}
+
+.lightbox-dots {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 7px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.lightbox-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.lightbox-dots span.active {
+  background: #fff;
+}
+
+.lightbox-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px 20px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
 .tweet-body footer {
   display: flex;
   gap: 22px;
@@ -1441,7 +1551,7 @@ button.rail-link:disabled:hover {
   gap: 4px;
   color: var(--muted);
   font-size: 15px;
-  padding: 12px 0 12px;
+  padding: 0 0 12px;
   border-bottom: 1px solid var(--line);
 }
 

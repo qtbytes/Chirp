@@ -14,6 +14,9 @@ import {
   BarChart2,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Download,
   Flag,
   Globe,
   Heart,
@@ -24,6 +27,7 @@ import {
   MoreHorizontal,
   Pencil,
   Repeat2,
+  Share2,
   Trash2,
   Users,
   VolumeX,
@@ -176,6 +180,7 @@ function tokenizeContent(text: string): ContentToken[] {
 
 function InlineImage({ url }: { url: string }) {
   const [failed, setFailed] = useState(false);
+  const [viewing, setViewing] = useState(false);
 
   if (failed) {
     return (
@@ -191,21 +196,27 @@ function InlineImage({ url }: { url: string }) {
     );
   }
   return (
-    <a
-      className="tweet-media-link"
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <img
-        className="tweet-media-image"
-        src={url}
-        alt=""
-        loading="lazy"
-        onError={() => setFailed(true)}
-      />
-    </a>
+    <>
+      <button
+        type="button"
+        className="tweet-media-link"
+        onClick={(event) => {
+          event.stopPropagation();
+          setViewing(true);
+        }}
+      >
+        <img
+          className="tweet-media-image"
+          src={url}
+          alt=""
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
+      </button>
+      {viewing ? (
+        <ImageLightbox images={[url]} initialIndex={0} onClose={() => setViewing(false)} />
+      ) : null}
+    </>
   );
 }
 
@@ -284,16 +295,205 @@ function VideoPlayer({ src, className }: { src: string; className: string }) {
   );
 }
 
+/** The lightbox caption: the image's file name from the URL path, if any. */
+function imageFileName(src: string): string {
+  try {
+    const path = new URL(src, window.location.href).pathname;
+    return decodeURIComponent(path.split("/").pop() ?? "");
+  } catch {
+    return "";
+  }
+}
+
+// Bluesky-style fullscreen image viewer: dark cover with share/download
+// top-left, close top-right and the file name bottom-left. Multi-image posts
+// get a dot indicator top-center plus prev/next arrows at the sides; the
+// arrow keys navigate and Escape (or a backdrop click) closes.
+export function ImageLightbox({
+  images,
+  initialIndex,
+  onClose,
+}: {
+  images: string[];
+  initialIndex: number;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(initialIndex);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const src = images[index];
+  const fileName = imageFileName(src);
+
+  useEffect(() => {
+    function handleKey(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      } else if (event.key === "ArrowLeft") {
+        setIndex((current) => Math.max(0, current - 1));
+      } else if (event.key === "ArrowRight") {
+        setIndex((current) => Math.min(images.length - 1, current + 1));
+      }
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [images.length, onClose]);
+
+  // The page must not scroll behind the fullscreen cover.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
+  useEffect(() => {
+    setLinkCopied(false);
+  }, [index]);
+
+  async function shareImage() {
+    const url = new URL(src, window.location.href).href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setLinkCopied(true);
+      }
+    } catch {
+      // Dismissed share sheet / clipboard denied — nothing to report.
+    }
+  }
+
+  async function downloadImage() {
+    try {
+      const response = await fetch(src);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = fileName || "image";
+      anchor.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // Cross-origin images we can't fetch still open in a tab to save from.
+      window.open(src, "_blank", "noopener");
+    }
+  }
+
+  return (
+    <div
+      className="lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Image viewer"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClose();
+      }}
+    >
+      <div className="lightbox-actions" onClick={(event) => event.stopPropagation()}>
+        <button
+          type="button"
+          className="lightbox-button"
+          onClick={() => void shareImage()}
+          aria-label="Share image"
+          title={linkCopied ? "Link copied" : "Share image"}
+        >
+          {linkCopied ? (
+            <Check size={20} aria-hidden="true" />
+          ) : (
+            <Share2 size={20} aria-hidden="true" />
+          )}
+        </button>
+        <button
+          type="button"
+          className="lightbox-button"
+          onClick={() => void downloadImage()}
+          aria-label="Download image"
+          title="Download image"
+        >
+          <Download size={20} aria-hidden="true" />
+        </button>
+      </div>
+      <button
+        type="button"
+        className="lightbox-button lightbox-close"
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose();
+        }}
+        aria-label="Close image viewer"
+      >
+        <X size={20} aria-hidden="true" />
+      </button>
+      {images.length > 1 ? (
+        <div className="lightbox-dots" aria-label={`Image ${index + 1} of ${images.length}`}>
+          {images.map((_, dot) => (
+            <span key={dot} className={dot === index ? "active" : undefined} />
+          ))}
+        </div>
+      ) : null}
+      <img
+        className="lightbox-image"
+        src={src}
+        alt={fileName}
+        onClick={(event) => event.stopPropagation()}
+      />
+      {index > 0 ? (
+        <button
+          type="button"
+          className="lightbox-button lightbox-nav lightbox-prev"
+          onClick={(event) => {
+            event.stopPropagation();
+            setIndex(index - 1);
+          }}
+          aria-label="Previous image"
+        >
+          <ChevronLeft size={24} aria-hidden="true" />
+        </button>
+      ) : null}
+      {index < images.length - 1 ? (
+        <button
+          type="button"
+          className="lightbox-button lightbox-nav lightbox-next"
+          onClick={(event) => {
+            event.stopPropagation();
+            setIndex(index + 1);
+          }}
+          aria-label="Next image"
+        >
+          <ChevronRight size={24} aria-hidden="true" />
+        </button>
+      ) : null}
+      {fileName ? <div className="lightbox-caption">{fileName}</div> : null}
+    </div>
+  );
+}
+
 // Renders a tweet/comment's uploaded media (media_urls), resolved to absolute
-// URLs. Images are clickable through to the full file; videos play inline.
+// URLs. Images open in the fullscreen lightbox; videos play inline.
 // Lays out as a 2-column grid when there is more than one item.
 export function MediaGallery({ urls }: { urls: string[] }) {
   const items = urls
     .map((url) => resolveMediaUrl(url))
     .filter((src): src is string => Boolean(src));
+  const images = items.filter((src) => !isVideoUrl(src));
+  const [viewing, setViewing] = useState<number | null>(null);
+
   if (items.length === 0) {
     return null;
   }
+
+  const viewer =
+    viewing != null ? (
+      <ImageLightbox
+        images={images}
+        initialIndex={viewing}
+        onClose={() => setViewing(null)}
+      />
+    ) : null;
 
   if (items.length === 1) {
     const src = items[0];
@@ -302,41 +502,47 @@ export function MediaGallery({ urls }: { urls: string[] }) {
         {isVideoUrl(src) ? (
           <VideoPlayer src={src} className="tweet-media-video" />
         ) : (
-          <a
+          <button
+            type="button"
             className="tweet-media-link"
-            href={src}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              setViewing(0);
+            }}
           >
             <img className="tweet-media-image" src={src} alt="" loading="lazy" />
-          </a>
+          </button>
         )}
+        {viewer}
       </div>
     );
   }
 
   return (
-    <div className="media-grid" data-count={items.length}>
-      {items.map((src) =>
-        isVideoUrl(src) ? (
-          <div key={src} className="media-grid__cell">
-            <VideoPlayer src={src} className="media-grid__video" />
-          </div>
-        ) : (
-          <a
-            key={src}
-            className="media-grid__cell"
-            href={src}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <img src={src} alt="" loading="lazy" />
-          </a>
-        ),
-      )}
-    </div>
+    <>
+      <div className="media-grid" data-count={items.length}>
+        {items.map((src) =>
+          isVideoUrl(src) ? (
+            <div key={src} className="media-grid__cell">
+              <VideoPlayer src={src} className="media-grid__video" />
+            </div>
+          ) : (
+            <button
+              key={src}
+              type="button"
+              className="media-grid__cell"
+              onClick={(event) => {
+                event.stopPropagation();
+                setViewing(images.indexOf(src));
+              }}
+            >
+              <img src={src} alt="" loading="lazy" />
+            </button>
+          ),
+        )}
+      </div>
+      {viewer}
+    </>
   );
 }
 
