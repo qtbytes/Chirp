@@ -1433,7 +1433,7 @@ button.rail-link:disabled:hover {
 }
 
 /* Twitter-style timestamp row between the tweet body and the action bar:
-   time · date · view count, plus the edit marker and visibility badge. */
+   time · date, plus the edit marker and visibility badge. */
 .detail-timestamp {
   display: flex;
   align-items: center;
@@ -1443,11 +1443,6 @@ button.rail-link:disabled:hover {
   font-size: 15px;
   padding: 12px 0 12px;
   border-bottom: 1px solid var(--line);
-}
-
-.detail-timestamp strong {
-  color: var(--ink);
-  font-weight: 700;
 }
 
 .detail-tweet > p {

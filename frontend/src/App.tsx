@@ -14,6 +14,7 @@ import {
 import {
   ArrowLeft,
   AtSign,
+  BarChart2,
   Bell,
   Feather,
   Home,
@@ -2113,9 +2114,6 @@ function TweetDetail({
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="detail-timestamp">
           <span>{displayDate}</span>
-          <span>
-            · <strong>{tweet.view_count}</strong> Views
-          </span>
           {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
           <VisibilityBadge visibility={tweet.visibility} />
         </div>
@@ -2149,6 +2147,10 @@ function TweetDetail({
             />
             <span>{tweet.like_count}</span>
           </button>
+          <span className="tweet-action views" aria-label="Views">
+            <BarChart2 size={18} aria-hidden="true" />
+            <span>{tweet.view_count}</span>
+          </span>
         </div>
       </article>
 
