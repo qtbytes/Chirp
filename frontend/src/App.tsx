@@ -139,70 +139,148 @@ function getSystemTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-/** Scroll offset of each visited history entry, keyed by location.key. */
-const scrollPositions = new Map<string, number>();
+/**
+ * Where a history entry's viewport was when it was left. The raw offset alone
+ * is not enough to return exactly: lazily loaded images reflow the list while
+ * it re-renders, shifting every absolute offset. So the topmost visible post
+ * card (`#post-…`) is recorded too, with its exact viewport delta — restoring
+ * pins that element back to the same place regardless of how the content
+ * above it resized.
+ */
+type ScrollRecord = {
+  y: number;
+  anchorId: string | null;
+  /** The anchor's getBoundingClientRect().top at capture time. */
+  anchorTop: number;
+};
+
+const scrollPositions = new Map<string, ScrollRecord>();
+
+function captureScrollRecord(): ScrollRecord {
+  const record: ScrollRecord = { y: window.scrollY, anchorId: null, anchorTop: 0 };
+  for (const el of document.querySelectorAll<HTMLElement>("article[id^='post-']")) {
+    const rect = el.getBoundingClientRect();
+    if (rect.bottom > 0 && rect.top < window.innerHeight) {
+      record.anchorId = el.id;
+      record.anchorTop = rect.top;
+      break;
+    }
+  }
+  return record;
+}
 
 /**
  * Twitter-style scroll restoration for the plain (non-data) router: going
- * back/forward returns to the exact offset the page was left at — back from a
+ * back/forward returns to the exact spot the page was left at — back from a
  * comment's detail lands on that comment, not the top of the thread — while
  * ordinary navigation still starts new pages at the top.
  */
 function ScrollMemory() {
   const location = useLocation();
   const navigationType = useNavigationType();
-  // The offset as of the last scroll event. Read at save time instead of
-  // window.scrollY because by then the next page's (shorter) DOM is already
-  // in and the browser may have clamped the real offset toward 0.
-  const lastScrollY = useRef(0);
+  // The record as of the last scroll event. Captured continuously instead of
+  // at save time because by then the next page's (shorter) DOM is already in
+  // and both the offset and the anchor are gone.
+  const lastRecord = useRef<ScrollRecord>({ y: 0, anchorId: null, anchorTop: 0 });
 
   useEffect(() => {
     window.history.scrollRestoration = "manual";
-    const onScroll = () => {
-      lastScrollY.current = window.scrollY;
+    let frame = 0;
+    const capture = () => {
+      frame = 0;
+      lastRecord.current = captureScrollRecord();
     };
-    onScroll();
+    const onScroll = () => {
+      if (!frame) {
+        frame = requestAnimationFrame(capture);
+      }
+    };
+    capture();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) {
+        cancelAnimationFrame(frame);
+      }
+    };
   }, []);
 
   // Remember where this history entry was when it is left…
   useLayoutEffect(() => {
     const key = location.key;
     return () => {
-      scrollPositions.set(key, lastScrollY.current);
+      scrollPositions.set(key, lastRecord.current);
     };
   }, [location.key]);
 
   // …and put the viewport back there when it is returned to.
   useLayoutEffect(() => {
     const saved = navigationType === "POP" ? scrollPositions.get(location.key) : undefined;
-    if (saved === undefined || saved === 0) {
+    if (!saved || (saved.y === 0 && !saved.anchorId)) {
       window.scrollTo(0, 0);
-      lastScrollY.current = 0;
+      lastRecord.current = { y: 0, anchorId: null, anchorTop: 0 };
       return;
     }
-    // The page being returned to refetches its content, so keep waiting for
-    // it to grow tall enough to hold the offset; settle for the best we can
-    // reach if it never does (e.g. a feed that reloads only its first page).
-    let cancelled = false;
-    const deadline = performance.now() + 4000;
-    const attempt = () => {
-      if (cancelled) {
+
+    // Keep the saved anchor pinned at its saved viewport position while the
+    // returning page re-renders and its images stream in (each load reflows
+    // the list). The pinning stops at the deadline — or immediately once the
+    // user scrolls/keys/touches, so it never fights real input.
+    let done = false;
+    const deadline = performance.now() + 3000;
+    const cancelEvents = ["wheel", "touchstart", "keydown", "mousedown"] as const;
+    const stop = () => {
+      if (done) {
         return;
       }
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      if (maxScroll >= saved || performance.now() > deadline) {
-        window.scrollTo(0, Math.min(saved, Math.max(maxScroll, 0)));
-        lastScrollY.current = window.scrollY;
+      done = true;
+      for (const name of cancelEvents) {
+        window.removeEventListener(name, stop);
+      }
+    };
+    for (const name of cancelEvents) {
+      window.addEventListener(name, stop, { passive: true });
+    }
+
+    const pin = () => {
+      if (done) {
         return;
       }
-      requestAnimationFrame(attempt);
+      if (saved.anchorId) {
+        // Ids can rarely repeat (a parent tweet shown under two replies);
+        // pin whichever instance implies a position closest to the saved one.
+        const candidates = document.querySelectorAll<HTMLElement>(
+          `[id='${CSS.escape(saved.anchorId)}']`,
+        );
+        let best: { drift: number; dist: number } | null = null;
+        for (const el of candidates) {
+          const drift = el.getBoundingClientRect().top - saved.anchorTop;
+          const dist = Math.abs(window.scrollY + drift - saved.y);
+          if (!best || dist < best.dist) {
+            best = { drift, dist };
+          }
+        }
+        if (best && Math.abs(best.drift) > 1) {
+          window.scrollBy(0, best.drift);
+        }
+        if (!best) {
+          // Anchor not rendered (yet, or content changed): approximate by
+          // offset while waiting for it.
+          const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+          window.scrollTo(0, Math.min(saved.y, Math.max(maxScroll, 0)));
+        }
+      } else {
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        window.scrollTo(0, Math.min(saved.y, Math.max(maxScroll, 0)));
+      }
+      if (performance.now() < deadline) {
+        requestAnimationFrame(pin);
+      } else {
+        stop();
+      }
     };
-    attempt();
-    return () => {
-      cancelled = true;
-    };
+    pin();
+    return stop;
   }, [location.key, navigationType]);
 
   return null;
@@ -868,7 +946,7 @@ function SearchReplyCard({
   onOpen: () => void;
 }) {
   return (
-    <article className="search-reply" onClick={onOpen}>
+    <article id={`post-${post.id}`} className="search-reply" onClick={onOpen}>
       <div className="search-reply-head">
         <Avatar user={post.author} size="small" />
         <Link

@@ -2056,6 +2056,7 @@ export function TweetCard({
 
   return (
     <article
+      id={`post-${tweet.id}`}
       className="tweet-card clickable"
       role="button"
       tabIndex={0}
