@@ -51,8 +51,13 @@ const ALL_EMOJIS: SearchEmoji[] = (() => {
   }));
 })();
 
+// The panel's full height (search + tabs + scroll area + padding). Used to
+// decide whether it still fits below the trigger or must open upward.
+const PANEL_HEIGHT = 400;
+
 export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [openUp, setOpenUp] = useState(false);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(EMOJI_CATEGORIES[0].id);
   const [recents, setRecents] = useState<string[]>(loadRecents);
@@ -117,7 +122,15 @@ export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void })
       <button
         type="button"
         className="icon-button emoji-trigger"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (!open) {
+            // A tall composer pushes the trigger toward the bottom of the
+            // screen; open the panel upward when it no longer fits below.
+            const rect = containerRef.current?.getBoundingClientRect();
+            setOpenUp(Boolean(rect && window.innerHeight - rect.bottom < PANEL_HEIGHT));
+          }
+          setOpen((value) => !value);
+        }}
         aria-label="Add emoji"
         aria-expanded={open}
         title="Add emoji"
@@ -126,7 +139,11 @@ export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void })
       </button>
 
       {open ? (
-        <div className="emoji-panel" role="dialog" aria-label="Emoji picker">
+        <div
+          className={openUp ? "emoji-panel emoji-panel--up" : "emoji-panel"}
+          role="dialog"
+          aria-label="Emoji picker"
+        >
           <label className="emoji-search">
             <Search size={16} aria-hidden="true" />
             <input

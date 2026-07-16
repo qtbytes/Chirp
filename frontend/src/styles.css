@@ -977,6 +977,12 @@ button.rail-link:disabled:hover {
   box-shadow: var(--shadow);
 }
 
+/* Set when the trigger is too close to the bottom of the viewport. */
+.emoji-panel--up {
+  top: auto;
+  bottom: calc(100% + 10px);
+}
+
 .emoji-search {
   display: grid;
   grid-template-columns: 16px 1fr;
