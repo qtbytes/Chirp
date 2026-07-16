@@ -1390,6 +1390,7 @@ type ReplyTarget = {
   id: number;
   content: string;
   media_urls: string[];
+  media_alts: string[];
   created_at: string;
   author: UserSummary;
 };
