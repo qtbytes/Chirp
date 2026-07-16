@@ -2107,6 +2107,7 @@ function TweetDetail({
             <span>@{tweet.author.username}</span>
           </div>
         </div>
+        <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
         {editing ? (
           <PostEditor
             initialContent={tweet.content}
@@ -2119,9 +2120,7 @@ function TweetDetail({
             visibility={editVisibility}
             onVisibilityChange={setEditVisibility}
           />
-        ) : (
-          <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
-        )}
+        ) : null}
         {tweet.media_urls.length > 0 ? (
           <MediaGallery urls={tweet.media_urls} alts={tweet.media_alts} />
         ) : null}

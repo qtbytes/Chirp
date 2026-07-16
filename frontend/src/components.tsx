@@ -1156,10 +1156,10 @@ export function ConfirmDialog({
   );
 }
 
-// Inline editor that replaces a post's content while editing. Its action bar
-// mirrors the composer -- emoji + media tools on the left, an optional audience
-// row above them (tweets only) -- so editing feels the same as posting. Media is
-// seeded from the post and can be added to or removed before saving.
+// Editing a post opens this compose-style dialog (same card, avatar column,
+// tools and audience row as the compose modal) so editing feels the same as
+// posting. Media is seeded from the post and can be added to or removed
+// before saving; Escape or the backdrop cancels.
 export function PostEditor({
   initialContent,
   initialMedia = [],
@@ -1183,6 +1183,7 @@ export function PostEditor({
   visibility?: TweetVisibility;
   onVisibilityChange?: (value: TweetVisibility) => void;
 }) {
+  const currentUser = useCurrentUser();
   const [value, setValue] = useState(initialContent);
   const media = useMediaAttachment(initialMedia, initialAlts);
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
@@ -1190,57 +1191,91 @@ export function PostEditor({
     setValue,
     maxLength,
   );
+  const remaining = maxLength - value.length;
   const canSave =
     (value.trim().length > 0 || media.mediaUrls.length > 0) && !saving && !media.uploading;
 
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") onCancel();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onCancel]);
+
   return (
-    <form
-      className="post-editor"
-      onClick={(event) => event.stopPropagation()}
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (canSave) {
-          onSave(value.trim(), media.mediaUrls, media.mediaAlts);
-        }
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        event.stopPropagation();
+        onCancel();
       }}
     >
-      <textarea
-        {...fieldProps}
-        value={value}
-        rows={1}
-        maxLength={maxLength}
-        aria-label="Edit content"
-        autoFocus
-      />
-      <MediaPreview attachment={media} />
-      {media.error ? <p className="form-error">{media.error}</p> : null}
-      {visibility != null && onVisibilityChange ? (
-        <div className="composer-visibility">
-          <VisibilityPicker
-            value={visibility}
-            onChange={onVisibilityChange}
+      <div
+        className="compose-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edit post"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="compose-modal-head">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onCancel}
+            aria-label="Close editor"
             disabled={saving}
-          />
+          >
+            <X size={20} aria-hidden="true" />
+          </button>
         </div>
-      ) : null}
-      <div className="post-editor-actions">
-        <div className="composer-tools">
-          <EmojiPicker onSelect={insertEmoji} />
-          <MediaButton attachment={media} />
-        </div>
-        <button
-          type="button"
-          className="outline-button compact"
-          onClick={onCancel}
-          disabled={saving}
+        <form
+          className="composer"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canSave) {
+              onSave(value.trim(), media.mediaUrls, media.mediaAlts);
+            }
+          }}
         >
-          Cancel
-        </button>
-        <button className="primary-button compact" disabled={!canSave}>
-          {saving ? "Saving…" : "Save"}
-        </button>
+          {currentUser ? <Avatar user={currentUser} /> : <span aria-hidden="true" />}
+          <div className="composer-body">
+            <div className="composer-input">
+              <ComposerHighlight text={value} />
+              <textarea
+                {...fieldProps}
+                value={value}
+                rows={1}
+                maxLength={maxLength}
+                aria-label="Edit content"
+                autoFocus
+              />
+            </div>
+            <MediaPreview attachment={media} />
+          </div>
+          {visibility != null && onVisibilityChange ? (
+            <div className="composer-visibility">
+              <VisibilityPicker
+                value={visibility}
+                onChange={onVisibilityChange}
+                disabled={saving}
+              />
+            </div>
+          ) : null}
+          <div className="composer-actions">
+            <div className="composer-tools">
+              <EmojiPicker onSelect={insertEmoji} />
+              <MediaButton attachment={media} />
+            </div>
+            <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
+            <button className="primary-button compact" disabled={!canSave}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </form>
       </div>
-    </form>
+    </div>
   );
 }
 
@@ -2066,6 +2101,7 @@ export function TweetCard({
           {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
           <VisibilityBadge visibility={tweet.visibility} />
         </header>
+        <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
         {editing ? (
           <PostEditor
             initialContent={tweet.content}
@@ -2078,9 +2114,7 @@ export function TweetCard({
             visibility={editVisibility}
             onVisibilityChange={setEditVisibility}
           />
-        ) : (
-          <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
-        )}
+        ) : null}
         {tweet.media_urls.length > 0 ? (
           <MediaGallery urls={tweet.media_urls} alts={tweet.media_alts} />
         ) : null}
@@ -2393,6 +2427,10 @@ export function CommentCard({
           {localComment.parent_comment_id ? <span>Reply</span> : null}
           {localComment.edited_at ? <span className="edited-tag">· edited</span> : null}
         </header>
+        <PostBody
+          text={localComment.content}
+          enablePreview={localComment.media_urls.length === 0}
+        />
         {editing ? (
           <PostEditor
             initialContent={localComment.content}
@@ -2403,12 +2441,7 @@ export function CommentCard({
             onSave={saveEdit}
             onCancel={() => setEditing(false)}
           />
-        ) : (
-          <PostBody
-            text={localComment.content}
-            enablePreview={localComment.media_urls.length === 0}
-          />
-        )}
+        ) : null}
         {localComment.media_urls.length > 0 ? (
           <MediaGallery urls={localComment.media_urls} alts={localComment.media_alts} />
         ) : null}

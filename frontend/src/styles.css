@@ -848,16 +848,8 @@ button.rail-link:disabled:hover {
    (The auto-grow effect in useEmojiField re-measures against this floor.) */
 .composer-body:has(.composer-media) textarea,
 .reply-composer-form:has(.composer-media) textarea,
-.quote-composer-form:has(.composer-media) textarea,
-.post-editor:has(.composer-media) textarea {
-  min-height: 0;
-}
-
-/* The borderless composers also trim their bottom padding; the post editor's
-   bordered box keeps its own so text doesn't touch the frame. */
-.composer-body:has(.composer-media) textarea,
-.reply-composer-form:has(.composer-media) textarea,
 .quote-composer-form:has(.composer-media) textarea {
+  min-height: 0;
   padding-bottom: 4px;
 }
 
@@ -2880,33 +2872,6 @@ a.tab {
 
 .edited-tag {
   color: var(--muted);
-}
-
-/* Inline "edit content in place" editor used by tweets and comments. */
-.post-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 6px 0 12px;
-}
-
-.post-editor textarea {
-  width: 100%;
-  min-height: 72px;
-  resize: vertical;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--input);
-  color: var(--ink);
-  font: inherit;
-  line-height: 1.4;
-}
-
-.post-editor-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 /* Delete confirmation modal. */
