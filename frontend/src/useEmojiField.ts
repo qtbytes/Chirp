@@ -16,8 +16,10 @@ export function useEmojiField<T extends Field>(
   const caretRef = useRef<{ start: number; end: number } | null>(null);
 
   // Auto-grow a <textarea> to fit its content: reset to the CSS min-height, then
-  // lock the height to the content's scroll height. Runs on every value change
-  // (typing, deletion, and emoji insertion). Inputs are left untouched.
+  // lock the height to the content's scroll height. Runs on every render (no
+  // dep array) because the floor isn't constant — attaching media relaxes the
+  // CSS min-height, and the stale inline height must be re-measured then too,
+  // not just on typing. Inputs are left untouched.
   useEffect(() => {
     const el = ref.current;
     if (!(el instanceof HTMLTextAreaElement)) {
@@ -28,7 +30,7 @@ export function useEmojiField<T extends Field>(
     el.style.overflowY = "hidden";
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
+  });
 
   function rememberCaret() {
     const el = ref.current;

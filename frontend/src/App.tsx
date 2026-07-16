@@ -1861,6 +1861,7 @@ function Composer({
         <textarea
           {...fieldProps}
           value={content}
+          rows={1}
           maxLength={280}
           placeholder="What is happening?"
           aria-label="Tweet content"

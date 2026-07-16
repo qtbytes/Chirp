@@ -1160,6 +1160,7 @@ export function PostEditor({
       <textarea
         {...fieldProps}
         value={value}
+        rows={1}
         maxLength={maxLength}
         aria-label="Edit content"
         autoFocus
@@ -1331,6 +1332,7 @@ export function QuoteComposer({
           <textarea
             {...fieldProps}
             value={content}
+            rows={1}
             maxLength={280}
             placeholder="Add a comment"
             aria-label="Quote comment"
@@ -1489,6 +1491,7 @@ export function ReplyComposer({
               <textarea
                 {...fieldProps}
                 value={content}
+                rows={1}
                 maxLength={1000}
                 placeholder="Post your reply"
                 aria-label="Post your reply"

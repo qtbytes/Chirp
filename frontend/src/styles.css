@@ -796,7 +796,25 @@ button.rail-link:disabled:hover {
 }
 
 .composer-media {
-  margin: 10px 0 4px;
+  margin: 4px 0;
+}
+
+/* With media attached the text area gives up its tall empty-state floor and
+   hugs its content, Twitter-style, so the preview sits right under the text.
+   (The auto-grow effect in useEmojiField re-measures against this floor.) */
+.composer-body:has(.composer-media) textarea,
+.reply-composer-form:has(.composer-media) textarea,
+.quote-composer-form:has(.composer-media) textarea,
+.post-editor:has(.composer-media) textarea {
+  min-height: 0;
+}
+
+/* The borderless composers also trim their bottom padding; the post editor's
+   bordered box keeps its own so text doesn't touch the frame. */
+.composer-body:has(.composer-media) textarea,
+.reply-composer-form:has(.composer-media) textarea,
+.quote-composer-form:has(.composer-media) textarea {
+  padding-bottom: 4px;
 }
 
 .composer-media-loading {
