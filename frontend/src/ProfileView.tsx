@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useFeedMemory } from "./useFeedMemory";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -68,6 +69,17 @@ export function ProfileView({
   const [loadingFeed, setLoadingFeed] = useState(false);
   const [feedError, setFeedError] = useState("");
 
+  const takeTweetsMemory = useFeedMemory(
+    `profile:${username}:tweets`,
+    { tweets, cursor: tweetsCursor },
+    tweets.length === 0,
+  );
+  const takeRepliesMemory = useFeedMemory(
+    `profile:${username}:replies`,
+    { replies, cursor: repliesCursor },
+    replies.length === 0,
+  );
+
   useEffect(() => {
     let cancelled = false;
     setProfile(null);
@@ -130,11 +142,25 @@ export function ProfileView({
     if (notFound) {
       return;
     }
+    // Back/forward restores the tab's list as the user left it.
     if (activeTab === "tweets") {
+      const cached = takeTweetsMemory();
+      if (cached) {
+        setTweets(cached.tweets);
+        setTweetsCursor(cached.cursor);
+        return;
+      }
       void loadTweets();
     } else {
+      const cached = takeRepliesMemory();
+      if (cached) {
+        setReplies(cached.replies);
+        setRepliesCursor(cached.cursor);
+        return;
+      }
       void loadReplies();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, loadTweets, loadReplies, notFound]);
 
   const patchTweet = useCallback((tweetId: number, patch: Partial<Tweet>) => {

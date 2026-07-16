@@ -118,6 +118,7 @@ import { ResetPasswordView, VerifyEmailView } from "./AuthTokenViews";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
+import { useFeedMemory } from "./useFeedMemory";
 import { useMediaAttachment } from "./useMediaAttachment";
 
 type AuthMode = "login" | "register";
@@ -715,10 +716,13 @@ function SearchHistoryPanel({
 
 function SearchView() {
   const { currentUser, onDiscoveryChanged } = useOutletContext<LayoutContext>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") ?? "";
+  const urlTab = searchParams.get("f");
   const [query, setQuery] = useState(initialQuery);
-  const [tab, setTab] = useState<SearchTab>("top");
+  const [tab, setTab] = useState<SearchTab>(
+    urlTab === "latest" || urlTab === "people" ? urlTab : "top",
+  );
   const [historyKey, setHistoryKey] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -728,6 +732,30 @@ function SearchView() {
   useEffect(() => {
     setQuery(initialQuery);
   }, [initialQuery]);
+
+  useEffect(() => {
+    setTab(urlTab === "latest" || urlTab === "people" ? urlTab : "top");
+  }, [urlTab]);
+
+  // Mirror the executed search into the URL (replace, not push) so coming
+  // *back* to /search restores the same query and tab — without it the view
+  // remounts empty and there is nothing for the feed memory to restore.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const next = new URLSearchParams();
+      if (activeQuery) {
+        next.set("q", activeQuery);
+        if (tab !== "top") {
+          next.set("f", tab);
+        }
+      }
+      if (next.toString() !== searchParams.toString()) {
+        setSearchParams(next, { replace: true });
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeQuery, tab]);
 
   // Save to history when a search is actually executed (debounce fires)
   const committedQuery = useRef("");
@@ -877,6 +905,12 @@ function SearchPostsPanel({
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
 
+  const takeFeedMemory = useFeedMemory(
+    `search:${sort}:${query}`,
+    { postById, ids, cursor },
+    ids.length === 0,
+  );
+
   const posts = useMemo(
     () => ids.map((id) => postById[id]).filter((post): post is SearchPost => Boolean(post)),
     [ids, postById],
@@ -950,6 +984,15 @@ function SearchPostsPanel({
   );
 
   useEffect(() => {
+    // Returning via back/forward restores the results the user left.
+    const cached = takeFeedMemory();
+    if (cached) {
+      setPostById(cached.postById);
+      setIds(cached.ids);
+      setCursor(cached.cursor);
+      setSearched(true);
+      return;
+    }
     setIds([]);
     setPostById({});
     setCursor(null);
@@ -959,6 +1002,7 @@ function SearchPostsPanel({
       void runSearch(query);
     }, 250);
     return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, runSearch]);
 
   return (
@@ -1018,6 +1062,12 @@ function HashtagView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [sort, setSort] = useState<HashtagSort>("top");
+
+  const takeFeedMemory = useFeedMemory(
+    `hashtag:${tag}:${sort}`,
+    { page, tweetById, tweetIds },
+    tweetIds.length === 0,
+  );
 
   const tweets = useMemo(
     () => tweetIds.map((id) => tweetById[id]).filter((tweet): tweet is Tweet => Boolean(tweet)),
@@ -1092,12 +1142,21 @@ function HashtagView() {
   );
 
   // Reset when navigating to a different tag (or switching the sort), then
-  // load the first page.
+  // load the first page — unless we're returning via back/forward, which
+  // restores the list as it was.
   useEffect(() => {
+    const cached = takeFeedMemory();
+    if (cached) {
+      setPage(cached.page);
+      setTweetById(cached.tweetById);
+      setTweetIds(cached.tweetIds);
+      return;
+    }
     setTweetIds([]);
     setTweetById({});
     setPage(null);
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   return (
@@ -1198,6 +1257,12 @@ function NotificationsView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const takeFeedMemory = useFeedMemory(
+    "notifications",
+    { items, cursor },
+    items.length === 0,
+  );
+
   const load = useCallback(
     async (nextCursor?: string | null, append = false) => {
       setLoading(true);
@@ -1216,7 +1281,15 @@ function NotificationsView() {
   );
 
   useEffect(() => {
+    const cached = takeFeedMemory();
+    if (cached) {
+      setItems(cached.items);
+      setCursor(cached.cursor);
+      setLoading(false);
+      return;
+    }
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   const hasUnread = items.some((notification) => !notification.is_read);
@@ -1327,24 +1400,10 @@ function NotificationsView() {
   );
 }
 
-/**
- * The feed as it looked when the user navigated away, kept per tab so going
- * *back* to Home can restore exactly what was on screen (including pages
- * fetched via "Load more" — a fresh first-page fetch couldn't reach a scroll
- * offset deep in the list). Fresh visits (nav clicks) still refetch.
- */
-type FeedSnapshot = {
-  page: TimelinePage | null;
-  tweetById: Record<number, Tweet>;
-  tweetIds: number[];
-};
-const feedCache = new Map<TimelineKind, FeedSnapshot>();
-
 function HomeView() {
   const { currentUser, refreshToken } = useOutletContext<LayoutContext>();
   const navigate = useNavigate();
   const location = useLocation();
-  const navigationType = useNavigationType();
   const activeTab: TimelineKind = location.pathname === "/following" ? "following" : "for-you";
   const [page, setPage] = useState<TimelinePage | null>(null);
   const [tweetById, setTweetById] = useState<Record<number, Tweet>>({});
@@ -1352,21 +1411,11 @@ function HomeView() {
   const [loadingFeed, setLoadingFeed] = useState(false);
   const [feedError, setFeedError] = useState("");
 
-  // Mirror the latest feed state so the snapshot effect below can save it
-  // from its cleanup without re-running on every keystroke of state.
-  const snapshotRef = useRef<FeedSnapshot>({ page, tweetById, tweetIds });
-  snapshotRef.current = { page, tweetById, tweetIds };
-
-  // Save the tab's feed when it is left — switching tabs or unmounting
-  // (navigating into a tweet, a profile, …).
-  useEffect(() => {
-    const tab = activeTab;
-    return () => {
-      if (snapshotRef.current.tweetIds.length > 0) {
-        feedCache.set(tab, snapshotRef.current);
-      }
-    };
-  }, [activeTab]);
+  const takeFeedMemory = useFeedMemory(
+    `home:${activeTab}`,
+    { page, tweetById, tweetIds },
+    tweetIds.length === 0,
+  );
 
   const tweets = useMemo(
     () => tweetIds.map((tweetId) => tweetById[tweetId]).filter((tweet): tweet is Tweet => Boolean(tweet)),
@@ -1454,14 +1503,12 @@ function HomeView() {
     // Arriving via back/forward restores the feed the user left, so the
     // scroll position (which may sit pages deep) still exists to return to.
     // Any other arrival — nav clicks, tab switches — fetches fresh.
-    if (navigationType === "POP") {
-      const cached = feedCache.get(activeTab);
-      if (cached) {
-        setPage(cached.page);
-        setTweetById(cached.tweetById);
-        setTweetIds(cached.tweetIds);
-        return;
-      }
+    const cached = takeFeedMemory();
+    if (cached) {
+      setPage(cached.page);
+      setTweetById(cached.tweetById);
+      setTweetIds(cached.tweetIds);
+      return;
     }
     void loadFeed();
     // eslint-disable-next-line react-hooks/exhaustive-deps

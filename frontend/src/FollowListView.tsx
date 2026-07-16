@@ -11,6 +11,7 @@ import {
 } from "./api";
 import type { UserDiscovery } from "./types";
 import { Avatar, getErrorMessage } from "./components";
+import { useFeedMemory } from "./useFeedMemory";
 
 type Tab = "followers" | "following";
 
@@ -25,6 +26,12 @@ export function FollowListView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notFound, setNotFound] = useState(false);
+
+  const takeFeedMemory = useFeedMemory(
+    `follow-list:${username}:${tab}`,
+    { items, cursor },
+    items.length === 0,
+  );
 
   const load = useCallback(
     async (nextCursor?: string | null, append = false) => {
@@ -52,7 +59,15 @@ export function FollowListView() {
     setItems([]);
     setCursor(null);
     setNotFound(false);
+    // Back/forward restores the list as the user left it.
+    const cached = takeFeedMemory();
+    if (cached) {
+      setItems(cached.items);
+      setCursor(cached.cursor);
+      return;
+    }
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   async function toggleFollow(user: UserDiscovery) {
