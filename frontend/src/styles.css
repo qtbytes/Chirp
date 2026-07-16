@@ -1334,6 +1334,8 @@ button.media-grid__cell {
   font: inherit;
   text-align: inherit;
   cursor: pointer;
+  /* No tap-highlight flash over the image the lightbox is opening. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Bluesky-style fullscreen image viewer. */
@@ -1364,6 +1366,7 @@ button.media-grid__cell {
   color: #fff;
   cursor: pointer;
   transition: background-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .lightbox-button:hover {
