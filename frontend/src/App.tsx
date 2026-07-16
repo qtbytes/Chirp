@@ -1,4 +1,12 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Link,
   Navigate,
@@ -7,6 +15,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useNavigationType,
   useOutletContext,
   useParams,
   useSearchParams,
@@ -129,6 +138,75 @@ function getSystemTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+/** Scroll offset of each visited history entry, keyed by location.key. */
+const scrollPositions = new Map<string, number>();
+
+/**
+ * Twitter-style scroll restoration for the plain (non-data) router: going
+ * back/forward returns to the exact offset the page was left at — back from a
+ * comment's detail lands on that comment, not the top of the thread — while
+ * ordinary navigation still starts new pages at the top.
+ */
+function ScrollMemory() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  // The offset as of the last scroll event. Read at save time instead of
+  // window.scrollY because by then the next page's (shorter) DOM is already
+  // in and the browser may have clamped the real offset toward 0.
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    window.history.scrollRestoration = "manual";
+    const onScroll = () => {
+      lastScrollY.current = window.scrollY;
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Remember where this history entry was when it is left…
+  useLayoutEffect(() => {
+    const key = location.key;
+    return () => {
+      scrollPositions.set(key, lastScrollY.current);
+    };
+  }, [location.key]);
+
+  // …and put the viewport back there when it is returned to.
+  useLayoutEffect(() => {
+    const saved = navigationType === "POP" ? scrollPositions.get(location.key) : undefined;
+    if (saved === undefined || saved === 0) {
+      window.scrollTo(0, 0);
+      lastScrollY.current = 0;
+      return;
+    }
+    // The page being returned to refetches its content, so keep waiting for
+    // it to grow tall enough to hold the offset; settle for the best we can
+    // reach if it never does (e.g. a feed that reloads only its first page).
+    let cancelled = false;
+    const deadline = performance.now() + 4000;
+    const attempt = () => {
+      if (cancelled) {
+        return;
+      }
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (maxScroll >= saved || performance.now() > deadline) {
+        window.scrollTo(0, Math.min(saved, Math.max(maxScroll, 0)));
+        lastScrollY.current = window.scrollY;
+        return;
+      }
+      requestAnimationFrame(attempt);
+    };
+    attempt();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.key, navigationType]);
+
+  return null;
+}
+
 function App() {
   const [currentUser, setCurrentUser] = useState<UserSummary | null>(null);
   const [booting, setBooting] = useState(true);
@@ -210,6 +288,7 @@ function App() {
 
   return (
     <CurrentUserProvider value={currentUser}>
+    <ScrollMemory />
     <Routes>
       {/* Also here: a signed-in user clicking their own confirmation link must
           land on the page, not on /:username. */}
@@ -1248,16 +1327,46 @@ function NotificationsView() {
   );
 }
 
+/**
+ * The feed as it looked when the user navigated away, kept per tab so going
+ * *back* to Home can restore exactly what was on screen (including pages
+ * fetched via "Load more" — a fresh first-page fetch couldn't reach a scroll
+ * offset deep in the list). Fresh visits (nav clicks) still refetch.
+ */
+type FeedSnapshot = {
+  page: TimelinePage | null;
+  tweetById: Record<number, Tweet>;
+  tweetIds: number[];
+};
+const feedCache = new Map<TimelineKind, FeedSnapshot>();
+
 function HomeView() {
   const { currentUser, refreshToken } = useOutletContext<LayoutContext>();
   const navigate = useNavigate();
   const location = useLocation();
+  const navigationType = useNavigationType();
   const activeTab: TimelineKind = location.pathname === "/following" ? "following" : "for-you";
   const [page, setPage] = useState<TimelinePage | null>(null);
   const [tweetById, setTweetById] = useState<Record<number, Tweet>>({});
   const [tweetIds, setTweetIds] = useState<number[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
   const [feedError, setFeedError] = useState("");
+
+  // Mirror the latest feed state so the snapshot effect below can save it
+  // from its cleanup without re-running on every keystroke of state.
+  const snapshotRef = useRef<FeedSnapshot>({ page, tweetById, tweetIds });
+  snapshotRef.current = { page, tweetById, tweetIds };
+
+  // Save the tab's feed when it is left — switching tabs or unmounting
+  // (navigating into a tweet, a profile, …).
+  useEffect(() => {
+    const tab = activeTab;
+    return () => {
+      if (snapshotRef.current.tweetIds.length > 0) {
+        feedCache.set(tab, snapshotRef.current);
+      }
+    };
+  }, [activeTab]);
 
   const tweets = useMemo(
     () => tweetIds.map((tweetId) => tweetById[tweetId]).filter((tweet): tweet is Tweet => Boolean(tweet)),
@@ -1342,7 +1451,20 @@ function HomeView() {
   );
 
   useEffect(() => {
+    // Arriving via back/forward restores the feed the user left, so the
+    // scroll position (which may sit pages deep) still exists to return to.
+    // Any other arrival — nav clicks, tab switches — fetches fresh.
+    if (navigationType === "POP") {
+      const cached = feedCache.get(activeTab);
+      if (cached) {
+        setPage(cached.page);
+        setTweetById(cached.tweetById);
+        setTweetIds(cached.tweetIds);
+        return;
+      }
+    }
     void loadFeed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadFeed, refreshToken]);
 
   useEffect(() => {
