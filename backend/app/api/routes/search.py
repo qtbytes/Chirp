@@ -76,6 +76,7 @@ def search_posts(
             id=row["post"].id,
             content=row["post"].content,
             media_urls=row["post"].media_urls or [],
+            media_alts=row["post"].media_alts or [],
             created_at=row["post"].created_at,
             edited_at=row["post"].edited_at,
             author=UserSummary.model_validate(row["post"].author),

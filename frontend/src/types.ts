@@ -22,6 +22,8 @@ export type QuotedPost = {
   id: number;
   content: string;
   media_urls: string[];
+  /** Per-image alt text, parallel to media_urls ("" = none). */
+  media_alts: string[];
   created_at: string;
   author: UserSummary;
 };
@@ -41,6 +43,8 @@ export type Tweet = {
   id: number;
   content: string;
   media_urls: string[];
+  /** Per-image alt text, parallel to media_urls ("" = none). */
+  media_alts: string[];
   created_at: string;
   edited_at: string | null;
   author: UserSummary;
@@ -89,6 +93,8 @@ export type Comment = {
   parent_comment_id: number | null;
   content: string;
   media_urls: string[];
+  /** Per-image alt text, parallel to media_urls ("" = none). */
+  media_alts: string[];
   created_at: string;
   edited_at: string | null;
   author: UserSummary;

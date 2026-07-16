@@ -29,6 +29,7 @@ def update_post(
     user_id: int,
     content: str,
     media_urls: list[str] | None,
+    media_alts: list[str] | None = None,
     visibility: str | None = None,
 ) -> Post:
     """
@@ -54,6 +55,8 @@ def update_post(
 
     post.content = content
     post.media_urls = media_urls or None
+    # All-empty alt lists store as NULL, not [""] * n.
+    post.media_alts = media_alts if media_alts and any(media_alts) else None
     if (
         visibility is not None
         and post.reply_to_id is None

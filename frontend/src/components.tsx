@@ -68,7 +68,13 @@ import type {
 } from "./types";
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
-import { ACCEPTED_MEDIA, useMediaAttachment, type MediaAttachment } from "./useMediaAttachment";
+import {
+  ACCEPTED_MEDIA,
+  MAX_ALT_LENGTH,
+  useMediaAttachment,
+  type MediaAttachment,
+  type MediaItem,
+} from "./useMediaAttachment";
 
 /**
  * The signed-in user. Provided once by App so leaf components (the reply
@@ -216,7 +222,11 @@ function InlineImage({ url }: { url: string }) {
         />
       </button>
       {viewing ? (
-        <ImageLightbox images={[url]} initialIndex={0} onClose={() => setViewing(false)} />
+        <ImageLightbox
+          images={[{ src: url, alt: "" }]}
+          initialIndex={0}
+          onClose={() => setViewing(false)}
+        />
       ) : null}
     </>
   );
@@ -297,7 +307,10 @@ function VideoPlayer({ src, className }: { src: string; className: string }) {
   );
 }
 
-/** The lightbox caption: the image's file name from the URL path, if any. */
+/** One image in the fullscreen viewer: its resolved URL and alt text ("" = none). */
+export type LightboxImage = { src: string; alt: string };
+
+/** The image's file name from the URL path — used to name downloads. */
 function imageFileName(src: string): string {
   try {
     const path = new URL(src, window.location.href).pathname;
@@ -308,15 +321,15 @@ function imageFileName(src: string): string {
 }
 
 // Bluesky-style fullscreen image viewer: dark cover with share/download
-// top-left, close top-right and the file name bottom-left. Multi-image posts
-// get a dot indicator top-center plus prev/next arrows at the sides; the
-// arrow keys navigate and Escape (or a backdrop click) closes.
+// top-left, close top-right and the image's alt text bottom-left. Multi-image
+// posts get a dot indicator top-center plus prev/next arrows at the sides;
+// the arrow keys navigate and Escape (or a backdrop click) closes.
 export function ImageLightbox({
   images,
   initialIndex,
   onClose,
 }: {
-  images: string[];
+  images: LightboxImage[];
   initialIndex: number;
   onClose: () => void;
 }) {
@@ -324,7 +337,7 @@ export function ImageLightbox({
   const [menuOpen, setMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const src = images[index];
+  const { src, alt } = images[index];
   const fileName = imageFileName(src);
 
   useEffect(() => {
@@ -500,7 +513,7 @@ export function ImageLightbox({
       <img
         className="lightbox-image"
         src={src}
-        alt={fileName}
+        alt={alt}
         onClick={(event) => event.stopPropagation()}
       />
       {index > 0 ? (
@@ -529,19 +542,20 @@ export function ImageLightbox({
           <ChevronRight size={20} aria-hidden="true" />
         </button>
       ) : null}
-      {fileName ? <div className="lightbox-caption">{fileName}</div> : null}
+      {alt ? <div className="lightbox-caption">{alt}</div> : null}
     </div>
   );
 }
 
 // Renders a tweet/comment's uploaded media (media_urls), resolved to absolute
-// URLs. Images open in the fullscreen lightbox; videos play inline.
-// Lays out as a 2-column grid when there is more than one item.
-export function MediaGallery({ urls }: { urls: string[] }) {
+// URLs, with per-image alt text (media_alts). Images open in the fullscreen
+// lightbox; videos play inline. Lays out as a 2-column grid when there is
+// more than one item.
+export function MediaGallery({ urls, alts = [] }: { urls: string[]; alts?: string[] }) {
   const items = urls
-    .map((url) => resolveMediaUrl(url))
-    .filter((src): src is string => Boolean(src));
-  const images = items.filter((src) => !isVideoUrl(src));
+    .map((url, i) => ({ src: resolveMediaUrl(url), alt: alts[i] ?? "" }))
+    .filter((item): item is LightboxImage => Boolean(item.src));
+  const images = items.filter((item) => !isVideoUrl(item.src));
   const [viewing, setViewing] = useState<number | null>(null);
 
   if (items.length === 0) {
@@ -558,11 +572,11 @@ export function MediaGallery({ urls }: { urls: string[] }) {
     ) : null;
 
   if (items.length === 1) {
-    const src = items[0];
+    const item = items[0];
     return (
       <div className="tweet-media-gallery">
-        {isVideoUrl(src) ? (
-          <VideoPlayer src={src} className="tweet-media-video" />
+        {isVideoUrl(item.src) ? (
+          <VideoPlayer src={item.src} className="tweet-media-video" />
         ) : (
           <button
             type="button"
@@ -572,7 +586,7 @@ export function MediaGallery({ urls }: { urls: string[] }) {
               setViewing(0);
             }}
           >
-            <img className="tweet-media-image" src={src} alt="" loading="lazy" />
+            <img className="tweet-media-image" src={item.src} alt={item.alt} loading="lazy" />
           </button>
         )}
         {viewer}
@@ -583,22 +597,22 @@ export function MediaGallery({ urls }: { urls: string[] }) {
   return (
     <>
       <div className="media-grid" data-count={items.length}>
-        {items.map((src) =>
-          isVideoUrl(src) ? (
-            <div key={src} className="media-grid__cell">
-              <VideoPlayer src={src} className="media-grid__video" />
+        {items.map((item) =>
+          isVideoUrl(item.src) ? (
+            <div key={item.src} className="media-grid__cell">
+              <VideoPlayer src={item.src} className="media-grid__video" />
             </div>
           ) : (
             <button
-              key={src}
+              key={item.src}
               type="button"
               className="media-grid__cell"
               onClick={(event) => {
                 event.stopPropagation();
-                setViewing(images.indexOf(src));
+                setViewing(images.indexOf(item));
               }}
             >
-              <img src={src} alt="" loading="lazy" />
+              <img src={item.src} alt={item.alt} loading="lazy" />
             </button>
           ),
         )}
@@ -639,24 +653,98 @@ export function MediaButton({ attachment }: { attachment: MediaAttachment }) {
 
 // Composer preview: a thumbnail grid of the attached images (each removable),
 // a spinner while uploads are in flight, plus any upload error.
+// Bluesky-style "Add alt text" dialog for one attached image: a preview of
+// the picture above a description field with a live character budget.
+function AltTextModal({
+  src,
+  initialAlt,
+  onSave,
+  onClose,
+}: {
+  src: string;
+  initialAlt: string;
+  onSave: (alt: string) => void;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState(initialAlt);
+
+  function save() {
+    onSave(value.trim());
+    onClose();
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClose();
+      }}
+    >
+      <section
+        className="modal alt-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add alt text"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="alt-modal-head">
+          <h2>Add alt text</h2>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close alt text editor"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+        <div className="alt-modal-image">
+          <img src={src} alt="" />
+        </div>
+        <label className="alt-modal-label" htmlFor="alt-text-input">
+          Descriptive alt text
+        </label>
+        <textarea
+          id="alt-text-input"
+          className="alt-modal-input"
+          placeholder="Alt text"
+          maxLength={MAX_ALT_LENGTH}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+        />
+        <div className="alt-modal-actions">
+          <span className="alt-modal-count" aria-hidden="true">
+            {MAX_ALT_LENGTH - value.length}
+          </span>
+          <button type="button" className="primary-button alt-modal-save" onClick={save}>
+            Save
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
-  if (
-    attachment.mediaUrls.length === 0 &&
-    !attachment.uploading &&
-    !attachment.error
-  ) {
+  const [altEditing, setAltEditing] = useState<MediaItem | null>(null);
+
+  if (attachment.items.length === 0 && !attachment.uploading && !attachment.error) {
     return null;
   }
 
-  const count = attachment.mediaUrls.length;
+  const count = attachment.items.length;
 
-  const removeButton = (url: string) => (
+  const removeButton = (item: MediaItem) => (
     <button
       type="button"
       className="composer-media-remove"
       onClick={(event) => {
         event.stopPropagation();
-        attachment.remove(url);
+        attachment.remove(item.url);
       }}
       aria-label="Remove media"
     >
@@ -664,40 +752,58 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
     </button>
   );
 
+  // Images only: <video> carries no alt attribute.
+  const altButton = (item: MediaItem) =>
+    isVideoUrl(item.url) ? null : (
+      <button
+        type="button"
+        className="composer-media-alt"
+        onClick={(event) => {
+          event.stopPropagation();
+          setAltEditing(item);
+        }}
+        aria-label={item.alt ? "Edit alt text" : "Add alt text"}
+      >
+        {item.alt ? "ALT" : "+ ALT"}
+      </button>
+    );
+
   return (
     <div className="composer-media">
       {count === 1 ? (
         <div className="composer-media-item">
-          {resolveMediaUrl(attachment.mediaUrls[0]) ? (
-            isVideoUrl(attachment.mediaUrls[0]) ? (
+          {resolveMediaUrl(attachment.items[0].url) ? (
+            isVideoUrl(attachment.items[0].url) ? (
               <VideoPlayer
-                src={resolveMediaUrl(attachment.mediaUrls[0])!}
+                src={resolveMediaUrl(attachment.items[0].url)!}
                 className="composer-media-image"
               />
             ) : (
               <img
                 className="composer-media-image"
-                src={resolveMediaUrl(attachment.mediaUrls[0])!}
-                alt="Attached preview"
+                src={resolveMediaUrl(attachment.items[0].url)!}
+                alt={attachment.items[0].alt || "Attached preview"}
               />
             )
           ) : null}
-          {removeButton(attachment.mediaUrls[0])}
+          {altButton(attachment.items[0])}
+          {removeButton(attachment.items[0])}
         </div>
       ) : count > 1 ? (
         <div className="media-grid" data-count={count}>
-          {attachment.mediaUrls.map((url) => {
-            const src = resolveMediaUrl(url);
+          {attachment.items.map((item) => {
+            const src = resolveMediaUrl(item.url);
             return (
-              <div className="media-grid__cell" key={url}>
+              <div className="media-grid__cell" key={item.url}>
                 {src ? (
-                  isVideoUrl(url) ? (
+                  isVideoUrl(item.url) ? (
                     <VideoPlayer src={src} className="media-grid__video" />
                   ) : (
-                    <img src={src} alt="Attached preview" />
+                    <img src={src} alt={item.alt || "Attached preview"} />
                   )
                 ) : null}
-                {removeButton(url)}
+                {altButton(item)}
+                {removeButton(item)}
               </div>
             );
           })}
@@ -710,6 +816,14 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
         </div>
       ) : null}
       {attachment.error ? <p className="form-error">{attachment.error}</p> : null}
+      {altEditing ? (
+        <AltTextModal
+          src={resolveMediaUrl(altEditing.url) ?? altEditing.url}
+          initialAlt={altEditing.alt}
+          onSave={(alt) => attachment.setAlt(altEditing.url, alt)}
+          onClose={() => setAltEditing(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1002,6 +1116,7 @@ export function ConfirmDialog({
 export function PostEditor({
   initialContent,
   initialMedia = [],
+  initialAlts = [],
   maxLength,
   saving,
   onSave,
@@ -1011,9 +1126,10 @@ export function PostEditor({
 }: {
   initialContent: string;
   initialMedia?: string[];
+  initialAlts?: string[];
   maxLength: number;
   saving: boolean;
-  onSave: (content: string, mediaUrls: string[]) => void;
+  onSave: (content: string, mediaUrls: string[], mediaAlts: string[]) => void;
   onCancel: () => void;
   // When both are given (tweet edit), the editor shows an audience selector.
   // Omitted for comments, which have no audience of their own.
@@ -1021,7 +1137,7 @@ export function PostEditor({
   onVisibilityChange?: (value: TweetVisibility) => void;
 }) {
   const [value, setValue] = useState(initialContent);
-  const media = useMediaAttachment(initialMedia);
+  const media = useMediaAttachment(initialMedia, initialAlts);
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
     value,
     setValue,
@@ -1037,7 +1153,7 @@ export function PostEditor({
       onSubmit={(event) => {
         event.preventDefault();
         if (canSave) {
-          onSave(value.trim(), media.mediaUrls);
+          onSave(value.trim(), media.mediaUrls, media.mediaAlts);
         }
       }}
     >
@@ -1129,7 +1245,9 @@ export function QuotedPostCard({
           <RichContent text={post.content} />
         </div>
       ) : null}
-      {post.media_urls.length > 0 ? <MediaGallery urls={post.media_urls} /> : null}
+      {post.media_urls.length > 0 ? (
+        <MediaGallery urls={post.media_urls} alts={post.media_alts} />
+      ) : null}
     </div>
   );
 }
@@ -1166,7 +1284,12 @@ export function QuoteComposer({
     setPosting(true);
     setError("");
     try {
-      const tweet = await createTweet(content.trim(), media.mediaUrls, quoted.id);
+      const tweet = await createTweet(
+        content.trim(),
+        media.mediaUrls,
+        media.mediaAlts,
+        quoted.id,
+      );
       onQuoted?.(tweet);
       onClose();
     } catch (err) {
@@ -1259,7 +1382,7 @@ export function ReplyComposer({
   onClose,
 }: {
   target: ReplyTarget;
-  onSubmit: (content: string, mediaUrls: string[]) => Promise<void>;
+  onSubmit: (content: string, mediaUrls: string[], mediaAlts: string[]) => Promise<void>;
   onClose: () => void;
 }) {
   const currentUser = useCurrentUser();
@@ -1291,7 +1414,7 @@ export function ReplyComposer({
     setPosting(true);
     setError("");
     try {
-      await onSubmit(content.trim(), media.mediaUrls);
+      await onSubmit(content.trim(), media.mediaUrls, media.mediaAlts);
       onClose();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1352,7 +1475,7 @@ export function ReplyComposer({
                 </p>
               ) : null}
               {target.media_urls.length > 0 ? (
-                <MediaGallery urls={target.media_urls} />
+                <MediaGallery urls={target.media_urls} alts={target.media_alts} />
               ) : null}
               <p className="reply-target-replying">
                 Replying to <span className="reply-mention">@{target.author.username}</span>
@@ -1711,11 +1834,11 @@ export function TweetCard({
     }
   }
 
-  async function saveEdit(content: string, mediaUrls: string[]) {
+  async function saveEdit(content: string, mediaUrls: string[], mediaAlts: string[]) {
     setSaving(true);
     setError("");
     try {
-      const updated = await editTweet(tweet.id, content, mediaUrls, editVisibility);
+      const updated = await editTweet(tweet.id, content, mediaUrls, mediaAlts, editVisibility);
       onTweetPatch(tweet.id, {
         content: updated.content,
         media_urls: updated.media_urls,
@@ -1784,8 +1907,8 @@ export function TweetCard({
 
   // Errors propagate to ReplyComposer, which owns the draft and shows them
   // inline rather than on the card behind the modal.
-  async function submitComment(content: string, mediaUrls: string[]) {
-    await createComment(tweet.id, content, mediaUrls);
+  async function submitComment(content: string, mediaUrls: string[], mediaAlts: string[]) {
+    await createComment(tweet.id, content, mediaUrls, mediaAlts);
     onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
   }
 
@@ -1890,6 +2013,7 @@ export function TweetCard({
           <PostEditor
             initialContent={tweet.content}
             initialMedia={tweet.media_urls}
+            initialAlts={tweet.media_alts}
             maxLength={280}
             saving={saving}
             onSave={saveEdit}
@@ -1900,7 +2024,9 @@ export function TweetCard({
         ) : (
           <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
         )}
-        {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
+        {tweet.media_urls.length > 0 ? (
+          <MediaGallery urls={tweet.media_urls} alts={tweet.media_alts} />
+        ) : null}
         {tweet.quoted_post ? <QuotedPostCard post={tweet.quoted_post} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <footer className="tweet-actions">
@@ -2049,11 +2175,11 @@ export function CommentCard({
     }
   }
 
-  async function saveEdit(content: string, mediaUrls: string[]) {
+  async function saveEdit(content: string, mediaUrls: string[], mediaAlts: string[]) {
     setSaving(true);
     setError("");
     try {
-      const updated = await editComment(localComment.id, content, mediaUrls);
+      const updated = await editComment(localComment.id, content, mediaUrls, mediaAlts);
       setLocalComment((value) => ({
         ...value,
         content: updated.content,
@@ -2106,8 +2232,8 @@ export function CommentCard({
   }
 
   // Errors propagate to ReplyComposer, which shows them inside the modal.
-  async function submitReply(content: string, mediaUrls: string[]) {
-    await replyToComment(localComment.id, content, mediaUrls);
+  async function submitReply(content: string, mediaUrls: string[], mediaAlts: string[]) {
+    await replyToComment(localComment.id, content, mediaUrls, mediaAlts);
     setLocalComment((value) => ({
       ...value,
       comment_count: value.comment_count + 1,
@@ -2214,6 +2340,7 @@ export function CommentCard({
           <PostEditor
             initialContent={localComment.content}
             initialMedia={localComment.media_urls}
+            initialAlts={localComment.media_alts}
             maxLength={1000}
             saving={saving}
             onSave={saveEdit}
@@ -2225,7 +2352,9 @@ export function CommentCard({
             enablePreview={localComment.media_urls.length === 0}
           />
         )}
-        {localComment.media_urls.length > 0 ? <MediaGallery urls={localComment.media_urls} /> : null}
+        {localComment.media_urls.length > 0 ? (
+          <MediaGallery urls={localComment.media_urls} alts={localComment.media_alts} />
+        ) : null}
         {localComment.quoted_post ? (
           <QuotedPostCard post={localComment.quoted_post} />
         ) : null}

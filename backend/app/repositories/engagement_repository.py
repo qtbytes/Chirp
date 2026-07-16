@@ -123,6 +123,7 @@ def create_comment(
     content: str,
     parent_comment_id: int | None = None,
     media_urls: list[str] | None = None,
+    media_alts: list[str] | None = None,
 ) -> tuple[Post, User]:
     """
     Create a reply post under a tweet (optionally under a parent comment) and
@@ -164,6 +165,8 @@ def create_comment(
         user_id=user_id,
         content=content,
         media_urls=media_urls or None,
+        # All-empty alt lists store as NULL, not [""] * n.
+        media_alts=media_alts if media_alts and any(media_alts) else None,
         reply_to_id=reply_to_id,
         root_id=tweet_id,
     )

@@ -19,6 +19,7 @@ def serialize_quoted_post(quoted: Post | None) -> QuotedPostOut | None:
         id=quoted.id,
         content=quoted.content,
         media_urls=quoted.media_urls or [],
+        media_alts=quoted.media_alts or [],
         created_at=quoted.created_at,
         author=UserSummary.model_validate(quoted.author),
     )

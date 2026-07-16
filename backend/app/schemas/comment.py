@@ -1,6 +1,10 @@
 from datetime import datetime
 
-from app.schemas.media import MAX_MEDIA_ITEMS, validate_media_urls
+from app.schemas.media import (
+    MAX_MEDIA_ITEMS,
+    normalize_media_alts,
+    validate_media_urls,
+)
 from app.schemas.user import UserSummary
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -8,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 class CommentCreate(BaseModel):
     content: str = Field(default="", max_length=1000)
     media_urls: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
+    # Per-image alt text, parallel to ``media_urls``; shorter lists pad with "".
+    media_alts: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
 
     @field_validator("media_urls")
     @classmethod
@@ -18,6 +24,7 @@ class CommentCreate(BaseModel):
     def _require_content_or_media(self) -> "CommentCreate":
         if not self.content.strip() and not self.media_urls:
             raise ValueError("comment must have content or media")
+        self.media_alts = normalize_media_alts(self.media_alts, len(self.media_urls))
         return self
 
 
@@ -27,6 +34,7 @@ class CommentOut(BaseModel):
     parent_comment_id: int | None = None
     content: str
     media_urls: list[str] = Field(default_factory=list)
+    media_alts: list[str] = Field(default_factory=list)
     created_at: datetime
     edited_at: datetime | None = None
     author: UserSummary

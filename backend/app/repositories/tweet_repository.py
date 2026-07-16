@@ -45,6 +45,7 @@ def create_tweet(
     author_id: int,
     content: str,
     media_urls: list[str] | None = None,
+    media_alts: list[str] | None = None,
     quoted_post_id: int | None = None,
     visibility: str | None = DEFAULT_VISIBILITY,
 ) -> Post | None:
@@ -83,6 +84,8 @@ def create_tweet(
         user_id=author_id,
         content=content,
         media_urls=media_urls or None,
+        # All-empty alt lists store as NULL, not [""] * n.
+        media_alts=media_alts if media_alts and any(media_alts) else None,
         quoted_post_id=quoted_post_id,
         visibility=visibility,
     )

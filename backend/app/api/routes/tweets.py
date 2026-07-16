@@ -167,6 +167,7 @@ def create_tweet(
             author_id=current_user_id,
             content=payload.content,
             media_urls=payload.media_urls,
+            media_alts=payload.media_alts,
             quoted_post_id=payload.quoted_post_id,
             visibility=payload.visibility,
         )
@@ -241,6 +242,7 @@ def get_tweet(
         id=tweet.id,
         content=tweet.content,
         media_urls=tweet.media_urls or [],
+        media_alts=tweet.media_alts or [],
         created_at=tweet.created_at,
         edited_at=tweet.edited_at,
         author=UserSummary.model_validate(tweet.author),
@@ -279,6 +281,7 @@ def edit_tweet(
             user_id=current_user_id,
             content=payload.content,
             media_urls=payload.media_urls,
+            media_alts=payload.media_alts,
             visibility=payload.visibility,
         )
     except ValueError:
@@ -305,6 +308,7 @@ def edit_tweet(
         id=tweet.id,
         content=tweet.content,
         media_urls=tweet.media_urls or [],
+        media_alts=tweet.media_alts or [],
         created_at=tweet.created_at,
         edited_at=tweet.edited_at,
         author=UserSummary.model_validate(tweet.author),

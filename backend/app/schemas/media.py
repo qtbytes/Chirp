@@ -12,12 +12,29 @@ MEDIA_URL_PATTERN = re.compile(
 # Maximum images allowed on a single tweet/comment.
 MAX_MEDIA_ITEMS = 4
 
+# Maximum length of one image's alt text (matches Bluesky's limit).
+MAX_ALT_LENGTH = 2000
+
 
 def validate_media_urls(value: list[str]) -> list[str]:
     for url in value:
         if not MEDIA_URL_PATTERN.fullmatch(url):
             raise ValueError("invalid media url")
     return value
+
+
+def normalize_media_alts(alts: list[str], media_count: int) -> list[str]:
+    """
+    Normalize per-image alt text against the post's media list: alts beyond the
+    media count are rejected, missing entries pad with "" so the stored list is
+    always parallel to ``media_urls``.
+    """
+    if len(alts) > media_count:
+        raise ValueError("more alt texts than media items")
+    for alt in alts:
+        if len(alt) > MAX_ALT_LENGTH:
+            raise ValueError(f"alt text must be {MAX_ALT_LENGTH} characters or fewer")
+    return [alt.strip() for alt in alts] + [""] * (media_count - len(alts))
 
 
 class MediaUploadOut(BaseModel):

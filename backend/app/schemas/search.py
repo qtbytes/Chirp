@@ -16,6 +16,7 @@ class SearchPostOut(BaseModel):
     id: int
     content: str
     media_urls: list[str] = Field(default_factory=list)
+    media_alts: list[str] = Field(default_factory=list)
     created_at: datetime
     edited_at: datetime | None = None
     author: UserSummary

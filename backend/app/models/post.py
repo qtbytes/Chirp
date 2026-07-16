@@ -44,6 +44,9 @@ class Post(Base):
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     media_urls: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    # Per-image alt text, parallel to ``media_urls`` (same length, "" = none).
+    # NULL for posts without media or written before alt support existed.
+    media_alts: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

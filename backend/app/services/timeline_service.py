@@ -264,6 +264,7 @@ class TimelineService:
             id=tweet.id,
             content=tweet.content,
             media_urls=tweet.media_urls or [],
+            media_alts=tweet.media_alts or [],
             created_at=tweet.created_at,
             edited_at=tweet.edited_at,
             author=UserSummary.model_validate(tweet.author),

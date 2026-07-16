@@ -844,6 +844,93 @@ button.rail-link:disabled:hover {
   background: rgba(15, 20, 25, 0.9);
 }
 
+/* Bluesky-style "+ ALT" badge on composer image previews (top-left). */
+.composer-media-alt {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(15, 20, 25, 0.75);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  z-index: 1;
+}
+
+.composer-media-alt:hover {
+  background: rgba(15, 20, 25, 0.9);
+}
+
+/* The "Add alt text" dialog opened by the badge. */
+.alt-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+
+.alt-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.alt-modal-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.alt-modal-image {
+  border-radius: 12px;
+  background: var(--soft);
+  overflow: hidden;
+}
+
+.alt-modal-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.alt-modal-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.alt-modal-input {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--input);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.4;
+}
+
+.alt-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.alt-modal-count {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.alt-modal-save {
+  flex: 1;
+}
+
 .composer-media .media-grid {
   margin-top: 8px;
 }

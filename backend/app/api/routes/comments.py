@@ -95,6 +95,7 @@ def get_comment(
         parent_comment_id=comment.parent_comment_id,
         content=comment.content,
         media_urls=comment.media_urls or [],
+        media_alts=comment.media_alts or [],
         created_at=comment.created_at,
         edited_at=comment.edited_at,
         author=UserSummary.model_validate(comment.author),
@@ -226,6 +227,7 @@ def reply_to_comment(
             parent_comment_id=comment_id,
             content=payload.content,
             media_urls=payload.media_urls,
+            media_alts=payload.media_alts,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -239,6 +241,7 @@ def reply_to_comment(
         parent_comment_id=comment.parent_comment_id,
         content=comment.content,
         media_urls=comment.media_urls or [],
+        media_alts=comment.media_alts or [],
         created_at=comment.created_at,
         edited_at=comment.edited_at,
         author=UserSummary.model_validate(author),
@@ -271,6 +274,7 @@ def edit_comment(
             user_id=current_user_id,
             content=payload.content,
             media_urls=payload.media_urls,
+            media_alts=payload.media_alts,
         )
     except ValueError:
         raise HTTPException(
@@ -298,6 +302,7 @@ def edit_comment(
         parent_comment_id=comment.parent_comment_id,
         content=comment.content,
         media_urls=comment.media_urls or [],
+        media_alts=comment.media_alts or [],
         created_at=comment.created_at,
         edited_at=comment.edited_at,
         author=UserSummary.model_validate(comment.author),

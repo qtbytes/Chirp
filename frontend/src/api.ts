@@ -233,6 +233,7 @@ export function uploadMedia(file: File): Promise<{ url: string }> {
 export function createTweet(
   content: string,
   mediaUrls: string[] = [],
+  mediaAlts: string[] = [],
   quotedPostId?: number,
   visibility: TweetVisibility = "public",
 ): Promise<Tweet> {
@@ -241,6 +242,7 @@ export function createTweet(
     body: JSON.stringify({
       content,
       media_urls: mediaUrls,
+      media_alts: mediaAlts,
       visibility,
       ...(quotedPostId != null ? { quoted_post_id: quotedPostId } : {}),
     }),
@@ -251,6 +253,7 @@ export function editTweet(
   tweetId: number,
   content: string,
   mediaUrls: string[] = [],
+  mediaAlts: string[] = [],
   visibility?: TweetVisibility,
 ): Promise<Tweet> {
   return request<Tweet>(`/tweets/${tweetId}`, {
@@ -258,6 +261,7 @@ export function editTweet(
     body: JSON.stringify({
       content,
       media_urls: mediaUrls,
+      media_alts: mediaAlts,
       // Omitted server-side means "leave the audience unchanged".
       ...(visibility != null ? { visibility } : {}),
     }),
@@ -283,10 +287,11 @@ export function createComment(
   tweetId: number,
   content: string,
   mediaUrls: string[] = [],
+  mediaAlts: string[] = [],
 ): Promise<Comment> {
   return request<Comment>(`/tweets/${tweetId}/comments`, {
     method: "POST",
-    body: JSON.stringify({ content, media_urls: mediaUrls }),
+    body: JSON.stringify({ content, media_urls: mediaUrls, media_alts: mediaAlts }),
   });
 }
 
@@ -303,10 +308,11 @@ export function editComment(
   commentId: number,
   content: string,
   mediaUrls: string[] = [],
+  mediaAlts: string[] = [],
 ): Promise<Comment> {
   return request<Comment>(`/comments/${commentId}`, {
     method: "PATCH",
-    body: JSON.stringify({ content, media_urls: mediaUrls }),
+    body: JSON.stringify({ content, media_urls: mediaUrls, media_alts: mediaAlts }),
   });
 }
 
@@ -329,10 +335,11 @@ export function replyToComment(
   commentId: number,
   content: string,
   mediaUrls: string[] = [],
+  mediaAlts: string[] = [],
 ): Promise<Comment> {
   return request<Comment>(`/comments/${commentId}/comments`, {
     method: "POST",
-    body: JSON.stringify({ content, media_urls: mediaUrls }),
+    body: JSON.stringify({ content, media_urls: mediaUrls, media_alts: mediaAlts }),
   });
 }
 

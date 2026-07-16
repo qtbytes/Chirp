@@ -2,7 +2,11 @@ from datetime import datetime
 from typing import Literal
 
 from app.models.post import DEFAULT_VISIBILITY, TweetVisibility
-from app.schemas.media import MAX_MEDIA_ITEMS, validate_media_urls
+from app.schemas.media import (
+    MAX_MEDIA_ITEMS,
+    normalize_media_alts,
+    validate_media_urls,
+)
 from app.schemas.user import UserSummary
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -10,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 class TweetCreate(BaseModel):
     content: str = Field(default="", max_length=280)
     media_urls: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
+    # Per-image alt text, parallel to ``media_urls``; shorter lists pad with "".
+    media_alts: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
     quoted_post_id: int | None = None
     # Audience for this tweet. Omitted (``None``) means "use the default" on
     # create and "leave it unchanged" on edit -- so a plain content edit never
@@ -31,6 +37,7 @@ class TweetCreate(BaseModel):
             and self.quoted_post_id is None
         ):
             raise ValueError("tweet must have content or media")
+        self.media_alts = normalize_media_alts(self.media_alts, len(self.media_urls))
         return self
 
 
@@ -40,6 +47,7 @@ class QuotedPostOut(BaseModel):
     id: int
     content: str
     media_urls: list[str] = Field(default_factory=list)
+    media_alts: list[str] = Field(default_factory=list)
     created_at: datetime
     author: UserSummary
 
@@ -50,6 +58,7 @@ class TweetOut(BaseModel):
     id: int
     content: str
     media_urls: list[str] = Field(default_factory=list)
+    media_alts: list[str] = Field(default_factory=list)
     created_at: datetime
     edited_at: datetime | None = None
     author: UserSummary

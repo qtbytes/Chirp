@@ -1836,7 +1836,13 @@ function Composer({
     setPosting(true);
     setError("");
     try {
-      const tweet = await createTweet(content.trim(), media.mediaUrls, undefined, visibility);
+      const tweet = await createTweet(
+        content.trim(),
+        media.mediaUrls,
+        media.mediaAlts,
+        undefined,
+        visibility,
+      );
       setContent("");
       media.clear();
       setVisibility("public");
@@ -1910,13 +1916,14 @@ function TweetDetail({
     setEditing(true);
   }
 
-  async function saveEdit(content: string, mediaUrls: string[]) {
+  async function saveEdit(content: string, mediaUrls: string[], mediaAlts: string[]) {
     setSavingEdit(true);
     try {
-      const updated = await editTweet(tweet.id, content, mediaUrls, editVisibility);
+      const updated = await editTweet(tweet.id, content, mediaUrls, mediaAlts, editVisibility);
       onTweetPatch(tweet.id, {
         content: updated.content,
         media_urls: updated.media_urls,
+        media_alts: updated.media_alts,
         edited_at: updated.edited_at,
         visibility: updated.visibility,
       });
@@ -2055,8 +2062,8 @@ function TweetDetail({
   }
 
   // Errors propagate to ReplyComposer, which shows them inside the modal.
-  async function submitDetailComment(content: string, mediaUrls: string[]) {
-    await createComment(tweet.id, content, mediaUrls);
+  async function submitDetailComment(content: string, mediaUrls: string[], mediaAlts: string[]) {
+    await createComment(tweet.id, content, mediaUrls, mediaAlts);
     onTweetPatch(tweet.id, { comment_count: tweet.comment_count + 1 });
     await loadTweetComments();
   }
@@ -2099,6 +2106,7 @@ function TweetDetail({
           <PostEditor
             initialContent={tweet.content}
             initialMedia={tweet.media_urls}
+            initialAlts={tweet.media_alts}
             maxLength={280}
             saving={savingEdit}
             onSave={saveEdit}
@@ -2109,7 +2117,9 @@ function TweetDetail({
         ) : (
           <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
         )}
-        {tweet.media_urls.length > 0 ? <MediaGallery urls={tweet.media_urls} /> : null}
+        {tweet.media_urls.length > 0 ? (
+          <MediaGallery urls={tweet.media_urls} alts={tweet.media_alts} />
+        ) : null}
         {tweet.quoted_post ? <QuotedPostCard post={tweet.quoted_post} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
         <div className="detail-timestamp">

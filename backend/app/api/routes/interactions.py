@@ -143,6 +143,7 @@ def create_comment(
             tweet_id=tweet_id,
             content=payload.content,
             media_urls=payload.media_urls,
+            media_alts=payload.media_alts,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -156,6 +157,7 @@ def create_comment(
         parent_comment_id=comment.parent_comment_id,
         content=comment.content,
         media_urls=comment.media_urls or [],
+        media_alts=comment.media_alts or [],
         created_at=comment.created_at,
         edited_at=comment.edited_at,
         author=UserSummary.model_validate(author),
@@ -206,6 +208,7 @@ def list_comments(
             parent_comment_id=comment.parent_comment_id,
             content=comment.content,
             media_urls=comment.media_urls or [],
+            media_alts=comment.media_alts or [],
             created_at=comment.created_at,
             edited_at=comment.edited_at,
             author=UserSummary.model_validate(author),
