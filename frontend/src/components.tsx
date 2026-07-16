@@ -781,7 +781,14 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
         }}
         aria-label={item.alt ? "Edit alt text" : "Add alt text"}
       >
-        {item.alt ? "ALT" : "+ ALT"}
+        {item.alt ? (
+          <>
+            <Check size={14} aria-hidden="true" />
+            <span>ALT</span>
+          </>
+        ) : (
+          "+ ALT"
+        )}
       </button>
     );
 

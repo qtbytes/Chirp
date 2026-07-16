@@ -862,11 +862,15 @@ button.rail-link:disabled:hover {
   background: rgba(15, 20, 25, 0.9);
 }
 
-/* Bluesky-style "+ ALT" badge on composer image previews (top-left). */
+/* Bluesky-style "+ ALT" badge on composer image previews (top-left); once
+   alt text is set it shows a checkmark before the label. */
 .composer-media-alt {
   position: absolute;
   top: 8px;
   left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 6px 10px;
   border: 0;
   border-radius: 8px;
