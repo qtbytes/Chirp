@@ -1390,6 +1390,29 @@ button.media-grid__cell {
   right: calc(16px + env(safe-area-inset-right, 0px));
 }
 
+/* The "..." menu opens below its top-left trigger (the shared dropdown
+   style anchors right, this one hangs left). */
+.lightbox-dropdown {
+  right: auto;
+  left: 0;
+  /* The anchor (a lone 44px button) is narrower than the labels; without an
+     explicit width the absolutely-positioned menu shrinks to it and clips. */
+  width: max-content;
+  white-space: nowrap;
+}
+
+.lightbox-toast {
+  position: absolute;
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 14px;
+}
+
 /* Compact dark frosted circles, like Bluesky's arrows. */
 .lightbox-nav {
   position: absolute;

@@ -26,6 +26,7 @@ import {
   Lock,
   MessageCircle,
   MoreHorizontal,
+  MoreVertical,
   Pencil,
   Repeat2,
   Share2,
@@ -320,6 +321,7 @@ export function ImageLightbox({
   onClose: () => void;
 }) {
   const [index, setIndex] = useState(initialIndex);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const src = images[index];
@@ -349,8 +351,17 @@ export function ImageLightbox({
   }, []);
 
   useEffect(() => {
-    setLinkCopied(false);
+    setMenuOpen(false);
   }, [index]);
+
+  // "Link copied" confirmation fades on its own (the menu is gone by then).
+  useEffect(() => {
+    if (!linkCopied) {
+      return;
+    }
+    const timer = setTimeout(() => setLinkCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [linkCopied]);
 
   async function shareImage() {
     const url = new URL(src, window.location.href).href;
@@ -420,6 +431,10 @@ export function ImageLightbox({
       aria-label="Image viewer"
       onClick={(event) => {
         event.stopPropagation();
+        if (menuOpen) {
+          setMenuOpen(false);
+          return;
+        }
         onClose();
       }}
       onTouchStart={handleTouchStart}
@@ -429,26 +444,41 @@ export function ImageLightbox({
         <button
           type="button"
           className="lightbox-button"
-          onClick={() => void shareImage()}
-          aria-label="Share image"
-          title={linkCopied ? "Link copied" : "Share image"}
+          onClick={() => setMenuOpen((value) => !value)}
+          aria-label="Image options"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
         >
-          {linkCopied ? (
-            <Check size={20} aria-hidden="true" />
-          ) : (
-            <Share2 size={20} aria-hidden="true" />
-          )}
+          <MoreVertical size={20} aria-hidden="true" />
         </button>
-        <button
-          type="button"
-          className="lightbox-button"
-          onClick={() => void downloadImage()}
-          aria-label="Download image"
-          title="Download image"
-        >
-          <Download size={20} aria-hidden="true" />
-        </button>
+        {menuOpen ? (
+          <div className="post-menu-dropdown lightbox-dropdown" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                void shareImage();
+              }}
+            >
+              <Share2 size={16} aria-hidden="true" />
+              <span>Share image</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                void downloadImage();
+              }}
+            >
+              <Download size={16} aria-hidden="true" />
+              <span>Download image</span>
+            </button>
+          </div>
+        ) : null}
       </div>
+      {linkCopied ? <div className="lightbox-toast">Link copied</div> : null}
       <button
         type="button"
         className="lightbox-button lightbox-close"
