@@ -336,6 +336,7 @@ export function ImageLightbox({
   const [index, setIndex] = useState(initialIndex);
   const [menuOpen, setMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const { src, alt } = images[index];
   const fileName = imageFileName(src);
@@ -365,6 +366,7 @@ export function ImageLightbox({
 
   useEffect(() => {
     setMenuOpen(false);
+    setCaptionExpanded(false);
   }, [index]);
 
   // "Link copied" confirmation fades on its own (the menu is gone by then).
@@ -542,7 +544,22 @@ export function ImageLightbox({
           <ChevronRight size={20} aria-hidden="true" />
         </button>
       ) : null}
-      {alt ? <div className="lightbox-caption">{alt}</div> : null}
+      {alt ? (
+        // Clicking the caption never closes the viewer (so the text can be
+        // selected and copied); it toggles the two-line clamp for long alts.
+        <div
+          className={captionExpanded ? "lightbox-caption expanded" : "lightbox-caption"}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (window.getSelection()?.toString()) {
+              return; // The click ended a text selection — leave it alone.
+            }
+            setCaptionExpanded((value) => !value);
+          }}
+        >
+          {alt}
+        </div>
+      ) : null}
     </div>
   );
 }

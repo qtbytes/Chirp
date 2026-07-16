@@ -1576,6 +1576,19 @@ button.media-grid__cell {
   color: #fff;
   font-size: 15px;
   overflow-wrap: anywhere;
+  /* Long alts clamp to two lines; clicking the bar toggles the full text. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: text;
+}
+
+.lightbox-caption.expanded {
+  display: block;
+  max-height: 50vh;
+  overflow-y: auto;
 }
 
 .tweet-body footer {
