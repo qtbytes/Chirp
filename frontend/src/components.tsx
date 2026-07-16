@@ -483,7 +483,7 @@ export function ImageLightbox({
           }}
           aria-label="Previous image"
         >
-          <ChevronLeft size={24} aria-hidden="true" />
+          <ChevronLeft size={20} aria-hidden="true" />
         </button>
       ) : null}
       {index < images.length - 1 ? (
@@ -496,7 +496,7 @@ export function ImageLightbox({
           }}
           aria-label="Next image"
         >
-          <ChevronRight size={24} aria-hidden="true" />
+          <ChevronRight size={20} aria-hidden="true" />
         </button>
       ) : null}
       {fileName ? <div className="lightbox-caption">{fileName}</div> : null}
