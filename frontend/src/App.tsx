@@ -85,6 +85,7 @@ import {
   CurrentUserProvider,
   MediaButton,
   MediaGallery,
+  ComposerHighlight,
   MediaPreview,
   PostEditor,
   PostMenu,
@@ -1858,15 +1859,18 @@ function Composer({
     <form className="composer" onSubmit={handleSubmit}>
       <Avatar user={currentUser} />
       <div className="composer-body">
-        <textarea
-          {...fieldProps}
-          value={content}
-          rows={1}
-          maxLength={280}
-          placeholder="What is happening?"
-          aria-label="Tweet content"
-          autoFocus={autoFocus}
-        />
+        <div className="composer-input">
+          <ComposerHighlight text={content} />
+          <textarea
+            {...fieldProps}
+            value={content}
+            rows={1}
+            maxLength={280}
+            placeholder="What is happening?"
+            aria-label="Tweet content"
+            autoFocus={autoFocus}
+          />
+        </div>
         <MediaPreview attachment={media} />
         {error ? <p className="form-error">{error}</p> : null}
       </div>

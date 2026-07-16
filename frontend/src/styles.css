@@ -191,7 +191,10 @@ input {
   padding: 0 14px;
 }
 
-textarea {
+/* .composer-highlight is the URL-coloring backdrop layer rendered behind a
+   composer textarea: it must share every text metric with the textarea. */
+textarea,
+.composer-highlight {
   min-height: 110px;
   resize: vertical;
   padding: 14px 0;
@@ -199,6 +202,47 @@ textarea {
   border-radius: 0;
   font-size: 20px;
   line-height: 1.4;
+}
+
+/* URL highlighting in composers: the textarea's own glyphs go transparent
+   (the caret stays) and the backdrop re-renders the draft with links colored,
+   Twitter-style. The links are decoration only — the layer takes no clicks. */
+.composer-input {
+  position: relative;
+}
+
+.composer-input textarea {
+  /* Block, so no inline baseline gap misaligns the backdrop's box. */
+  display: block;
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ink);
+}
+
+.composer-input textarea::placeholder {
+  color: var(--muted);
+}
+
+/* A translucent selection keeps the backdrop text readable while selected. */
+.composer-input textarea::selection {
+  background: rgba(29, 155, 240, 0.3);
+}
+
+.composer-highlight {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  color: var(--ink);
+}
+
+.composer-highlight-url {
+  color: var(--accent);
 }
 
 input:focus,
@@ -1324,16 +1368,20 @@ button.rail-link:disabled:hover {
   padding: 0 16px 16px;
 }
 
-.quote-composer-form textarea {
+.quote-composer-form textarea,
+.quote-composer-form .composer-highlight {
   width: 100%;
   min-height: 90px;
   resize: vertical;
   border: none;
   outline: none;
   background: transparent;
-  color: inherit;
   font: inherit;
   font-size: 1.1rem;
+}
+
+.quote-composer-form .composer-highlight {
+  min-height: 0;
 }
 
 .quote-composer-form .quoted-post {
@@ -2340,7 +2388,8 @@ button.media-grid__cell {
     gap: 10px;
   }
 
-  .composer textarea {
+  .composer textarea,
+  .composer .composer-highlight {
     min-height: 48px;
     font-size: 16px;
     padding: 8px 0;
@@ -3081,18 +3130,24 @@ a.tab {
   min-width: 0;
 }
 
-.reply-input-body textarea {
+/* Shared with the URL-highlight backdrop so both layers keep the same
+   metrics; the text colors come from the .composer-input rules. */
+.reply-input-body textarea,
+.reply-input-body .composer-highlight {
   width: 100%;
   border: 0;
   resize: none;
   background: transparent;
-  color: inherit;
   font: inherit;
   font-size: 19px;
   line-height: 1.4;
   min-height: 88px;
   padding: 8px 0;
   outline: none;
+}
+
+.reply-input-body .composer-highlight {
+  min-height: 0;
 }
 
 .reply-input-body textarea::placeholder {

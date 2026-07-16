@@ -186,6 +186,29 @@ function tokenizeContent(text: string): ContentToken[] {
   return tokens;
 }
 
+/**
+ * Twitter-style URL coloring for a draft being typed. Rendered as a backdrop
+ * layer inside `.composer-input`, behind a transparent-text <textarea>, so
+ * links read highlighted while staying plain editable text — not clickable.
+ * Both layers must share identical text metrics (see the CSS) or they drift.
+ */
+export function ComposerHighlight({ text }: { text: string }) {
+  const tokens = useMemo(() => tokenizeContent(text), [text]);
+  return (
+    <div className="composer-highlight" aria-hidden="true">
+      {tokens.map((token, index) =>
+        token.type === "url" ? (
+          <span key={index} className="composer-highlight-url">
+            {token.value}
+          </span>
+        ) : (
+          token.value
+        ),
+      )}
+    </div>
+  );
+}
+
 function InlineImage({ url }: { url: string }) {
   const [failed, setFailed] = useState(false);
   const [viewing, setViewing] = useState(false);
@@ -1353,15 +1376,18 @@ export function QuoteComposer({
           </button>
         </div>
         <form className="quote-composer-form" onSubmit={handleSubmit}>
-          <textarea
-            {...fieldProps}
-            value={content}
-            rows={1}
-            maxLength={280}
-            placeholder="Add a comment"
-            aria-label="Quote comment"
-            autoFocus
-          />
+          <div className="composer-input">
+            <ComposerHighlight text={content} />
+            <textarea
+              {...fieldProps}
+              value={content}
+              rows={1}
+              maxLength={280}
+              placeholder="Add a comment"
+              aria-label="Quote comment"
+              autoFocus
+            />
+          </div>
           <MediaPreview attachment={media} />
           <QuotedPostCard post={quoted} preview />
           {error ? <p className="form-error">{error}</p> : null}
@@ -1513,15 +1539,18 @@ export function ReplyComposer({
           <div className="reply-input-row">
             {currentUser ? <Avatar user={currentUser} /> : null}
             <div className="reply-input-body">
-              <textarea
-                {...fieldProps}
-                value={content}
-                rows={1}
-                maxLength={1000}
-                placeholder="Post your reply"
-                aria-label="Post your reply"
-                autoFocus
-              />
+              <div className="composer-input">
+                <ComposerHighlight text={content} />
+                <textarea
+                  {...fieldProps}
+                  value={content}
+                  rows={1}
+                  maxLength={1000}
+                  placeholder="Post your reply"
+                  aria-label="Post your reply"
+                  autoFocus
+                />
+              </div>
               <MediaPreview attachment={media} />
             </div>
           </div>
