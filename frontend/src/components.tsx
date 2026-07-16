@@ -1,6 +1,7 @@
 import {
   FormEvent,
   KeyboardEvent,
+  TouchEvent,
   createContext,
   useContext,
   useEffect,
@@ -320,6 +321,7 @@ export function ImageLightbox({
 }) {
   const [index, setIndex] = useState(initialIndex);
   const [linkCopied, setLinkCopied] = useState(false);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const src = images[index];
   const fileName = imageFileName(src);
 
@@ -364,6 +366,34 @@ export function ImageLightbox({
     }
   }
 
+  // Swipe left/right anywhere on the cover to change images. Only a clearly
+  // horizontal single-finger swipe counts, so pinch-zoom and sloppy taps
+  // (which still close via the backdrop click) are left alone.
+  function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
+    touchStart.current =
+      event.touches.length === 1
+        ? { x: event.touches[0].clientX, y: event.touches[0].clientY }
+        : null;
+  }
+
+  function handleTouchEnd(event: TouchEvent<HTMLDivElement>) {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start || images.length < 2) {
+      return;
+    }
+    const deltaX = event.changedTouches[0].clientX - start.x;
+    const deltaY = event.changedTouches[0].clientY - start.y;
+    if (Math.abs(deltaX) < 48 || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) {
+      return;
+    }
+    if (deltaX < 0) {
+      setIndex((current) => Math.min(images.length - 1, current + 1));
+    } else {
+      setIndex((current) => Math.max(0, current - 1));
+    }
+  }
+
   async function downloadImage() {
     try {
       const response = await fetch(src);
@@ -392,6 +422,8 @@ export function ImageLightbox({
         event.stopPropagation();
         onClose();
       }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       <div className="lightbox-actions" onClick={(event) => event.stopPropagation()}>
         <button
