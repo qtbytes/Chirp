@@ -887,12 +887,15 @@ button.rail-link:disabled:hover {
   background: rgba(15, 20, 25, 0.9);
 }
 
-/* The "Add alt text" dialog opened by the badge. */
-.alt-modal {
+/* The "Add alt text" dialog opened by the badge. Sized like the compose
+   dialog (600px), with the picture letterboxed and centered, Twitter-style. */
+.modal.alt-modal {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 16px 20px 20px;
+  /* Same window size as the compose dialog (the base .modal rule is 560px). */
+  width: min(600px, calc(100vw - 32px));
 }
 
 .alt-modal-head {
@@ -910,13 +913,16 @@ button.rail-link:disabled:hover {
   border-radius: 12px;
   background: var(--soft);
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: min(55vh, 480px);
 }
 
 .alt-modal-image img {
   display: block;
   max-width: 100%;
-  max-height: 320px;
-  margin: 0 auto;
+  max-height: 100%;
   object-fit: contain;
 }
 
