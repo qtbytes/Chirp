@@ -2455,8 +2455,8 @@ button.media-grid__cell {
   }
 
   .tweet-card {
-    grid-template-columns: 42px minmax(0, 1fr);
-    padding: 14px;
+    grid-template-columns: 40px minmax(0, 1fr);
+    padding: 12px 14px;
   }
 
   .composer {
@@ -2477,6 +2477,91 @@ button.media-grid__cell {
     margin-bottom: 4px;
   }
 
+  /* Mobile type/density scale: the desktop sizes read zoomed-in at phone
+     width, so the visible text steps down ~1px and the chrome (tabs, avatars,
+     action pills) tightens to Twitter-mobile proportions. Form fields are the
+     exception and stay at 16px — iOS auto-zooms any focused field below that,
+     which is exactly the "page too large" effect this block removes. */
+  body {
+    font-size: 15px;
+  }
+
+  .feed-header h1 {
+    font-size: 19px;
+  }
+
+  .feed-title-row {
+    min-height: 44px;
+  }
+
+  .tab {
+    min-height: 44px;
+  }
+
+  .avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .tweet-body header span,
+  .tweet-body footer,
+  .counter,
+  .user-copy span {
+    font-size: 13px;
+  }
+
+  /* One-line card header, Twitter-style: on a narrow screen the @handle
+     truncates (then the display name), instead of pushing the date onto a
+     second row — that wrap alone cost ~26px per card. */
+  .tweet-body header {
+    flex-wrap: nowrap;
+  }
+
+  .tweet-body header > * {
+    flex: 0 0 auto;
+  }
+
+  .tweet-body header .author-link {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .tweet-body header .author-link strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The handle is the first span; give it the highest shrink priority. */
+  .tweet-body header > span:first-of-type {
+    flex: 0 4 auto;
+    min-width: 4ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tweet-action {
+    min-width: 44px;
+    min-height: 30px;
+  }
+
+  .tweet-action svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .primary-button {
+    min-height: 40px;
+  }
+
+  /* Every composer pair (textarea + highlight backdrop) moves together —
+     they must keep identical text metrics or the entity coloring drifts. */
+  .composer-input textarea,
+  .composer-input .composer-highlight {
+    font-size: 16px;
+  }
 
   .auth-panel {
     padding: 26px;
