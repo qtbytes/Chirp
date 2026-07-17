@@ -1759,6 +1759,7 @@ export function QuoteComposer({
   onClose: () => void;
   onQuoted?: (tweet: Tweet) => void;
 }) {
+  const currentUser = useCurrentUser();
   const [content, setContent] = useState("");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
     content,
@@ -1828,22 +1829,30 @@ export function QuoteComposer({
           </button>
         </div>
         <form className="quote-composer-form" onSubmit={handleSubmit}>
-          <div className="composer-input">
-            <ComposerHighlight text={content} />
-            <textarea
-              {...fieldProps}
-              onKeyDown={typeahead.onKeyDown}
-              value={content}
-              rows={1}
-              maxLength={280}
-              placeholder="Add a comment"
-              aria-label="Quote comment"
-              autoFocus
-            />
-            {typeahead.menu}
+          {/* Same shape as the compose dialog: the author's avatar on the
+              left, and everything they are writing — comment, attached media,
+              the quoted card — stacked in the text column beside it. */}
+          <div className="quote-input-row">
+            {currentUser ? <Avatar user={currentUser} /> : null}
+            <div className="quote-input-body">
+              <div className="composer-input">
+                <ComposerHighlight text={content} />
+                <textarea
+                  {...fieldProps}
+                  onKeyDown={typeahead.onKeyDown}
+                  value={content}
+                  rows={1}
+                  maxLength={280}
+                  placeholder="Add a comment"
+                  aria-label="Quote comment"
+                  autoFocus
+                />
+                {typeahead.menu}
+              </div>
+              <MediaPreview attachment={media} />
+              <QuotedPostCard post={quoted} preview />
+            </div>
           </div>
-          <MediaPreview attachment={media} />
-          <QuotedPostCard post={quoted} preview />
           {error ? <p className="form-error">{error}</p> : null}
           <div className="composer-actions">
             <div className="composer-tools">

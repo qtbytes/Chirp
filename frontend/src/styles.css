@@ -1445,16 +1445,35 @@ button.rail-link:disabled:hover {
   padding: 0 16px 16px;
 }
 
+/* Avatar beside the draft, like the compose dialog; the quoted card and any
+   media live in the text column so they align under what's being typed. */
+.quote-input-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.quote-input-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .quote-composer-form textarea,
 .quote-composer-form .composer-highlight {
   width: 100%;
-  min-height: 90px;
+  /* One comfortable line; it auto-grows with the draft, so the gap between
+     the field and the quoted card stays tight. */
+  min-height: 44px;
   resize: vertical;
   border: none;
   outline: none;
   background: transparent;
   font: inherit;
   font-size: 1.1rem;
+  padding: 10px 0;
 }
 
 .quote-composer-form .composer-highlight {
