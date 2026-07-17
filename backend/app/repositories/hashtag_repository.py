@@ -11,6 +11,36 @@ from app.models.post_view import PostView
 from app.models.user import User
 
 
+def search_tags(db: Session, prefix: str, limit: int) -> list[dict]:
+    """
+    Tags starting with ``prefix`` (already normalised), most-used first.
+
+    Backs the composer's ``#`` typeahead. Counts follow the trending rules:
+    only public posts from live accounts, so a followers-only or private
+    post can neither surface a tag here nor inflate its count. An empty
+    prefix returns the most-used tags overall — what the composer shows the
+    moment ``#`` is typed, before any letters narrow it.
+    """
+    # `prefix` is \w-only in practice, but escape LIKE's wildcards anyway so a
+    # literal "%"/"_" can never widen the match.
+    escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    post_count = func.count().label("post_count")
+    rows = db.execute(
+        select(PostHashtag.tag, post_count)
+        .join(Post, Post.id == PostHashtag.post_id)
+        .join(User, User.id == Post.user_id)
+        .where(
+            PostHashtag.tag.like(f"{escaped}%", escape="\\"),
+            User.deleted_at.is_(None),
+            Post.visibility == "public",
+        )
+        .group_by(PostHashtag.tag)
+        .order_by(post_count.desc(), PostHashtag.tag)
+        .limit(limit)
+    ).all()
+    return [{"tag": tag, "post_count": int(count)} for tag, count in rows]
+
+
 def list_trending(
     db: Session,
     window_hours: int,

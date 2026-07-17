@@ -2,7 +2,7 @@ from typing import Literal
 
 from app.api.deps import get_current_user_id
 from app.db.database import get_db
-from app.repositories import block_repository, tweet_repository
+from app.repositories import block_repository, hashtag_repository, tweet_repository
 from app.schemas.tweet import HashtagPostsPage, TrendingHashtagOut
 from app.services import trending_service
 from app.services.timeline_service import TimelineService, decode_cursor, encode_cursor
@@ -15,6 +15,30 @@ router = APIRouter(prefix="/hashtags", tags=["hashtags"])
 def _normalize_tag(raw: str) -> str:
     """Match how tags are stored (lowercase, no leading ``#``)."""
     return raw.strip().lstrip("#").lower()
+
+
+@router.get("", response_model=list[TrendingHashtagOut])
+def suggest_hashtags(
+    query: str = Query(default="", max_length=140),
+    limit: int = Query(default=8, ge=1, le=20),
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> list[TrendingHashtagOut]:
+    """
+    Prefix suggestions for the composer's ``#`` typeahead, most-used first.
+
+    ``query`` is normalised the same way tags are stored, so ``#Te``, ``te``
+    and ``TE`` all suggest ``#test``. An empty query suggests the most-used
+    tags overall.
+    """
+    return [
+        TrendingHashtagOut(**row)
+        for row in hashtag_repository.search_tags(
+            db,
+            prefix=_normalize_tag(query),
+            limit=limit,
+        )
+    ]
 
 
 @router.get("/trending", response_model=list[TrendingHashtagOut])

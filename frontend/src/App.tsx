@@ -95,6 +95,7 @@ import {
   MediaButton,
   MediaGallery,
   ComposerHighlight,
+  useComposerTypeahead,
   MediaPreview,
   PostEditor,
   PostMenu,
@@ -2071,6 +2072,12 @@ function Composer({
   const [posting, setPosting] = useState(false);
   const [visibility, setVisibility] = useState<TweetVisibility>("public");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(content, setContent, 280);
+  const typeahead = useComposerTypeahead({
+    text: content,
+    onTextChange: setContent,
+    maxLength: 280,
+    fieldRef: fieldProps.ref,
+  });
   const media = useMediaAttachment();
   const remaining = 280 - content.length;
   const canPost = (content.trim().length > 0 || media.mediaUrls.length > 0) && remaining >= 0;
@@ -2110,6 +2117,7 @@ function Composer({
           <ComposerHighlight text={content} />
           <textarea
             {...fieldProps}
+            onKeyDown={typeahead.onKeyDown}
             value={content}
             rows={1}
             maxLength={280}
@@ -2117,6 +2125,7 @@ function Composer({
             aria-label="Tweet content"
             autoFocus={autoFocus}
           />
+          {typeahead.menu}
         </div>
         <MediaPreview attachment={media} />
         {error ? <p className="form-error">{error}</p> : null}

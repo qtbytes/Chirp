@@ -378,6 +378,15 @@ export function searchPosts(
 }
 
 /** The most-used hashtags in the recent window (global, server-cached). */
+/** Prefix suggestions for the composer's `#` typeahead, most-used first. */
+export function suggestHashtags(query: string): Promise<TrendingHashtag[]> {
+  const params = new URLSearchParams({ limit: "8" });
+  if (query.trim()) {
+    params.set("query", query.trim());
+  }
+  return request<TrendingHashtag[]>(`/hashtags?${params.toString()}`);
+}
+
 export function getTrending(): Promise<TrendingHashtag[]> {
   return request<TrendingHashtag[]>(`/hashtags/trending`);
 }

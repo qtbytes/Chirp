@@ -1,10 +1,13 @@
 import {
   FormEvent,
   KeyboardEvent,
+  RefObject,
   TouchEvent,
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -47,10 +50,12 @@ import {
   editComment,
   editTweet,
   isVideoUrl,
+  listUsers,
   recordPostViews,
   replyToComment,
   reportPost,
   resolveMediaUrl,
+  suggestHashtags,
   toggleCommentLike,
   toggleTweetLike,
   unfurlUrl,
@@ -61,9 +66,11 @@ import type {
   LinkPreview,
   QuotedPost,
   ReportReason,
+  TrendingHashtag,
   Tweet,
   TweetStats,
   TweetVisibility,
+  UserDiscovery,
   UserSummary,
 } from "./types";
 import { EmojiPicker } from "./EmojiPicker";
@@ -187,9 +194,10 @@ function tokenizeContent(text: string): ContentToken[] {
 }
 
 /**
- * Twitter-style URL coloring for a draft being typed. Rendered as a backdrop
- * layer inside `.composer-input`, behind a transparent-text <textarea>, so
- * links read highlighted while staying plain editable text — not clickable.
+ * Twitter-style entity coloring for a draft being typed: URLs, #hashtags and
+ * @mentions. Rendered as a backdrop layer inside `.composer-input`, behind a
+ * transparent-text <textarea>, so entities read highlighted while staying
+ * plain editable text — not clickable.
  * Both layers must share identical text metrics (see the CSS) or they drift.
  */
 export function ComposerHighlight({ text }: { text: string }) {
@@ -197,16 +205,346 @@ export function ComposerHighlight({ text }: { text: string }) {
   return (
     <div className="composer-highlight" aria-hidden="true">
       {tokens.map((token, index) =>
-        token.type === "url" ? (
+        token.type === "text" ? (
+          token.value
+        ) : (
           <span key={index} className="composer-highlight-url">
             {token.value}
           </span>
-        ) : (
-          token.value
         ),
       )}
     </div>
   );
+}
+
+/** The partial `@mention` / `#hashtag` the caret is currently inside. */
+type TypeaheadEntity = {
+  type: "mention" | "hashtag";
+  /** The body typed so far, without the trigger character. */
+  query: string;
+  /** Index of the `@`/`#` trigger in the draft. */
+  start: number;
+  /** End of the word around the caret, so accepting mid-word replaces all of it. */
+  end: number;
+};
+
+// Anchored at the caret ($) and mirroring the tokenizer's boundary rules, so
+// the menu opens exactly where the highlight layer would color an entity.
+const MENTION_AT_CARET = /(?<!\w)@([A-Za-z0-9_]{0,50})$/;
+const HASHTAG_AT_CARET = /(?<!\w)#(\w{0,140})$/u;
+
+function findTypeaheadEntity(text: string, caret: number): TypeaheadEntity | null {
+  const before = text.slice(0, caret);
+  const mention = before.match(MENTION_AT_CARET);
+  const match = mention ?? before.match(HASHTAG_AT_CARET);
+  if (!match || match.index === undefined) {
+    return null;
+  }
+  const type = mention ? "mention" : "hashtag";
+  const wordChar = type === "mention" ? /[A-Za-z0-9_]/ : /\w/u;
+  let end = caret;
+  while (end < text.length && wordChar.test(text[end])) {
+    end += 1;
+  }
+  return { type, query: match[1], start: match.index, end };
+}
+
+/**
+ * A Range over the character at ``offset`` inside the highlight backdrop.
+ *
+ * The backdrop renders the draft with the exact metrics of the textarea, so
+ * this rect *is* where that character sits in the textarea — which is how the
+ * suggestion menu gets anchored under the caret's line without the classic
+ * throwaway-mirror-div trick: the mirror is already in the DOM.
+ */
+function rangeAtCharOffset(root: Element, offset: number): Range | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let remaining = offset;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const length = node.textContent?.length ?? 0;
+    if (remaining < length) {
+      const range = document.createRange();
+      range.setStart(node, remaining);
+      range.setEnd(node, remaining + 1);
+      return range;
+    }
+    remaining -= length;
+  }
+  return null;
+}
+
+/**
+ * Bluesky-style suggestions while typing `@` or `#` in a composer.
+ *
+ * Give it the draft, its setter, and the textarea ref from `useEmojiField`;
+ * spread nothing — render the returned `menu` inside `.composer-input` (which
+ * is `position: relative`) and pass `onKeyDown` to the textarea. While the
+ * menu is open it owns ArrowUp/Down (move), Enter/Tab (accept) and Escape
+ * (dismiss — stopped from propagating so a dialog composer doesn't close).
+ *
+ * Suggestions are decoration: every fetch is debounced, last-request-wins,
+ * and a failed lookup simply shows nothing rather than surfacing an error.
+ */
+export function useComposerTypeahead({
+  text,
+  onTextChange,
+  maxLength,
+  fieldRef,
+}: {
+  text: string;
+  onTextChange: (next: string) => void;
+  maxLength: number;
+  fieldRef: RefObject<HTMLTextAreaElement | null>;
+}) {
+  const [entity, setEntity] = useState<TypeaheadEntity | null>(null);
+  const [users, setUsers] = useState<UserDiscovery[]>([]);
+  const [tags, setTags] = useState<TrendingHashtag[]>([]);
+  const [index, setIndex] = useState(0);
+  // `type:start` of an entity Escape closed: stays hidden until the caret
+  // leaves it, so the menu doesn't pop right back on the next keystroke.
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
+  const requestRef = useRef(0);
+
+  const syncEntity = useCallback(() => {
+    const el = fieldRef.current;
+    if (!el || document.activeElement !== el) {
+      setEntity(null);
+      return;
+    }
+    const caret = el.selectionStart ?? el.value.length;
+    const next = findTypeaheadEntity(el.value, caret);
+    setEntity((prev) =>
+      prev &&
+      next &&
+      prev.type === next.type &&
+      prev.start === next.start &&
+      prev.end === next.end &&
+      prev.query === next.query
+        ? prev
+        : next,
+    );
+  }, [fieldRef]);
+
+  useEffect(syncEntity, [text, syncEntity]);
+
+  // Caret moves that don't change the text (arrows, clicks) still fire
+  // selectionchange on the document; blur must close the menu outright.
+  useEffect(() => {
+    const el = fieldRef.current;
+    const close = () => setEntity(null);
+    document.addEventListener("selectionchange", syncEntity);
+    el?.addEventListener("blur", close);
+    return () => {
+      document.removeEventListener("selectionchange", syncEntity);
+      el?.removeEventListener("blur", close);
+    };
+  }, [fieldRef, syncEntity]);
+
+  useEffect(() => {
+    if (!entity) {
+      setDismissed(null);
+    }
+  }, [entity]);
+
+  const entityType = entity?.type ?? null;
+  const entityQuery = entity?.query ?? null;
+  useEffect(() => {
+    if (entityType === null || entityQuery === null) {
+      setUsers([]);
+      setTags([]);
+      return;
+    }
+    const requestId = ++requestRef.current;
+    const timer = window.setTimeout(async () => {
+      try {
+        if (entityType === "mention") {
+          const rows = await listUsers(entityQuery);
+          if (requestRef.current === requestId) {
+            setUsers(rows);
+            setIndex(0);
+          }
+        } else {
+          const rows = await suggestHashtags(entityQuery);
+          if (requestRef.current === requestId) {
+            setTags(rows);
+            setIndex(0);
+          }
+        }
+      } catch {
+        if (requestRef.current === requestId) {
+          setUsers([]);
+          setTags([]);
+        }
+      }
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [entityType, entityQuery]);
+
+  // Anchor the menu under the trigger character's line, measured off the
+  // highlight backdrop. Layout effect: the backdrop must have re-rendered
+  // this draft before it is measured.
+  useLayoutEffect(() => {
+    if (!entity) {
+      setAnchor(null);
+      return;
+    }
+    const el = fieldRef.current;
+    const container = el?.parentElement;
+    const mirror = container?.querySelector(".composer-highlight");
+    if (!el || !container || !mirror) {
+      setAnchor(null);
+      return;
+    }
+    const containerRect = container.getBoundingClientRect();
+    const rect = rangeAtCharOffset(mirror, entity.start)?.getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) {
+      setAnchor({ top: el.offsetTop + el.offsetHeight, left: 0 });
+      return;
+    }
+    setAnchor({
+      top: rect.bottom - containerRect.top + 4,
+      left: Math.max(0, Math.min(rect.left - containerRect.left, containerRect.width - 300)),
+    });
+  }, [entity, fieldRef, text]);
+
+  const count = entity?.type === "mention" ? users.length : tags.length;
+  const open =
+    entity !== null && count > 0 && dismissed !== `${entity.type}:${entity.start}`;
+
+  const accept = useCallback(
+    (body: string) => {
+      if (!entity) {
+        return;
+      }
+      const insert = (entity.type === "mention" ? "@" : "#") + body;
+      const rest = text.slice(entity.end);
+      // A trailing space ends the entity and keeps typing flowing, unless one
+      // is already there — or the draft has no room left for it.
+      const spaceFollows = rest.startsWith(" ");
+      let replacement = spaceFollows ? insert : `${insert} `;
+      let next = text.slice(0, entity.start) + replacement + rest;
+      if (next.length > maxLength && replacement.endsWith(" ")) {
+        replacement = insert;
+        next = text.slice(0, entity.start) + replacement + rest;
+      }
+      if (next.length > maxLength) {
+        return;
+      }
+      // Land after the space that now follows the entity, whichever branch
+      // provided it; in the no-room fallback there is none, so stay put.
+      const caret =
+        entity.start + replacement.length + (spaceFollows ? 1 : 0);
+      onTextChange(next);
+      setEntity(null);
+      const el = fieldRef.current;
+      requestAnimationFrame(() => {
+        if (el) {
+          el.focus();
+          const position = Math.min(caret, next.length);
+          el.setSelectionRange(position, position);
+        }
+      });
+    },
+    [entity, text, maxLength, onTextChange, fieldRef],
+  );
+
+  const acceptCurrent = useCallback(() => {
+    if (!entity) {
+      return;
+    }
+    if (entity.type === "mention") {
+      const user = users[index];
+      if (user) {
+        accept(user.username);
+      }
+    } else {
+      const tag = tags[index];
+      if (tag) {
+        accept(tag.tag);
+      }
+    }
+  }, [entity, users, tags, index, accept]);
+
+  const onKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (!open || !entity) {
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setIndex((current) => (current + 1) % count);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setIndex((current) => (current - 1 + count) % count);
+      } else if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        acceptCurrent();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        // The dialog composers close on window-level Escape; this one is ours.
+        event.stopPropagation();
+        setDismissed(`${entity.type}:${entity.start}`);
+      }
+    },
+    [open, entity, count, acceptCurrent],
+  );
+
+  const menu =
+    open && entity && anchor ? (
+      <div
+        className="typeahead-menu"
+        style={{ top: anchor.top, left: anchor.left }}
+        role="listbox"
+        aria-label={entity.type === "mention" ? "Mention suggestions" : "Hashtag suggestions"}
+      >
+        {entity.type === "mention"
+          ? users.map((user, itemIndex) => (
+              <button
+                key={user.id}
+                type="button"
+                role="option"
+                aria-selected={itemIndex === index}
+                className={
+                  itemIndex === index ? "typeahead-item selected" : "typeahead-item"
+                }
+                // Keep focus (and the caret) in the textarea through the click.
+                onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() => setIndex(itemIndex)}
+                onClick={() => accept(user.username)}
+              >
+                <Avatar user={user} size="small" />
+                <span className="typeahead-labels">
+                  <span className="typeahead-primary">{displayName(user)}</span>
+                  <span className="typeahead-secondary">@{user.username}</span>
+                </span>
+              </button>
+            ))
+          : tags.map((tag, itemIndex) => (
+              <button
+                key={tag.tag}
+                type="button"
+                role="option"
+                aria-selected={itemIndex === index}
+                className={
+                  itemIndex === index ? "typeahead-item selected" : "typeahead-item"
+                }
+                onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() => setIndex(itemIndex)}
+                onClick={() => accept(tag.tag)}
+              >
+                <span className="typeahead-labels">
+                  <span className="typeahead-primary">#{tag.tag}</span>
+                  <span className="typeahead-secondary">
+                    {tag.post_count} {tag.post_count === 1 ? "post" : "posts"}
+                  </span>
+                </span>
+              </button>
+            ))}
+      </div>
+    ) : null;
+
+  return { menu, onKeyDown };
 }
 
 function InlineImage({ url }: { url: string }) {
@@ -1191,6 +1529,12 @@ export function PostEditor({
     setValue,
     maxLength,
   );
+  const typeahead = useComposerTypeahead({
+    text: value,
+    onTextChange: setValue,
+    maxLength,
+    fieldRef: fieldProps.ref,
+  });
   const remaining = maxLength - value.length;
   const canSave =
     (value.trim().length > 0 || media.mediaUrls.length > 0) && !saving && !media.uploading;
@@ -1245,12 +1589,14 @@ export function PostEditor({
               <ComposerHighlight text={value} />
               <textarea
                 {...fieldProps}
+                onKeyDown={typeahead.onKeyDown}
                 value={value}
                 rows={1}
                 maxLength={maxLength}
                 aria-label="Edit content"
                 autoFocus
               />
+              {typeahead.menu}
             </div>
             <MediaPreview attachment={media} />
           </div>
@@ -1354,6 +1700,12 @@ export function QuoteComposer({
     setContent,
     280,
   );
+  const typeahead = useComposerTypeahead({
+    text: content,
+    onTextChange: setContent,
+    maxLength: 280,
+    fieldRef: fieldProps.ref,
+  });
   const media = useMediaAttachment();
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
@@ -1415,6 +1767,7 @@ export function QuoteComposer({
             <ComposerHighlight text={content} />
             <textarea
               {...fieldProps}
+              onKeyDown={typeahead.onKeyDown}
               value={content}
               rows={1}
               maxLength={280}
@@ -1422,6 +1775,7 @@ export function QuoteComposer({
               aria-label="Quote comment"
               autoFocus
             />
+            {typeahead.menu}
           </div>
           <MediaPreview attachment={media} />
           <QuotedPostCard post={quoted} preview />
@@ -1480,6 +1834,12 @@ export function ReplyComposer({
     setContent,
     1000,
   );
+  const typeahead = useComposerTypeahead({
+    text: content,
+    onTextChange: setContent,
+    maxLength: 1000,
+    fieldRef: fieldProps.ref,
+  });
   const media = useMediaAttachment();
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
@@ -1578,6 +1938,7 @@ export function ReplyComposer({
                 <ComposerHighlight text={content} />
                 <textarea
                   {...fieldProps}
+                  onKeyDown={typeahead.onKeyDown}
                   value={content}
                   rows={1}
                   maxLength={1000}
@@ -1585,6 +1946,7 @@ export function ReplyComposer({
                   aria-label="Post your reply"
                   autoFocus
                 />
+                {typeahead.menu}
               </div>
               <MediaPreview attachment={media} />
             </div>

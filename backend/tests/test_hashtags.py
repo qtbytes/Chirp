@@ -147,3 +147,38 @@ def test_top_sort_rejects_a_malformed_cursor() -> None:
         params={"sort": "top", "cursor": "garbage"},
     )
     assert response.status_code == 400
+
+
+def test_suggestions_prefix_match_most_used_first() -> None:
+    alice, _ = _register("alice")
+    _post(alice, "#python one")
+    _post(alice, "#python two")
+    _post(alice, "#pytest once")
+    _post(alice, "#django elsewhere")
+
+    response = alice.get("/api/v1/hashtags", params={"query": "py"})
+    assert response.status_code == 200
+    items = response.json()
+    assert [item["tag"] for item in items] == ["python", "pytest"]
+    assert items[0]["post_count"] == 2
+
+    # The query is normalised like stored tags: "#Py" and "py" suggest alike.
+    dressed = alice.get("/api/v1/hashtags", params={"query": "#Py"}).json()
+    assert [item["tag"] for item in dressed] == ["python", "pytest"]
+
+    # An empty query returns the most-used tags overall (the bare-"#" case).
+    every = alice.get("/api/v1/hashtags").json()
+    assert [item["tag"] for item in every] == ["python", "django", "pytest"]
+
+
+def test_suggestions_exclude_non_public_posts() -> None:
+    alice, _ = _register("alice")
+    response = alice.post(
+        "/api/v1/tweets",
+        json={"content": "#secret plans", "visibility": "private"},
+    )
+    assert response.status_code == 201
+    _post(alice, "#open post")
+
+    tags = [item["tag"] for item in alice.get("/api/v1/hashtags").json()]
+    assert tags == ["open"]
