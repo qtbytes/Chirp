@@ -2,7 +2,15 @@
   color: #0f1419;
   background: #ffffff;
   color-scheme: light;
-  font-family: ui-sans-serif, "Segoe UI", "Helvetica Neue", sans-serif;
+  /* "Twemoji Country Flags" is injected by the polyfill in main.tsx only on
+     platforms that can't draw flag emojis (Windows); it contains nothing but
+     flag sequences, so leading the stack changes no other glyph. */
+  font-family:
+    "Twemoji Country Flags",
+    ui-sans-serif,
+    "Segoe UI",
+    "Helvetica Neue",
+    sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --line: #d9e1e8;

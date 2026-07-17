@@ -12,6 +12,7 @@
   "dependencies": {
     "@playwright/test": "^1.61.1",
     "@vitejs/plugin-react": "^5.1.1",
+    "country-flag-emoji-polyfill": "^0.1.8",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
