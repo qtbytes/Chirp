@@ -1107,6 +1107,16 @@ button.rail-link:disabled:hover {
   z-index: 50;
 }
 
+/* Inside the capped floating panel the grid gives up its fixed height: it
+   takes whatever the inline max-height leaves after search + tabs, so a
+   cramped viewport shortens the scroll area instead of pushing the panel's
+   top (or bottom) off screen. */
+.emoji-panel--floating .emoji-scroll {
+  height: auto;
+  flex: 1 1 260px;
+  min-height: 0;
+}
+
 .emoji-search {
   display: grid;
   grid-template-columns: 16px 1fr;

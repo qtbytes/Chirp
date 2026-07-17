@@ -8,9 +8,12 @@ import { Smile } from "lucide-react";
 // ref the outside-click handler needs) while the chunk loads.
 const EmojiPanel = lazy(() => import("./EmojiPanel"));
 
-// The panel's full height (search + tabs + scroll area + padding). Used to
-// decide whether it fits below the trigger or must open upward.
+// The panel's preferred height (search + tabs + scroll area + padding). The
+// side with room gets it; when neither side has this much, the panel is
+// capped to what actually fits and the emoji grid scrolls inside it — the
+// panel must never be guessed off the edge of the viewport.
 const PANEL_HEIGHT = 400;
+const VIEWPORT_MARGIN = 12;
 
 export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -73,12 +76,24 @@ export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void })
       if (rect) {
         const width = Math.min(340, window.innerWidth - 16);
         const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
-        // Below the trigger when it fits; otherwise pinned above it. Fixed
-        // coordinates, so neither direction can be clipped by a dialog.
+        const spaceBelow = window.innerHeight - rect.bottom - 10 - VIEWPORT_MARGIN;
+        const spaceAbove = rect.top - 10 - VIEWPORT_MARGIN;
+        // Below the trigger when the preferred height fits there, otherwise
+        // whichever side is roomier — capped to that side's real space, so
+        // the panel can never run off the top or bottom of the viewport.
+        const openBelow = spaceBelow >= PANEL_HEIGHT || spaceBelow >= spaceAbove;
         setAnchor(
-          window.innerHeight - rect.bottom >= PANEL_HEIGHT + 16
-            ? { top: rect.bottom + 10, left }
-            : { bottom: window.innerHeight - rect.top + 10, left },
+          openBelow
+            ? {
+                top: rect.bottom + 10,
+                left,
+                maxHeight: Math.min(PANEL_HEIGHT, spaceBelow),
+              }
+            : {
+                bottom: window.innerHeight - rect.top + 10,
+                left,
+                maxHeight: Math.min(PANEL_HEIGHT, spaceAbove),
+              },
         );
       } else {
         setAnchor(null);
