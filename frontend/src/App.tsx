@@ -1631,10 +1631,11 @@ function HomeView() {
 
   return (
     <>
+      {/* No title row here: the tabs say where you are, and on Home every
+          vertical pixel above the composer is feed real estate. The h1 stays
+          for screen readers and the document outline. */}
       <header className="feed-header">
-        <div className="feed-title-row">
-          <h1>Home</h1>
-        </div>
+        <h1 className="visually-hidden">Home</h1>
         <div className="tab-list" role="tablist" aria-label="Timeline">
           <button
             className={activeTab === "for-you" ? "tab active" : "tab"}
