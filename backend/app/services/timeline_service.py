@@ -1,10 +1,13 @@
+import logging
 from datetime import datetime, timezone
 from typing import Literal
 
+from redis.exceptions import RedisError
 from rq.queue import Queue
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.metrics import REDIS_FAILURES, TIMELINE_CACHE
 from app.db.database import SessionLocal
 from app.db.redis_client import get_redis_client
 from app.repositories import (
@@ -18,6 +21,8 @@ from app.schemas.tweet import TimelinePage, TweetOut
 from app.schemas.user import UserSummary
 from app.services.ranking import score_tweet, weights_from_settings
 from app.services.serializers import serialize_quoted_post
+
+logger = logging.getLogger(__name__)
 
 
 def encode_cursor(created_at: datetime, row_id: int) -> str:
@@ -102,7 +107,10 @@ class TimelineService:
         # a followers-only/private post the viewer can't see renders as no embed
         # (``quoted_post=None``), the same as a deleted quote.
         self.viewer_id = viewer_id
-        self.redis = get_redis_client()
+        # No Redis handle is taken here. The cache is best-effort, so Redis is
+        # looked up lazily inside the cache helpers and a Redis outage degrades
+        # to "every page is a miss" -- constructing the service (which routes
+        # also do just to serialize a tweet) must not require Redis at all.
 
     def get_home_timeline(
         self,
@@ -359,10 +367,17 @@ class TimelineService:
         - first page is hottest
         - deeper pages change often and are less frequently accessed
         """
-        payload = self.redis.get(self._cache_key(user_id, limit, strategy))
+        try:
+            payload = get_redis_client().get(self._cache_key(user_id, limit, strategy))
+        except RedisError:
+            REDIS_FAILURES.labels(operation="timeline_cache_read").inc()
+            logger.warning("timeline cache read failed: Redis unavailable")
+            return None
         if not payload:
+            TIMELINE_CACHE.labels(result="miss").inc()
             return None
 
+        TIMELINE_CACHE.labels(result="hit").inc()
         return TimelinePage.model_validate_json(payload)
 
     def _set_cached_page(
@@ -372,11 +387,15 @@ class TimelineService:
         strategy: str,
         page: TimelinePage,
     ) -> None:
-        self.redis.setex(
-            self._cache_key(user_id, limit, strategy),
-            settings.timeline_cache_ttl_seconds,
-            page.model_dump_json(),
-        )
+        try:
+            get_redis_client().setex(
+                self._cache_key(user_id, limit, strategy),
+                settings.timeline_cache_ttl_seconds,
+                page.model_dump_json(),
+            )
+        except RedisError:
+            REDIS_FAILURES.labels(operation="timeline_cache_write").inc()
+            logger.warning("timeline cache write skipped: Redis unavailable")
 
 
 def invalidate_timeline_cache_for_users(user_ids: list[int]) -> None:
@@ -393,18 +412,28 @@ def invalidate_timeline_cache_for_users(user_ids: list[int]) -> None:
     - This project caches only the first page and already uses a short TTL, so
       bounded staleness is acceptable for the demo benchmark.
     """
-    redis_client = get_redis_client()
     unique_user_ids = list(set(user_ids))
     eager_invalidation_limit = 1000
 
     if len(unique_user_ids) > eager_invalidation_limit:
         return
 
-    for user_id in unique_user_ids:
-        for strategy in ("read", "write"):
-            pattern = f"timeline:{strategy}:user:{user_id}:limit:*"
-            for key in redis_client.scan_iter(match=pattern):
-                redis_client.delete(key)
+    # Best-effort: the cache lives in Redis, so if Redis is unreachable there
+    # are no cached pages left to invalidate -- but count it, because a *flaky*
+    # Redis can serve a stale page after failing its invalidation here.
+    try:
+        redis_client = get_redis_client()
+        for user_id in unique_user_ids:
+            for strategy in ("read", "write"):
+                pattern = f"timeline:{strategy}:user:{user_id}:limit:*"
+                for key in redis_client.scan_iter(match=pattern):
+                    redis_client.delete(key)
+    except RedisError:
+        REDIS_FAILURES.labels(operation="cache_invalidation").inc()
+        logger.warning(
+            "timeline cache invalidation skipped for %d users: Redis unavailable",
+            len(unique_user_ids),
+        )
 
 
 def run_feed_fanout_job(tweet_id: int, author_id: int) -> None:
@@ -447,14 +476,30 @@ def run_feed_fanout_job(tweet_id: int, author_id: int) -> None:
 
 
 def enqueue_feed_fanout_job(tweet_id: int, author_id: int) -> None:
-    """Enqueue fan-out on write into RQ. Redis is required."""
-    queue = Queue(
-        name=settings.rq_queue_name,
-        connection=get_redis_client(),
-    )
-    queue.enqueue(
-        "app.services.timeline_service.run_feed_fanout_job",
-        tweet_id,
-        author_id,
-        job_timeout=settings.rq_job_timeout_seconds,
-    )
+    """
+    Enqueue fan-out on write into RQ, falling back to inline execution.
+
+    This is called *after* the tweet has committed, so raising here would 500 a
+    request whose write already succeeded -- and a client that retries the 500
+    would double-post. When Redis is unreachable the fan-out runs inline
+    instead: slower for the caller (a celebrity post pays for its own fan-out),
+    but the tweet reaches every follower's feed and the request stays truthful.
+    """
+    try:
+        queue = Queue(
+            name=settings.rq_queue_name,
+            connection=get_redis_client(),
+        )
+        queue.enqueue(
+            "app.services.timeline_service.run_feed_fanout_job",
+            tweet_id,
+            author_id,
+            job_timeout=settings.rq_job_timeout_seconds,
+        )
+    except RedisError:
+        REDIS_FAILURES.labels(operation="fanout_enqueue").inc()
+        logger.warning(
+            "feed fan-out enqueue failed for tweet %s: Redis unavailable; running inline",
+            tweet_id,
+        )
+        run_feed_fanout_job(tweet_id, author_id)

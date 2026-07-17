@@ -287,6 +287,34 @@ cd backend && uv run pytest -q     # API, timeline, link preview
 cd frontend && npm run typecheck   # tsc -b
 ```
 
+## Monitoring
+
+`GET /metrics` is a Prometheus scrape target (`app/core/metrics.py`). The
+request path already fails loudly — a broken route answers 5xx and the caller
+sees it — so the instrumentation concentrates on the paths that fail silently:
+
+- **The fan-out pipeline** is the only place the API answers 201 and the real
+  work happens later, elsewhere. `chirp_rq_queue_depth`, `chirp_rq_failed_jobs`
+  and `chirp_rq_workers` are read from Redis at scrape time: depth climbing
+  with zero workers means nobody is draining the queue, and anything in the
+  failed registry is a tweet that silently never reached some follower's feed.
+- **Deliberately swallowed Redis failures** — a dropped SSE nudge, a cache
+  treated as a miss, a skipped invalidation, an enqueue that ran inline —
+  each increments `chirp_redis_failures_total{operation=…}` and logs a
+  WARNING. Best-effort without a counter is indistinguishable from broken.
+- **Per-route traffic**: `chirp_http_requests_total` and a latency histogram,
+  labelled by route *template* (`/api/v1/tweets/{tweet_id}`), never raw path,
+  so per-id URLs don't mint unbounded series. Duration is time to first byte,
+  so an SSE stream held open for an hour isn't a one-hour latency outlier.
+  Because sessions and the rate limiter fail closed, a Redis blip shows up
+  here as a 503 spike — and `chirp_redis_up` says why.
+- `chirp_timeline_cache_total{result=hit|miss}` and `chirp_sse_connections`
+  round out cache effectiveness and live-stream fan-in.
+
+Adopting this made one readme claim true: fan-out *now* actually falls back to
+inline execution when the enqueue fails. Previously `POST /tweets` raised
+after the tweet had committed — a 500 whose retry would double-post.
+
 ## Deploying
 
 `git pull && ./deploy/deploy.sh` on the server. See [`deploy/`](deploy/README.md).

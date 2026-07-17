@@ -2,6 +2,7 @@ from pathlib import Path
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.metrics import MetricsMiddleware, metrics_response
 from app.models import (  # noqa: F401
     Block,
     FeedItem,
@@ -26,6 +27,7 @@ app = FastAPI(
     description="Interview-focused Twitter system skeleton with pull/push timeline strategies.",
 )
 
+app.add_middleware(MetricsMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin],
@@ -39,6 +41,12 @@ app.include_router(api_router)
 uploads_path = Path(settings.uploads_dir)
 uploads_path.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    """Prometheus scrape target; see app/core/metrics.py for what and why."""
+    return metrics_response()
 
 
 @app.get("/")

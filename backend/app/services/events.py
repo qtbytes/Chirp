@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from collections.abc import AsyncIterator
 
@@ -37,7 +38,10 @@ from redis.exceptions import RedisError
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
+from app.core.metrics import REDIS_FAILURES, SSE_CONNECTIONS
 from app.db.redis_client import get_redis_client
+
+logger = logging.getLogger(__name__)
 
 _CHANNEL_PREFIX = "events:user:"
 # Where per-session pending recipient ids are stashed until the commit lands.
@@ -62,11 +66,18 @@ def queue_user_event(db: Session, user_id: int) -> None:
 def _publish(user_id: int, payload: dict) -> None:
     # Best-effort on purpose: this runs in an after-commit hook, and the client
     # also polls, so a dropped nudge is recovered -- it must not fail the write
-    # that already committed.
+    # that already committed. But best-effort must not mean invisible: without
+    # the counter and the log line, degraded pub/sub looks identical to healthy
+    # pub/sub until someone notices their badge is always late.
     try:
         get_redis_client().publish(_channel(user_id), json.dumps(payload))
     except RedisError:
-        pass
+        REDIS_FAILURES.labels(operation="notification_publish").inc()
+        logger.warning(
+            "dropped notification nudge for user %s: Redis unavailable; "
+            "client will recover on its fallback poll",
+            user_id,
+        )
 
 
 @event.listens_for(Session, "after_commit")
@@ -99,6 +110,7 @@ async def stream_user_events(user_id: int) -> AsyncIterator[str]:
     """
     pubsub = get_redis_client().pubsub()
     pubsub.subscribe(_channel(user_id))
+    SSE_CONNECTIONS.inc()
     try:
         # An initial comment flushes headers so the browser marks the stream open.
         yield ": connected\n\n"
@@ -121,7 +133,10 @@ async def stream_user_events(user_id: int) -> AsyncIterator[str]:
             # task here and the finally block tears the subscription down.
             await asyncio.sleep(_POLL_INTERVAL_SECONDS)
     finally:
+        SSE_CONNECTIONS.dec()
         try:
             pubsub.close()
         except RedisError:
+            # Teardown of an already-dead connection; there is nothing left to
+            # degrade, so this one stays uncounted.
             pass
