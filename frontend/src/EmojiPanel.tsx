@@ -56,13 +56,7 @@ const ALL_EMOJIS: SearchEmoji[] = (() => {
   }));
 })();
 
-export default function EmojiPanel({
-  openUp,
-  onPick,
-}: {
-  openUp: boolean;
-  onPick: (emoji: string) => void;
-}) {
+export default function EmojiPanel({ onPick }: { onPick: (emoji: string) => void }) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(EMOJI_CATEGORIES[0].id);
   const [recents, setRecents] = useState<string[]>(loadRecents);
@@ -94,11 +88,7 @@ export default function EmojiPanel({
   }
 
   return (
-    <div
-      className={openUp ? "emoji-panel emoji-panel--up" : "emoji-panel"}
-      role="dialog"
-      aria-label="Emoji picker"
-    >
+    <>
       <label className="emoji-search">
         <Search size={16} aria-hidden="true" />
         <input
@@ -200,6 +190,6 @@ export default function EmojiPanel({
           ))
         )}
       </div>
-    </div>
+    </>
   );
 }

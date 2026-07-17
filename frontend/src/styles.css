@@ -1095,9 +1095,16 @@ button.rail-link:disabled:hover {
 }
 
 /* Set when the trigger is too close to the bottom of the viewport. */
-.emoji-panel--up {
+/* Portaled to <body> with viewport-fixed coordinates (inline top/bottom/left
+   from EmojiPicker), so a dialog composer's overflow cannot clip the panel —
+   opening upward inside a modal used to cut off the search bar and tabs.
+   z-index above .modal-backdrop (30). */
+.emoji-panel--floating {
+  position: fixed;
   top: auto;
-  bottom: calc(100% + 10px);
+  bottom: auto;
+  left: auto;
+  z-index: 50;
 }
 
 .emoji-search {
