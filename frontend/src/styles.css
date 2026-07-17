@@ -245,15 +245,17 @@ textarea,
   color: var(--accent);
 }
 
-/* The @mention / #hashtag suggestion menu, anchored under the caret's line
-   inside .composer-input. Selection is keyboard-driven (.selected), so the
-   items are buttons that never take focus away from the textarea. */
+/* The @mention / #hashtag suggestion menu, anchored under the caret's line.
+   Rendered in a portal with viewport-fixed coordinates (width/max-height come
+   inline from the hook) so a dialog composer's overflow can never clip it;
+   z-index sits above .modal-backdrop (30). Selection is keyboard-driven
+   (.selected), so the items are buttons that never take focus away from the
+   textarea. */
 .typeahead-menu {
-  position: absolute;
-  z-index: 30;
+  position: fixed;
+  z-index: 50;
   display: flex;
   flex-direction: column;
-  width: min(300px, 100%);
   max-height: 320px;
   overflow-y: auto;
   padding: 6px;

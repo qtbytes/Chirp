@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Ban,
@@ -303,7 +304,16 @@ export function useComposerTypeahead({
   // `type:start` of an entity Escape closed: stays hidden until the caret
   // leaves it, so the menu doesn't pop right back on the next keystroke.
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
+  // Viewport coordinates: the menu renders in a portal with position:fixed so
+  // a dialog composer's overflow clipping can never cut it off. Exactly one of
+  // top/bottom is set — bottom means "no room below the caret, open upward".
+  const [anchor, setAnchor] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const requestRef = useRef(0);
 
   const syncEntity = useCallback(() => {
@@ -382,9 +392,8 @@ export function useComposerTypeahead({
   }, [entityType, entityQuery]);
 
   // Anchor the menu under the trigger character's line, measured off the
-  // highlight backdrop. Layout effect: the backdrop must have re-rendered
-  // this draft before it is measured.
-  useLayoutEffect(() => {
+  // highlight backdrop.
+  const measure = useCallback(() => {
     if (!entity) {
       setAnchor(null);
       return;
@@ -397,16 +406,55 @@ export function useComposerTypeahead({
       return;
     }
     const containerRect = container.getBoundingClientRect();
-    const rect = rangeAtCharOffset(mirror, entity.start)?.getBoundingClientRect();
-    if (!rect || (rect.width === 0 && rect.height === 0)) {
-      setAnchor({ top: el.offsetTop + el.offsetHeight, left: 0 });
+    const charRect = rangeAtCharOffset(mirror, entity.start)?.getBoundingClientRect();
+    const line =
+      charRect && (charRect.width > 0 || charRect.height > 0)
+        ? charRect
+        : el.getBoundingClientRect();
+
+    const width = Math.min(300, Math.max(200, containerRect.width));
+    // Align with the trigger, kept inside the composer then inside the viewport.
+    const left = Math.max(
+      8,
+      Math.min(
+        Math.max(containerRect.left, line.left),
+        containerRect.right - width,
+        window.innerWidth - width - 8,
+      ),
+    );
+
+    // Open downward when the space under the caret's line can hold a useful
+    // list; otherwise open upward, pinned above the line. maxHeight tracks the
+    // chosen side so the menu scrolls internally instead of leaving the screen.
+    const below = window.innerHeight - line.bottom - 12;
+    const above = line.top - 12;
+    if (below >= 220 || below >= above) {
+      setAnchor({ top: line.bottom + 4, left, width, maxHeight: Math.min(320, below) });
+    } else {
+      setAnchor({
+        bottom: window.innerHeight - line.top + 4,
+        left,
+        width,
+        maxHeight: Math.min(320, above),
+      });
+    }
+  }, [entity, fieldRef]);
+
+  // Layout effect: the backdrop must have re-rendered this draft before it is
+  // measured. Scroll and resize move the fixed-position anchor, so re-measure
+  // on both (capture phase catches scrolls of any ancestor, not just window).
+  useLayoutEffect(measure, [measure, text]);
+  useEffect(() => {
+    if (!entity) {
       return;
     }
-    setAnchor({
-      top: rect.bottom - containerRect.top + 4,
-      left: Math.max(0, Math.min(rect.left - containerRect.left, containerRect.width - 300)),
-    });
-  }, [entity, fieldRef, text]);
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [entity, measure]);
 
   const count = entity?.type === "mention" ? users.length : tags.length;
   const open =
@@ -491,13 +539,22 @@ export function useComposerTypeahead({
   );
 
   const menu =
-    open && entity && anchor ? (
-      <div
-        className="typeahead-menu"
-        style={{ top: anchor.top, left: anchor.left }}
-        role="listbox"
-        aria-label={entity.type === "mention" ? "Mention suggestions" : "Hashtag suggestions"}
-      >
+    open && entity && anchor
+      ? createPortal(
+          <div
+            className="typeahead-menu"
+            style={{
+              top: anchor.top,
+              bottom: anchor.bottom,
+              left: anchor.left,
+              width: anchor.width,
+              maxHeight: anchor.maxHeight,
+            }}
+            role="listbox"
+            aria-label={
+              entity.type === "mention" ? "Mention suggestions" : "Hashtag suggestions"
+            }
+          >
         {entity.type === "mention"
           ? users.map((user, itemIndex) => (
               <button
@@ -541,8 +598,10 @@ export function useComposerTypeahead({
                 </span>
               </button>
             ))}
-      </div>
-    ) : null;
+          </div>,
+          document.body,
+        )
+      : null;
 
   return { menu, onKeyDown };
 }
