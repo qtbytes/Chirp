@@ -1255,6 +1255,16 @@ button.rail-link:disabled:hover {
   cursor: pointer;
 }
 
+/* No native tap flash on the cards (it inherits to everything inside them):
+   the whole card is one big click target, so on mobile any tap — including
+   one aimed at an image thumbnail — flashed the entire card blue. The app's
+   own hover/active styles and the navigation itself are the feedback;
+   keyboard users keep the :focus-visible outline below. */
+.tweet-card,
+.comment-card {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .tweet-card.clickable:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;

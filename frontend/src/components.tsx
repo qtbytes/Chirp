@@ -858,7 +858,12 @@ export function ImageLightbox({
     }
   }
 
-  return (
+  // Portaled to <body>: rendered in place it sits inside the clickable tweet
+  // card's DOM, and mobile browsers compute the tap-highlight from the DOM
+  // tree — every tap in the viewer flashed the whole card blue and ran the
+  // card's capture-phase handlers. stopPropagation only contains the React
+  // tree; moving the DOM subtree out is what actually detaches the card.
+  return createPortal(
     <div
       className="lightbox"
       role="dialog"
@@ -980,7 +985,8 @@ export function ImageLightbox({
           {alt}
         </div>
       ) : null}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
