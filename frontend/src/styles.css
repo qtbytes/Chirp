@@ -3749,3 +3749,30 @@ a.tab {
 .chat-menu-dropdown {
   min-width: 220px;
 }
+
+/* Bluesky-style empty inbox: a smiling bubble, a line, a New chat button. */
+.chat-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 110px 24px;
+  color: var(--ink);
+}
+
+.chat-empty-icon {
+  opacity: 0.9;
+}
+
+.chat-empty-state p {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.chat-empty-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+}

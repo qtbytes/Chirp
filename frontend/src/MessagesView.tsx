@@ -9,6 +9,7 @@ import {
   Check,
   Loader2,
   MailPlus,
+  MessageCirclePlus,
   MoreHorizontal,
   Search as SearchIcon,
   Settings2,
@@ -104,9 +105,33 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
 
       {error ? <div className="status-panel error">{error}</div> : null}
       {!loading && conversations.length === 0 && !error ? (
-        <div className="status-panel">
-          <strong>Inbox empty</strong>
-          <p>Say hi to someone!</p>
+        <div className="chat-empty-state">
+          {/* A smiling speech bubble (lucide's message-circle with a face). */}
+          <svg
+            className="chat-empty-icon"
+            width="72"
+            height="72"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+            <circle cx="9.2" cy="10.2" r="0.5" fill="currentColor" />
+            <circle cx="14.8" cy="10.2" r="0.5" fill="currentColor" />
+            <path d="M9.6 13.4c1.4 1.2 3.4 1.2 4.8 0" />
+          </svg>
+          <p>Say hi to someone</p>
+          <button
+            className="primary-button chat-empty-button"
+            onClick={() => setComposing(true)}
+          >
+            <MessageCirclePlus size={18} aria-hidden="true" />
+            <span>New chat</span>
+          </button>
         </div>
       ) : null}
 
