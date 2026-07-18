@@ -15,6 +15,10 @@ import "./styles.css";
 // font-family stack but defines nothing except flags, so on macOS/Android —
 // where detection says flags render natively — nothing is even downloaded.
 polyfillCountryFlagEmojis("Twemoji Country Flags", flagFontUrl);
+// The browser only fetches an @font-face when a glyph first needs it, which
+// made the first flag render as letters for a beat. Warm it at startup —
+// resolves instantly (no download) on platforms where the polyfill declined.
+void document.fonts.load('1em "Twemoji Country Flags"', "🇺🇳");
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

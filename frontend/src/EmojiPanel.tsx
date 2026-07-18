@@ -2,10 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock, Search } from "lucide-react";
 import { EMOJI_CATEGORIES, type EmojiItem } from "./emojiData";
 
-// The panel body of the emoji picker, split from the trigger (EmojiPicker.tsx)
-// so the generated emoji dataset — by far the largest module in the app — is
-// code-split out of the main bundle and fetched the first time a picker opens.
-// This file is loaded via React.lazy: keep the component the default export.
+// The panel body of the emoji picker: search, category tabs, and the grids.
+// EmojiPicker.tsx owns the trigger and the floating shell this renders into.
 
 const RECENTS_KEY = "emoji-recents";
 const RECENTS_LIMIT = 24;

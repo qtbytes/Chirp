@@ -1,12 +1,10 @@
-import { CSSProperties, Suspense, lazy, useEffect, useRef, useState } from "react";
+import { CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Smile } from "lucide-react";
-
-// The panel interior — and the large generated emoji dataset it imports — is
-// code-split out of the main bundle and fetched the first time any picker is
-// opened. The shell div stays here so it can render instantly (and hold the
-// ref the outside-click handler needs) while the chunk loads.
-const EmojiPanel = lazy(() => import("./EmojiPanel"));
+// Imported statically on purpose: code-splitting the panel (and its large
+// emoji dataset) made the first open visibly laggy, so the dataset ships in
+// the up-front bundle and the panel renders instantly.
+import EmojiPanel from "./EmojiPanel";
 
 // The panel's preferred height (search + tabs + scroll area + padding). The
 // side with room gets it; when neither side has this much, the panel is
@@ -124,9 +122,7 @@ export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void })
               role="dialog"
               aria-label="Emoji picker"
             >
-              <Suspense fallback={null}>
-                <EmojiPanel onPick={onSelect} />
-              </Suspense>
+              <EmojiPanel onPick={onSelect} />
             </div>,
             document.body,
           )
