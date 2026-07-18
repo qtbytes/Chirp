@@ -442,3 +442,113 @@ def test_avatar_is_served_from_uploads_mount() -> None:
     avatar_path = avatar_url.split("?", maxsplit=1)[0]
     saved_file = Path(settings.uploads_dir) / avatar_path.removeprefix("/uploads/")
     saved_file.unlink(missing_ok=True)
+
+
+# A syntactically valid media URL; regex-validated only, no upload needed.
+MEDIA_URL_A = "/uploads/media/" + "a" * 32 + ".png"
+MEDIA_URL_B = "/uploads/media/" + "b" * 32 + ".png"
+
+
+def test_user_media_lists_tweets_and_replies_with_media() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    bob_tweet = bob.post(
+        "/api/v1/tweets", json={"content": "bob pic", "media_urls": [MEDIA_URL_A]}
+    ).json()
+
+    alice.post("/api/v1/tweets", json={"content": "text only"})
+    media_tweet = alice.post(
+        "/api/v1/tweets", json={"content": "my photo", "media_urls": [MEDIA_URL_A]}
+    ).json()
+    media_reply = alice.post(
+        f"/api/v1/tweets/{bob_tweet['id']}/comments",
+        json={"content": "reply pic", "media_urls": [MEDIA_URL_B]},
+    ).json()
+    # A bare retweet of bob's media tweet carries no media of its own, so the
+    # media tab must not show it.
+    assert (
+        alice.post(
+            "/api/v1/tweets", json={"quoted_post_id": bob_tweet["id"]}
+        ).status_code
+        == 201
+    )
+
+    items = alice.get("/api/v1/users/alice/media").json()["items"]
+    assert [(item["id"], item["is_reply"]) for item in items] == [
+        (media_reply["id"], True),
+        (media_tweet["id"], False),
+    ]
+    reply_item = items[0]
+    assert reply_item["thread_id"] == bob_tweet["id"]
+    assert reply_item["parent_comment_id"] is None
+    assert reply_item["media_urls"] == [MEDIA_URL_B]
+    assert reply_item["author"]["username"] == "alice"
+
+
+def test_user_media_pagination() -> None:
+    client = TestClient(app)
+    register(client, "alice")
+    ids = [
+        client.post(
+            "/api/v1/tweets",
+            json={"content": f"media {index}", "media_urls": [MEDIA_URL_A]},
+        ).json()["id"]
+        for index in range(3)
+    ]
+
+    page = client.get("/api/v1/users/alice/media", params={"limit": 2}).json()
+    assert [item["id"] for item in page["items"]] == [ids[2], ids[1]]
+    assert page["next_cursor"]
+
+    page2 = client.get(
+        "/api/v1/users/alice/media",
+        params={"limit": 2, "cursor": page["next_cursor"]},
+    ).json()
+    assert [item["id"] for item in page2["items"]] == [ids[0]]
+    assert page2["next_cursor"] is None
+
+
+def test_user_media_error_paths_and_blocks() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    bob_id = register(bob, "bob")["id"]
+
+    assert alice.get("/api/v1/users/ghost/media").status_code == 404
+    assert (
+        alice.get("/api/v1/users/bob/media", params={"cursor": "junk"}).status_code
+        == 400
+    )
+
+    bob.post("/api/v1/tweets", json={"content": "pic", "media_urls": [MEDIA_URL_A]})
+    assert alice.get("/api/v1/users/bob/media").json()["items"]
+
+    alice.post(f"/api/v1/blocks/{bob_id}")
+    assert alice.get("/api/v1/users/bob/media").json()["items"] == []
+
+
+def test_user_media_hides_replies_into_hidden_threads() -> None:
+    bob = TestClient(app)
+    bob_id = register(bob, "bob")["id"]
+    carol = TestClient(app)
+    register(carol, "carol")
+    alice = TestClient(app)
+    register(alice, "alice")
+
+    followers_tweet = bob.post(
+        "/api/v1/tweets",
+        json={"content": "followers only", "visibility": "followers"},
+    ).json()
+    carol.post(f"/api/v1/follows/{bob_id}")
+    carol.post(
+        f"/api/v1/tweets/{followers_tweet['id']}/comments",
+        json={"content": "sneak pic", "media_urls": [MEDIA_URL_A]},
+    )
+
+    # bob follows the thread root he owns; the media reply is visible to him.
+    assert bob.get("/api/v1/users/carol/media").json()["items"]
+    # alice does not follow bob, so the reply's thread is hidden from her.
+    assert alice.get("/api/v1/users/carol/media").json()["items"] == []

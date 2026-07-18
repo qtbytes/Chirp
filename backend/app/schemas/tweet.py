@@ -98,6 +98,24 @@ class HashtagPostsPage(BaseModel):
     next_cursor: str | None = None
 
 
+class ProfileMediaPostOut(TweetOut):
+    """
+    A profile media-tab item: any post of the user's that carries its own
+    media, tweet or reply. Shaped like ``TweetOut`` so the same card renders
+    it, plus what the client needs to treat a reply as a comment:
+    ``thread_id`` (the thread to open) and ``parent_comment_id``.
+    """
+
+    is_reply: bool = False
+    thread_id: int
+    parent_comment_id: int | None = None
+
+
+class ProfileMediaPage(BaseModel):
+    items: list[ProfileMediaPostOut]
+    next_cursor: str | None = None
+
+
 class TrendingHashtagOut(BaseModel):
     tag: str
     post_count: int

@@ -407,6 +407,10 @@ function App() {
           path="/:username/replies"
           element={<ProfileView currentUser={currentUser} onCurrentUserChange={setCurrentUser} />}
         />
+        <Route
+          path="/:username/media"
+          element={<ProfileView currentUser={currentUser} onCurrentUserChange={setCurrentUser} />}
+        />
         <Route path="/:username/followers" element={<FollowListView />} />
         <Route path="/:username/following" element={<FollowListView />} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,14 +1,14 @@
 from datetime import datetime
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.models.like import Like
 from app.models.post import Post
 from app.models.user import User
 from app.repositories.block_repository import blocks_between
 from app.repositories.notification_repository import add_notification
-from app.repositories.tweet_repository import _quote_counts_subquery
+from app.repositories.tweet_repository import _quote_counts_subquery, list_tweet_stats
 from app.repositories.visibility import can_view_thread, visible_root_predicate
 
 
@@ -462,6 +462,106 @@ def list_replies_by_user(
         feed.append(
             {
                 **base,
+                "cursor_created_at": created_at,
+                "cursor_id": row_id,
+            }
+        )
+    return feed
+
+
+def list_media_posts_by_user(
+    db: Session,
+    user_id: int,
+    limit: int,
+    current_user_id: int | None = None,
+    cursor_created_at: datetime | None = None,
+    cursor_id: int | None = None,
+) -> list[dict]:
+    """
+    The user's media feed newest-first: every post they authored that carries
+    media of its own -- top-level tweets and replies alike, so the tab reads as
+    a feed of full posts (Bluesky-style) rather than a bare image grid.
+
+    "Media of its own" is the post's ``media_urls``. A plain retweet (an empty
+    quote) has none and is excluded, and a quoted post's images never qualify
+    the quote -- but a quote the user attached their own images to does.
+
+    Like the replies feed, each post is shown only when the viewer may see its
+    thread root, so a media reply into a followers-only thread does not leak.
+    """
+    Root = aliased(Post)
+    stmt = (
+        select(Post.id, Post.created_at)
+        .join(Root, Root.id == func.coalesce(Post.root_id, Post.id))
+        .where(
+            Post.user_id == user_id,
+            Post.media_urls.is_not(None),
+            func.json_array_length(Post.media_urls) > 0,
+            visible_root_predicate(current_user_id, Root),
+        )
+        .order_by(Post.created_at.desc(), Post.id.desc())
+        .limit(limit + 1)
+    )
+    if cursor_created_at is not None and cursor_id is not None:
+        stmt = stmt.where(
+            or_(
+                Post.created_at < cursor_created_at,
+                and_(
+                    Post.created_at == cursor_created_at,
+                    Post.id < cursor_id,
+                ),
+            )
+        )
+
+    ident_rows = db.execute(stmt).all()
+    ordered_ids = [row_id for row_id, _ in ident_rows]
+    if not ordered_ids:
+        return []
+
+    posts = db.scalars(
+        select(Post).options(joinedload(Post.author)).where(Post.id.in_(ordered_ids))
+    ).all()
+    post_by_id = {post.id: post for post in posts}
+
+    # A tweet and a reply keep different count semantics (a tweet's
+    # comment_count is its whole thread), so stat each kind with the matching
+    # method -- the same split the search feed makes.
+    tweet_ids = [post.id for post in posts if post.reply_to_id is None]
+    reply_ids = [post.id for post in posts if post.reply_to_id is not None]
+    stats_by_id: dict[int, dict] = {}
+    for stats in list_tweet_stats(
+        db, tweet_ids=tweet_ids, current_user_id=current_user_id
+    ):
+        stats_by_id[stats["id"]] = stats
+    for stats in list_comment_stats(
+        db, comment_ids=reply_ids, current_user_id=current_user_id
+    ):
+        stats_by_id[stats["id"]] = stats
+
+    empty = {
+        "like_count": 0,
+        "comment_count": 0,
+        "retweet_count": 0,
+        "view_count": 0,
+        "liked_by_me": False,
+    }
+
+    feed: list[dict] = []
+    for row_id, created_at in ident_rows:
+        post = post_by_id.get(row_id)
+        if post is None:
+            continue
+        stats = stats_by_id.get(row_id, empty)
+        feed.append(
+            {
+                "post": post,
+                "is_reply": post.reply_to_id is not None,
+                "thread_id": post.root_id or post.id,
+                "like_count": stats["like_count"],
+                "comment_count": stats["comment_count"],
+                "retweet_count": stats["retweet_count"],
+                "view_count": stats["view_count"],
+                "liked_by_me": stats["liked_by_me"],
                 "cursor_created_at": created_at,
                 "cursor_id": row_id,
             }

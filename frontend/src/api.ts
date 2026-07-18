@@ -11,6 +11,7 @@ import type {
   NotificationPage,
   Report,
   ReportReason,
+  ProfileMediaPage,
   ProfileRepliesPage,
   ProfileTweetsPage,
   SearchPage,
@@ -547,6 +548,19 @@ export function getUserTweets(
   }
   return request<ProfileTweetsPage>(
     `/users/${encodeURIComponent(username)}/tweets?${params.toString()}`,
+  );
+}
+
+export function getUserMedia(
+  username: string,
+  cursor?: string | null,
+): Promise<ProfileMediaPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<ProfileMediaPage>(
+    `/users/${encodeURIComponent(username)}/media?${params.toString()}`,
   );
 }
 

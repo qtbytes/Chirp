@@ -15,7 +15,12 @@ from app.repositories import (
 )
 from app.schemas.comment import CommentOut, ProfileRepliesPage, ReplyWithParentOut
 from app.schemas.follow import FollowListPage
-from app.schemas.tweet import ProfileTweetsPage, TweetOut
+from app.schemas.tweet import (
+    ProfileMediaPage,
+    ProfileMediaPostOut,
+    ProfileTweetsPage,
+    TweetOut,
+)
 from app.schemas.user import (
     UserDiscoveryOut,
     UserProfileOut,
@@ -158,6 +163,87 @@ def list_user_tweets(
         )
 
     return ProfileTweetsPage(items=items, next_cursor=next_cursor)
+
+
+@router.get("/{username}/media", response_model=ProfileMediaPage)
+def list_user_media(
+    username: str,
+    limit: int = Query(default=20, ge=1, le=50),
+    cursor: str | None = None,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> ProfileMediaPage:
+    """
+    The profile's Media tab: the user's own posts that carry media, tweets and
+    replies alike, as full posts (Bluesky-style) rather than an image grid.
+    """
+    user = user_repository.get_user_by_username(db, username)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+
+    cursor_created_at, cursor_id = decode_cursor(cursor)
+    if cursor and (cursor_created_at is None or cursor_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid cursor",
+        )
+
+    if block_repository.blocks_between(db, current_user_id, user.id):
+        return ProfileMediaPage(items=[], next_cursor=None)
+
+    rows = engagement_repository.list_media_posts_by_user(
+        db,
+        user_id=user.id,
+        limit=limit,
+        current_user_id=current_user_id,
+        cursor_created_at=cursor_created_at,
+        cursor_id=cursor_id,
+    )
+
+    has_next = len(rows) > limit
+    page_rows = rows[:limit]
+
+    items = []
+    for row in page_rows:
+        post = row["post"]
+        items.append(
+            ProfileMediaPostOut(
+                id=post.id,
+                content=post.content,
+                media_urls=post.media_urls or [],
+                media_alts=post.media_alts or [],
+                created_at=post.created_at,
+                edited_at=post.edited_at,
+                author=UserSummary.model_validate(post.author),
+                like_count=row["like_count"],
+                comment_count=row["comment_count"],
+                retweet_count=row["retweet_count"],
+                view_count=row["view_count"],
+                liked_by_me=row["liked_by_me"],
+                quoted_post=(
+                    serialize_quoted_post(post.quoted_post)
+                    if can_view_post(db, current_user_id, post.quoted_post)
+                    else None
+                ),
+                visibility=post.visibility,
+                is_reply=row["is_reply"],
+                thread_id=row["thread_id"],
+                parent_comment_id=post.parent_comment_id,
+            )
+        )
+
+    next_cursor = None
+    if has_next and page_rows:
+        last_row = page_rows[-1]
+        next_cursor = encode_cursor(
+            last_row["cursor_created_at"],
+            last_row["cursor_id"],
+        )
+
+    return ProfileMediaPage(items=items, next_cursor=next_cursor)
 
 
 @router.get("/{username}/replies", response_model=ProfileRepliesPage)

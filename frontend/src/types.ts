@@ -235,6 +235,23 @@ export type NotificationPage = {
   next_cursor: string | null;
 };
 
+/**
+ * A profile media-tab item: any of the user's own posts carrying media,
+ * tweet or reply. Tweet-shaped so a top-level item renders in a TweetCard;
+ * a reply carries `thread_id`/`parent_comment_id` so it can render as a
+ * comment and link into its thread.
+ */
+export type ProfileMediaPost = Tweet & {
+  is_reply: boolean;
+  thread_id: number;
+  parent_comment_id: number | null;
+};
+
+export type ProfileMediaPage = {
+  items: ProfileMediaPost[];
+  next_cursor: string | null;
+};
+
 export type ReplyWithParent = {
   comment: Comment;
   parent_tweet: Tweet;
