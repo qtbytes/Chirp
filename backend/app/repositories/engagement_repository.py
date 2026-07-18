@@ -513,7 +513,69 @@ def list_media_posts_by_user(
             )
         )
 
-    ident_rows = db.execute(stmt).all()
+    return _hydrate_profile_posts(db, db.execute(stmt).all(), current_user_id)
+
+
+def list_liked_posts_by_user(
+    db: Session,
+    user_id: int,
+    limit: int,
+    cursor_liked_at: datetime | None = None,
+    cursor_id: int | None = None,
+    exclude_author_ids: set[int] | None = None,
+) -> list[dict]:
+    """
+    The posts ``user_id`` liked, most recently liked first -- tweets and
+    replies alike (likes are one operation over the unified post model). The
+    caller is always the owner: the likes feed is private, so ``user_id`` is
+    both subject and viewer.
+
+    The cursor pages on ``(like.created_at, post_id)`` -- like time, not post
+    time, so the feed reads as a history of the user's liking.
+
+    A liked post drops out rather than leak when it is no longer visible to
+    the owner: its author was deleted, a block now stands between them
+    (``exclude_author_ids``), or its thread root's audience shut them out.
+    """
+    Root = aliased(Post)
+    stmt = (
+        select(Post.id, Like.created_at)
+        .join(Like, Like.post_id == Post.id)
+        .join(User, User.id == Post.user_id)
+        .join(Root, Root.id == func.coalesce(Post.root_id, Post.id))
+        .where(
+            Like.user_id == user_id,
+            User.deleted_at.is_(None),
+            visible_root_predicate(user_id, Root),
+        )
+        .order_by(Like.created_at.desc(), Post.id.desc())
+        .limit(limit + 1)
+    )
+    if exclude_author_ids:
+        stmt = stmt.where(Post.user_id.not_in(exclude_author_ids))
+    if cursor_liked_at is not None and cursor_id is not None:
+        stmt = stmt.where(
+            or_(
+                Like.created_at < cursor_liked_at,
+                and_(
+                    Like.created_at == cursor_liked_at,
+                    Post.id < cursor_id,
+                ),
+            )
+        )
+
+    return _hydrate_profile_posts(db, db.execute(stmt).all(), user_id)
+
+
+def _hydrate_profile_posts(
+    db: Session,
+    ident_rows: list,
+    current_user_id: int | None,
+) -> list[dict]:
+    """
+    Load posts + engagement for ``(post_id, cursor_datetime)`` rows, keeping
+    their order. Shared tail of the profile media and likes feeds.
+    """
     ordered_ids = [row_id for row_id, _ in ident_rows]
     if not ordered_ids:
         return []

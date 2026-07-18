@@ -552,3 +552,104 @@ def test_user_media_hides_replies_into_hidden_threads() -> None:
     assert bob.get("/api/v1/users/carol/media").json()["items"]
     # alice does not follow bob, so the reply's thread is hidden from her.
     assert alice.get("/api/v1/users/carol/media").json()["items"] == []
+
+
+def test_user_likes_lists_liked_tweets_and_replies_by_like_time() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    tweet1 = bob.post("/api/v1/tweets", json={"content": "first"}).json()
+    tweet2 = bob.post("/api/v1/tweets", json={"content": "second"}).json()
+    reply = bob.post(
+        f"/api/v1/tweets/{tweet1['id']}/comments", json={"content": "bob replies"}
+    ).json()
+
+    # Liked in this order: tweet2, then the reply, then tweet1 -- the feed
+    # must come back most-recently-liked first, not by post age.
+    alice.post(f"/api/v1/tweets/{tweet2['id']}/likes")
+    alice.post(f"/api/v1/comments/{reply['id']}/likes")
+    alice.post(f"/api/v1/tweets/{tweet1['id']}/likes")
+
+    items = alice.get("/api/v1/users/alice/likes").json()["items"]
+    assert [(item["id"], item["is_reply"]) for item in items] == [
+        (tweet1["id"], False),
+        (reply["id"], True),
+        (tweet2["id"], False),
+    ]
+    reply_item = items[1]
+    assert reply_item["thread_id"] == tweet1["id"]
+    assert reply_item["author"]["username"] == "bob"
+    assert all(item["liked_by_me"] for item in items)
+
+
+def test_user_likes_are_private() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    tweet = bob.post("/api/v1/tweets", json={"content": "hello"}).json()
+    alice.post(f"/api/v1/tweets/{tweet['id']}/likes")
+
+    assert bob.get("/api/v1/users/alice/likes").status_code == 403
+    assert alice.get("/api/v1/users/ghost/likes").status_code == 404
+    assert (
+        alice.get("/api/v1/users/alice/likes", params={"cursor": "junk"}).status_code
+        == 400
+    )
+
+
+def test_user_likes_pagination() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    ids = [
+        bob.post("/api/v1/tweets", json={"content": f"tweet {index}"}).json()["id"]
+        for index in range(3)
+    ]
+    for tweet_id in ids:
+        alice.post(f"/api/v1/tweets/{tweet_id}/likes")
+
+    page = alice.get("/api/v1/users/alice/likes", params={"limit": 2}).json()
+    assert [item["id"] for item in page["items"]] == [ids[2], ids[1]]
+    assert page["next_cursor"]
+
+    page2 = alice.get(
+        "/api/v1/users/alice/likes",
+        params={"limit": 2, "cursor": page["next_cursor"]},
+    ).json()
+    assert [item["id"] for item in page2["items"]] == [ids[0]]
+    assert page2["next_cursor"] is None
+
+
+def test_user_likes_hide_blocked_and_invisible_posts() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    bob_id = register(bob, "bob")["id"]
+    carol = TestClient(app)
+    carol_id = register(carol, "carol")["id"]
+
+    bob_tweet = bob.post("/api/v1/tweets", json={"content": "bob post"}).json()
+    alice.post(f"/api/v1/tweets/{bob_tweet['id']}/likes")
+
+    # A followers-only tweet alice can see while following; unfollowing later
+    # must drop it from her likes rather than leak it.
+    alice.post(f"/api/v1/follows/{carol_id}")
+    carol_tweet = carol.post(
+        "/api/v1/tweets",
+        json={"content": "carol followers only", "visibility": "followers"},
+    ).json()
+    alice.post(f"/api/v1/tweets/{carol_tweet['id']}/likes")
+
+    items = alice.get("/api/v1/users/alice/likes").json()["items"]
+    assert [item["id"] for item in items] == [carol_tweet["id"], bob_tweet["id"]]
+
+    alice.delete(f"/api/v1/follows/{carol_id}")
+    alice.post(f"/api/v1/blocks/{bob_id}")
+
+    assert alice.get("/api/v1/users/alice/likes").json()["items"] == []

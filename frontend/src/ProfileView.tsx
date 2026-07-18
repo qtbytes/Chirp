@@ -15,6 +15,7 @@ import {
   blockUser,
   displayName,
   followUser,
+  getUserLikes,
   getUserMedia,
   getUserProfile,
   getUserReplies,
@@ -25,7 +26,7 @@ import {
   unmuteUser,
 } from "./api";
 import type {
-  ProfileMediaPost,
+  ProfilePost,
   ReplyWithParent,
   Tweet,
   UserProfile,
@@ -52,13 +53,14 @@ export function ProfileView({
   const { username = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const activeTab: "tweets" | "replies" | "media" = location.pathname.endsWith(
-    "/replies",
-  )
-    ? "replies"
-    : location.pathname.endsWith("/media")
-      ? "media"
-      : "tweets";
+  const activeTab: "tweets" | "replies" | "media" | "likes" =
+    location.pathname.endsWith("/replies")
+      ? "replies"
+      : location.pathname.endsWith("/media")
+        ? "media"
+        : location.pathname.endsWith("/likes")
+          ? "likes"
+          : "tweets";
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -73,8 +75,10 @@ export function ProfileView({
   const [tweetsCursor, setTweetsCursor] = useState<string | null>(null);
   const [replies, setReplies] = useState<ReplyWithParent[]>([]);
   const [repliesCursor, setRepliesCursor] = useState<string | null>(null);
-  const [mediaPosts, setMediaPosts] = useState<ProfileMediaPost[]>([]);
+  const [mediaPosts, setMediaPosts] = useState<ProfilePost[]>([]);
   const [mediaCursor, setMediaCursor] = useState<string | null>(null);
+  const [likedPosts, setLikedPosts] = useState<ProfilePost[]>([]);
+  const [likesCursor, setLikesCursor] = useState<string | null>(null);
   const [loadingFeed, setLoadingFeed] = useState(false);
   const [feedError, setFeedError] = useState("");
 
@@ -92,6 +96,11 @@ export function ProfileView({
     `profile:${username}:media`,
     { mediaPosts, cursor: mediaCursor },
     mediaPosts.length === 0,
+  );
+  const takeLikesMemory = useFeedMemory(
+    `profile:${username}:likes`,
+    { likedPosts, cursor: likesCursor },
+    likedPosts.length === 0,
   );
 
   useEffect(() => {
@@ -169,10 +178,30 @@ export function ProfileView({
     [username],
   );
 
+  const loadLikes = useCallback(
+    async (cursor?: string | null, append = false) => {
+      setLoadingFeed(true);
+      setFeedError("");
+      try {
+        const page = await getUserLikes(username, cursor);
+        setLikedPosts((current) =>
+          append ? [...current, ...page.items] : page.items,
+        );
+        setLikesCursor(page.next_cursor);
+      } catch (err) {
+        setFeedError(getErrorMessage(err));
+      } finally {
+        setLoadingFeed(false);
+      }
+    },
+    [username],
+  );
+
   useEffect(() => {
     setTweets([]);
     setReplies([]);
     setMediaPosts([]);
+    setLikedPosts([]);
     if (notFound) {
       return;
     }
@@ -193,6 +222,14 @@ export function ProfileView({
         return;
       }
       void loadMedia();
+    } else if (activeTab === "likes") {
+      const cached = takeLikesMemory();
+      if (cached) {
+        setLikedPosts(cached.likedPosts);
+        setLikesCursor(cached.cursor);
+        return;
+      }
+      void loadLikes();
     } else {
       const cached = takeRepliesMemory();
       if (cached) {
@@ -203,7 +240,7 @@ export function ProfileView({
       void loadReplies();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, loadTweets, loadReplies, loadMedia, notFound]);
+  }, [activeTab, loadTweets, loadReplies, loadMedia, loadLikes, notFound]);
 
   const patchTweet = useCallback((tweetId: number, patch: Partial<Tweet>) => {
     setTweets((current) =>
@@ -213,6 +250,12 @@ export function ProfileView({
 
   const patchMediaPost = useCallback((postId: number, patch: Partial<Tweet>) => {
     setMediaPosts((current) =>
+      current.map((post) => (post.id === postId ? { ...post, ...patch } : post)),
+    );
+  }, []);
+
+  const patchLikedPost = useCallback((postId: number, patch: Partial<Tweet>) => {
+    setLikedPosts((current) =>
       current.map((post) => (post.id === postId ? { ...post, ...patch } : post)),
     );
   }, []);
@@ -275,6 +318,8 @@ export function ProfileView({
         void loadTweets();
       } else if (activeTab === "media") {
         void loadMedia();
+      } else if (activeTab === "likes") {
+        void loadLikes();
       } else {
         void loadReplies();
       }
@@ -322,6 +367,8 @@ export function ProfileView({
       void loadTweets();
     } else if (activeTab === "media") {
       void loadMedia();
+    } else if (activeTab === "likes") {
+      void loadLikes();
     } else {
       void loadReplies();
     }
@@ -452,7 +499,15 @@ export function ProfileView({
       ) : null}
 
       {profile.is_blocked ? null : (
-        <div className="tab-list tab-list--three" role="tablist" aria-label="Profile content">
+        <div
+          className={
+            profile.is_current_user
+              ? "tab-list tab-list--four"
+              : "tab-list tab-list--three"
+          }
+          role="tablist"
+          aria-label="Profile content"
+        >
           <Link
             to={`/${encodeURIComponent(username)}`}
             className={activeTab === "tweets" ? "tab active" : "tab"}
@@ -477,6 +532,16 @@ export function ProfileView({
           >
             Media
           </Link>
+          {profile.is_current_user ? (
+            <Link
+              to={`/${encodeURIComponent(username)}/likes`}
+              className={activeTab === "likes" ? "tab active" : "tab"}
+              role="tab"
+              aria-selected={activeTab === "likes"}
+            >
+              Likes
+            </Link>
+          ) : null}
         </div>
       )}
 
@@ -529,54 +594,58 @@ export function ProfileView({
             <div className="status-panel">No posts with media yet.</div>
           ) : null}
           <section className="tweet-list">
-            {mediaPosts.map((post) =>
-              post.is_reply ? (
-                <CommentCard
-                  key={post.id}
-                  comment={{
-                    id: post.id,
-                    tweet_id: post.thread_id,
-                    parent_comment_id: post.parent_comment_id,
-                    content: post.content,
-                    media_urls: post.media_urls,
-                    media_alts: post.media_alts,
-                    created_at: post.created_at,
-                    edited_at: post.edited_at,
-                    author: post.author,
-                    like_count: post.like_count,
-                    comment_count: post.comment_count,
-                    retweet_count: post.retweet_count,
-                    view_count: post.view_count,
-                    liked_by_me: post.liked_by_me,
-                    quoted_post: post.quoted_post,
-                  }}
-                  currentUserId={currentUser.id}
-                  onChanged={() => void loadMedia()}
-                  onReplyCreated={() => void loadMedia()}
-                  onOpen={() => navigate(`/comment/${post.id}`)}
-                />
-              ) : (
-                <TweetCard
-                  key={post.id}
-                  tweet={post}
-                  onOpen={() => navigate(`/tweet/${post.id}`)}
-                  onTweetPatch={patchMediaPost}
-                  currentUserId={currentUser.id}
-                  onDeleted={(id) =>
-                    setMediaPosts((current) =>
-                      current.filter((item) => item.id !== id),
-                    )
-                  }
-                  onAuthorMuted={() => void refreshAfterModeration()}
-                  onAuthorBlocked={() => void refreshAfterModeration()}
-                />
-              ),
-            )}
+            {mediaPosts.map((post) => (
+              <ProfilePostCard
+                key={post.id}
+                post={post}
+                currentUserId={currentUser.id}
+                onPatch={patchMediaPost}
+                onDeleted={(id) =>
+                  setMediaPosts((current) =>
+                    current.filter((item) => item.id !== id),
+                  )
+                }
+                onReload={() => void loadMedia()}
+                onModeration={() => void refreshAfterModeration()}
+              />
+            ))}
           </section>
           {mediaCursor ? (
             <button
               className="load-more"
               onClick={() => void loadMedia(mediaCursor, true)}
+              disabled={loadingFeed}
+            >
+              Load more
+            </button>
+          ) : null}
+        </>
+      ) : activeTab === "likes" ? (
+        <>
+          {!loadingFeed && likedPosts.length === 0 && !feedError ? (
+            <div className="status-panel">No likes yet.</div>
+          ) : null}
+          <section className="tweet-list">
+            {likedPosts.map((post) => (
+              <ProfilePostCard
+                key={post.id}
+                post={post}
+                currentUserId={currentUser.id}
+                onPatch={patchLikedPost}
+                onDeleted={(id) =>
+                  setLikedPosts((current) =>
+                    current.filter((item) => item.id !== id),
+                  )
+                }
+                onReload={() => void loadLikes()}
+                onModeration={() => void refreshAfterModeration()}
+              />
+            ))}
+          </section>
+          {likesCursor ? (
+            <button
+              className="load-more"
+              onClick={() => void loadLikes(likesCursor, true)}
               disabled={loadingFeed}
             >
               Load more
@@ -663,6 +732,71 @@ export function ProfileView({
       ) : null}
 
     </section>
+  );
+}
+
+/**
+ * One item of a mixed tweet/reply profile feed (the Media and Likes tabs): a
+ * reply renders as a comment card that opens its own thread, anything else as
+ * a regular tweet card.
+ */
+function ProfilePostCard({
+  post,
+  currentUserId,
+  onPatch,
+  onDeleted,
+  onReload,
+  onModeration,
+}: {
+  post: ProfilePost;
+  currentUserId: number;
+  onPatch: (postId: number, patch: Partial<Tweet>) => void;
+  onDeleted: (postId: number) => void;
+  /** Re-fetch the hosting feed after a change it cannot patch locally. */
+  onReload: () => void;
+  /** Resync profile + feed after muting or blocking the author from the card. */
+  onModeration: () => void;
+}) {
+  const navigate = useNavigate();
+
+  if (post.is_reply) {
+    return (
+      <CommentCard
+        comment={{
+          id: post.id,
+          tweet_id: post.thread_id,
+          parent_comment_id: post.parent_comment_id,
+          content: post.content,
+          media_urls: post.media_urls,
+          media_alts: post.media_alts,
+          created_at: post.created_at,
+          edited_at: post.edited_at,
+          author: post.author,
+          like_count: post.like_count,
+          comment_count: post.comment_count,
+          retweet_count: post.retweet_count,
+          view_count: post.view_count,
+          liked_by_me: post.liked_by_me,
+          quoted_post: post.quoted_post,
+        }}
+        currentUserId={currentUserId}
+        onChanged={onReload}
+        onReplyCreated={onReload}
+        onOpen={() => navigate(`/comment/${post.id}`)}
+      />
+    );
+  }
+
+  return (
+    <TweetCard
+      tweet={post}
+      onOpen={() => navigate(`/tweet/${post.id}`)}
+      onTweetPatch={onPatch}
+      currentUserId={currentUserId}
+      onDeleted={onDeleted}
+      onAuthorMuted={onModeration}
+      onAuthorBlocked={onModeration}
+    />
   );
 }
 

@@ -11,6 +11,7 @@ import type {
   NotificationPage,
   Report,
   ReportReason,
+  ProfileLikesPage,
   ProfileMediaPage,
   ProfileRepliesPage,
   ProfileTweetsPage,
@@ -561,6 +562,20 @@ export function getUserMedia(
   }
   return request<ProfileMediaPage>(
     `/users/${encodeURIComponent(username)}/media?${params.toString()}`,
+  );
+}
+
+/** The signed-in user's own liked posts; the server 403s anyone else's. */
+export function getUserLikes(
+  username: string,
+  cursor?: string | null,
+): Promise<ProfileLikesPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<ProfileLikesPage>(
+    `/users/${encodeURIComponent(username)}/likes?${params.toString()}`,
   );
 }
 

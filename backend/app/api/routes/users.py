@@ -16,8 +16,9 @@ from app.repositories import (
 from app.schemas.comment import CommentOut, ProfileRepliesPage, ReplyWithParentOut
 from app.schemas.follow import FollowListPage
 from app.schemas.tweet import (
+    ProfileLikesPage,
     ProfileMediaPage,
-    ProfileMediaPostOut,
+    ProfilePostOut,
     ProfileTweetsPage,
     TweetOut,
 )
@@ -203,6 +204,17 @@ def list_user_media(
         cursor_id=cursor_id,
     )
 
+    items, next_cursor = _profile_post_page(db, rows, limit, current_user_id)
+    return ProfileMediaPage(items=items, next_cursor=next_cursor)
+
+
+def _profile_post_page(
+    db: Session,
+    rows: list[dict],
+    limit: int,
+    current_user_id: int,
+) -> tuple[list[ProfilePostOut], str | None]:
+    """Serialize a mixed tweet/reply feed page; shared by the media and likes tabs."""
     has_next = len(rows) > limit
     page_rows = rows[:limit]
 
@@ -210,7 +222,7 @@ def list_user_media(
     for row in page_rows:
         post = row["post"]
         items.append(
-            ProfileMediaPostOut(
+            ProfilePostOut(
                 id=post.id,
                 content=post.content,
                 media_urls=post.media_urls or [],
@@ -243,7 +255,57 @@ def list_user_media(
             last_row["cursor_id"],
         )
 
-    return ProfileMediaPage(items=items, next_cursor=next_cursor)
+    return items, next_cursor
+
+
+@router.get("/{username}/likes", response_model=ProfileLikesPage)
+def list_user_likes(
+    username: str,
+    limit: int = Query(default=20, ge=1, le=50),
+    cursor: str | None = None,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> ProfileLikesPage:
+    """
+    The profile's Likes tab: posts the user liked -- tweets and replies alike --
+    most recently liked first.
+
+    Likes are private. Only the owner may read their own list; every other
+    caller gets 403, and the UI only offers the tab on your own profile.
+    """
+    user = user_repository.get_user_by_username(db, username)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+
+    if user.id != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="likes are private",
+        )
+
+    cursor_liked_at, cursor_id = decode_cursor(cursor)
+    if cursor and (cursor_liked_at is None or cursor_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid cursor",
+        )
+
+    rows = engagement_repository.list_liked_posts_by_user(
+        db,
+        user_id=user.id,
+        limit=limit,
+        cursor_liked_at=cursor_liked_at,
+        cursor_id=cursor_id,
+        # A block in either direction hides the author's posts everywhere,
+        # the likes history included.
+        exclude_author_ids=block_repository.hidden_user_ids(db, current_user_id),
+    )
+
+    items, next_cursor = _profile_post_page(db, rows, limit, current_user_id)
+    return ProfileLikesPage(items=items, next_cursor=next_cursor)
 
 
 @router.get("/{username}/replies", response_model=ProfileRepliesPage)

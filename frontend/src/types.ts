@@ -236,19 +236,24 @@ export type NotificationPage = {
 };
 
 /**
- * A profile media-tab item: any of the user's own posts carrying media,
- * tweet or reply. Tweet-shaped so a top-level item renders in a TweetCard;
+ * A profile feed item that may be a tweet or a reply (the Media and Likes
+ * tabs mix both). Tweet-shaped so a top-level item renders in a TweetCard;
  * a reply carries `thread_id`/`parent_comment_id` so it can render as a
  * comment and link into its thread.
  */
-export type ProfileMediaPost = Tweet & {
+export type ProfilePost = Tweet & {
   is_reply: boolean;
   thread_id: number;
   parent_comment_id: number | null;
 };
 
 export type ProfileMediaPage = {
-  items: ProfileMediaPost[];
+  items: ProfilePost[];
+  next_cursor: string | null;
+};
+
+export type ProfileLikesPage = {
+  items: ProfilePost[];
   next_cursor: string | null;
 };
 
