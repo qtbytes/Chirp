@@ -151,8 +151,13 @@ def test_block_keeps_history_but_locks_sending() -> None:
         refused = send(client, other, "hello?")
         assert refused.status_code == 403
         assert detail_part in refused.json()["detail"]
-    assert len(alice.get("/api/v1/dm/conversations").json()["items"]) == 1
-    assert len(bob.get("/api/v1/dm/conversations").json()["items"]) == 1
+    # Only the blocker's own views flag `blocked`, driving the Unblock menu.
+    assert alice.get("/api/v1/dm/with/bob").json()["blocked"] is True
+    assert bob.get("/api/v1/dm/with/alice").json()["blocked"] is False
+    alice_rows = alice.get("/api/v1/dm/conversations").json()["items"]
+    bob_rows = bob.get("/api/v1/dm/conversations").json()["items"]
+    assert [row["blocked"] for row in alice_rows] == [True]
+    assert [row["blocked"] for row in bob_rows] == [False]
 
     # The blocked side may still tidy their own copy: mute and delete work.
     assert bob.post("/api/v1/dm/with/alice/mute").status_code == 204

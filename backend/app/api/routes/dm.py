@@ -2,7 +2,7 @@ from app.api.deps import get_current_user_id
 from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.models.user import User
-from app.repositories import dm_repository, user_repository
+from app.repositories import block_repository, dm_repository, user_repository
 from app.schemas.dm import (
     ChatOut,
     ConversationOut,
@@ -78,6 +78,9 @@ def list_conversations(
             ),
             unread_count=row["unread_count"],
             muted=row["muted"],
+            blocked=block_repository.is_blocking(
+                db, current_user_id, row["other_user"].id
+            ),
         )
         for row in page_rows
     ]
@@ -139,6 +142,7 @@ def get_chat(
             if conversation is not None
             else False
         ),
+        blocked=block_repository.is_blocking(db, current_user_id, other.id),
     )
 
 

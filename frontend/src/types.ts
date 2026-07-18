@@ -276,6 +276,8 @@ export type DmConversation = {
   unread_count: number;
   /** Your own mute; the other participant never sees it. */
   muted: boolean;
+  /** Whether you've blocked them (the row menu offers Unblock instead). */
+  blocked: boolean;
 };
 
 export type DmConversationPage = {
@@ -307,6 +309,8 @@ export type DmChat = {
     | "blocked_you"
     | null;
   muted: boolean;
+  /** Whether you've blocked them (the chat menu offers Unblock instead). */
+  blocked: boolean;
 };
 
 export type ReplyWithParent = {

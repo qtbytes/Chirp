@@ -37,6 +37,9 @@ class ConversationOut(BaseModel):
     unread_count: int = 0
     # Viewer's own mute; the other participant never sees it.
     muted: bool = False
+    # Whether the viewer has blocked the other participant, so the row's menu
+    # can offer Unblock instead of Block.
+    blocked: bool = False
 
 
 class ConversationPage(BaseModel):
@@ -63,6 +66,9 @@ class ChatOut(BaseModel):
         Literal["policy", "await_reply", "you_blocked", "blocked_you"] | None
     ) = None
     muted: bool = False
+    # Whether the viewer has blocked the other participant (mirrors
+    # cannot_send_reason == 'you_blocked', but explicit for the menu).
+    blocked: bool = False
 
 
 class DmUnreadCountOut(BaseModel):

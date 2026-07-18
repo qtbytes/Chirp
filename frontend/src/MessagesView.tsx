@@ -174,6 +174,7 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
               <ChatMenu
                 otherUser={conversation.other_user}
                 muted={conversation.muted}
+                blocked={conversation.blocked}
                 onMutedChange={(muted) =>
                   setConversations((current) =>
                     current.map((item) =>
@@ -181,7 +182,7 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
                     ),
                   )
                 }
-                onBlocked={() => void load()}
+                onBlockChanged={() => void load()}
                 onDeleted={() =>
                   setConversations((current) =>
                     current.filter((item) => item.id !== conversation.id),
@@ -221,15 +222,18 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
 function ChatMenu({
   otherUser,
   muted,
+  blocked,
   onMutedChange,
-  onBlocked,
+  onBlockChanged,
   onDeleted,
 }: {
   otherUser: UserSummary;
   muted: boolean;
+  /** Whether the viewer has blocked them; flips the item to Unblock. */
+  blocked: boolean;
   onMutedChange: (muted: boolean) => void;
-  /** The account was blocked: the chat stays readable but sending locks. */
-  onBlocked: () => void;
+  /** A block was added or removed; the host should re-read its chat state. */
+  onBlockChanged: () => void;
   /** The conversation was deleted for this side; it left the inbox. */
   onDeleted: () => void;
 }) {
@@ -273,7 +277,7 @@ function ChatMenu({
       if (confirming === "block") {
         await blockUser(otherUser.id);
         setConfirming(null);
-        onBlocked();
+        onBlockChanged();
       } else {
         await deleteDmChat(otherUser.username);
         setConfirming(null);
@@ -319,18 +323,35 @@ function ChatMenu({
             )}
             <span>{muted ? "Unmute conversation" : "Mute conversation"}</span>
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="danger-menu-item"
-            onClick={() => {
-              setOpen(false);
-              setConfirming("block");
-            }}
-          >
-            <Ban size={16} aria-hidden="true" />
-            <span>Block account</span>
-          </button>
+          {blocked ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                // Unblocking restores, so it needs no confirmation.
+                void unblockUser(otherUser.id)
+                  .then(onBlockChanged)
+                  .catch((err) => setError(getErrorMessage(err)));
+              }}
+            >
+              <Ban size={16} aria-hidden="true" />
+              <span>Unblock account</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              className="danger-menu-item"
+              onClick={() => {
+                setOpen(false);
+                setConfirming("block");
+              }}
+            >
+              <Ban size={16} aria-hidden="true" />
+              <span>Block account</span>
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -733,10 +754,11 @@ export function ChatView({ currentUser }: { currentUser: UserSummary }) {
           <ChatMenu
             otherUser={chat.other_user}
             muted={chat.muted}
+            blocked={chat.blocked}
             onMutedChange={(muted) =>
               setChat((current) => (current ? { ...current, muted } : current))
             }
-            onBlocked={() => void refresh()}
+            onBlockChanged={() => void refresh()}
             onDeleted={() => navigate("/messages")}
           />
         </span>
