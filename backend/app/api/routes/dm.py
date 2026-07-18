@@ -2,7 +2,7 @@ from app.api.deps import get_current_user_id
 from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
 from app.models.user import User
-from app.repositories import block_repository, dm_repository, user_repository
+from app.repositories import dm_repository, user_repository
 from app.schemas.dm import (
     ChatOut,
     ConversationOut,
@@ -21,16 +21,13 @@ router = APIRouter(prefix="/dm", tags=["dm"])
 
 def _load_counterpart(db: Session, username: str, current_user_id: int) -> User:
     """
-    Resolve the other participant, refusing self-chat and hiding blocked or
-    deleted accounts behind the same 404 the rest of the API uses (a block is
-    never disclosed by a distinct error).
+    Resolve the other participant, refusing self-chat. Deliberately does NOT
+    gate on blocks: a block only locks sending (``check_can_send``), while the
+    existing history stays readable on both sides -- Twitter's behavior, and
+    kinder than the chat vanishing mid-thought.
     """
     user = user_repository.get_user_by_username(db, username)
-    if (
-        user is None
-        or user.is_deleted
-        or block_repository.blocks_between(db, current_user_id, user.id)
-    ):
+    if user is None or user.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="user not found",
@@ -57,13 +54,14 @@ def list_conversations(
             detail="invalid cursor",
         )
 
+    # Blocked counterparts are not excluded: their conversations stay listed
+    # (read-only) rather than vanishing.
     rows = dm_repository.list_conversations(
         db,
         user_id=current_user_id,
         limit=limit,
         cursor_last_message_at=cursor_last_at,
         cursor_id=cursor_id,
-        exclude_user_ids=block_repository.hidden_user_ids(db, current_user_id),
     )
 
     has_next = len(rows) > limit
@@ -98,11 +96,7 @@ def unread_count(
     db: Session = Depends(get_db),
 ) -> DmUnreadCountOut:
     return DmUnreadCountOut(
-        count=dm_repository.count_unread_total(
-            db,
-            user_id=current_user_id,
-            exclude_user_ids=block_repository.hidden_user_ids(db, current_user_id),
-        )
+        count=dm_repository.count_unread_total(db, user_id=current_user_id)
     )
 
 
@@ -139,7 +133,6 @@ def get_chat(
         messages=[DmMessageOut.model_validate(message) for message in messages],
         next_cursor=next_cursor,
         can_send=reason is None,
-        # 'blocked' cannot reach here (a block already 404s above).
         cannot_send_reason=reason,
         muted=(
             conversation.muted_for(current_user_id)
@@ -171,16 +164,14 @@ def send_message(
         )
     except PermissionError as exc:
         reason = str(exc)
-        if reason == "blocked":
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="user not found",
-            ) from exc
-        detail = (
-            "they don't accept new messages"
-            if reason == "policy"
-            else "wait for a reply before sending more messages"
-        )
+        if reason == "you_blocked":
+            detail = "you blocked this account; unblock them to send messages"
+        elif reason == "blocked_you":
+            detail = "this account has blocked you"
+        elif reason == "policy":
+            detail = "they don't accept new messages"
+        else:
+            detail = "wait for a reply before sending more messages"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=detail
         ) from exc

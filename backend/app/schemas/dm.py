@@ -49,15 +49,19 @@ class ChatOut(BaseModel):
     One conversation as the chat view needs it: the other participant, a page
     of messages (newest first; ``next_cursor`` pages further back), and
     whether the viewer may send right now. ``cannot_send_reason`` is a code
-    the client turns into copy: 'policy' (their setting refuses you) or
-    'await_reply' (your one opener is out; wait for them).
+    the client turns into copy: 'policy' (their setting refuses you),
+    'await_reply' (your one opener is out; wait for them), 'you_blocked'
+    (you blocked them -- unblock to resume), or 'blocked_you' (they blocked
+    you). Either block leaves the history readable; only sending ends.
     """
 
     other_user: UserSummary
     messages: list[DmMessageOut]
     next_cursor: str | None = None
     can_send: bool = True
-    cannot_send_reason: Literal["policy", "await_reply"] | None = None
+    cannot_send_reason: (
+        Literal["policy", "await_reply", "you_blocked", "blocked_you"] | None
+    ) = None
     muted: bool = False
 
 

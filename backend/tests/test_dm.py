@@ -124,7 +124,7 @@ def test_dm_policy_gates_new_conversations() -> None:
     assert send(carol, "bob", "still works").status_code == 201
 
 
-def test_dm_hidden_across_blocks_and_self_and_unknown() -> None:
+def test_block_keeps_history_but_locks_sending() -> None:
     alice = TestClient(app)
     register(alice, "alice")
     bob = TestClient(app)
@@ -137,18 +137,32 @@ def test_dm_hidden_across_blocks_and_self_and_unknown() -> None:
     assert alice.get("/api/v1/dm/with/alice").status_code == 400
     assert send(alice, "alice", "me myself").status_code == 400
 
-    # A block hides the chat and the conversation row in both directions.
+    # A block leaves the history readable on both sides but ends sending;
+    # each side gets copy for its own situation.
     alice.post(f"/api/v1/blocks/{bob_id}")
-    assert alice.get("/api/v1/dm/with/bob").status_code == 404
-    assert send(alice, "bob", "hello?").status_code == 404
-    assert send(bob, "alice", "hello?").status_code == 404
-    assert alice.get("/api/v1/dm/conversations").json()["items"] == []
-    assert bob.get("/api/v1/dm/conversations").json()["items"] == []
-    assert bob.get("/api/v1/dm/unread-count").json()["count"] == 0
+    for client, other, reason, detail_part in (
+        (alice, "bob", "you_blocked", "you blocked"),
+        (bob, "alice", "blocked_you", "has blocked you"),
+    ):
+        chat = client.get(f"/api/v1/dm/with/{other}").json()
+        assert len(chat["messages"]) == 2
+        assert chat["can_send"] is False
+        assert chat["cannot_send_reason"] == reason
+        refused = send(client, other, "hello?")
+        assert refused.status_code == 403
+        assert detail_part in refused.json()["detail"]
+    assert len(alice.get("/api/v1/dm/conversations").json()["items"]) == 1
+    assert len(bob.get("/api/v1/dm/conversations").json()["items"]) == 1
 
-    # Unblocking restores the history.
+    # The blocked side may still tidy their own copy: mute and delete work.
+    assert bob.post("/api/v1/dm/with/alice/mute").status_code == 204
+    assert bob.delete("/api/v1/dm/with/alice").status_code == 204
+    assert bob.get("/api/v1/dm/conversations").json()["items"] == []
+
+    # Unblocking reopens the established conversation for the untouched side.
     alice.delete(f"/api/v1/blocks/{bob_id}")
     assert len(alice.get("/api/v1/dm/with/bob").json()["messages"]) == 2
+    assert send(alice, "bob", "we're back").status_code == 201
 
 
 def test_message_pagination_and_validation() -> None:

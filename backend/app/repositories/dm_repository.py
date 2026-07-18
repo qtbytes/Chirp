@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.models.dm import Conversation, DmMessage
 from app.models.user import User
-from app.repositories.block_repository import blocks_between
+from app.repositories.block_repository import is_blocking
 from app.repositories.follow_repository import is_following
 from app.services.events import queue_user_event
 
@@ -51,10 +51,14 @@ def check_can_send(
 ) -> str | None:
     """
     Whether ``sender_id`` may message ``recipient`` right now; ``None`` for
-    yes, otherwise a reason code: 'blocked', 'policy', or 'await_reply'.
+    yes, otherwise a reason code: 'you_blocked' (the sender blocked the
+    recipient -- actionable, so said plainly), 'blocked_you' (the recipient
+    blocked the sender, or is gone), 'policy', or 'await_reply'.
     """
-    if recipient.is_deleted or blocks_between(db, sender_id, recipient.id):
-        return "blocked"
+    if is_blocking(db, sender_id, recipient.id):
+        return "you_blocked"
+    if recipient.is_deleted or is_blocking(db, recipient.id, sender_id):
+        return "blocked_you"
 
     if conversation is not None:
         recipient_has_replied = (

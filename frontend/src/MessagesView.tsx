@@ -27,6 +27,7 @@ import {
   markDmRead,
   sendDmMessage,
   setDmChatMuted,
+  unblockUser,
   updateProfile,
 } from "./api";
 import type {
@@ -180,7 +181,8 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
                     ),
                   )
                 }
-                onGone={() =>
+                onBlocked={() => void load()}
+                onDeleted={() =>
                   setConversations((current) =>
                     current.filter((item) => item.id !== conversation.id),
                   )
@@ -220,13 +222,16 @@ function ChatMenu({
   otherUser,
   muted,
   onMutedChange,
-  onGone,
+  onBlocked,
+  onDeleted,
 }: {
   otherUser: UserSummary;
   muted: boolean;
   onMutedChange: (muted: boolean) => void;
-  /** The chat is no longer viewable (deleted or account blocked). */
-  onGone: () => void;
+  /** The account was blocked: the chat stays readable but sending locks. */
+  onBlocked: () => void;
+  /** The conversation was deleted for this side; it left the inbox. */
+  onDeleted: () => void;
 }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -267,11 +272,13 @@ function ChatMenu({
     try {
       if (confirming === "block") {
         await blockUser(otherUser.id);
+        setConfirming(null);
+        onBlocked();
       } else {
         await deleteDmChat(otherUser.username);
+        setConfirming(null);
+        onDeleted();
       }
-      setConfirming(null);
-      onGone();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -342,7 +349,7 @@ function ChatMenu({
       {confirming === "block" ? (
         <ConfirmDialog
           title={`Block @${otherUser.username}?`}
-          message="They won't be able to message you, follow you, or see your Tweets, and you won't see theirs."
+          message="Neither of you can send messages anymore, though the chat history stays. They also can't follow you or see your Tweets."
           confirmLabel="Block"
           busyLabel="Blocking…"
           busy={busy}
@@ -547,6 +554,7 @@ export function ChatView({ currentUser }: { currentUser: UserSummary }) {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [unblocking, setUnblocking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
@@ -625,6 +633,21 @@ export function ChatView({ currentUser }: { currentUser: UserSummary }) {
       setError(getErrorMessage(err));
     } finally {
       setLoadingOlder(false);
+    }
+  }
+
+  async function unblock() {
+    if (unblocking) {
+      return;
+    }
+    setUnblocking(true);
+    try {
+      await unblockUser(chat!.other_user.id);
+      await refresh();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setUnblocking(false);
     }
   }
 
@@ -713,7 +736,8 @@ export function ChatView({ currentUser }: { currentUser: UserSummary }) {
             onMutedChange={(muted) =>
               setChat((current) => (current ? { ...current, muted } : current))
             }
-            onGone={() => navigate("/messages")}
+            onBlocked={() => void refresh()}
+            onDeleted={() => navigate("/messages")}
           />
         </span>
       </div>
@@ -802,6 +826,23 @@ export function ChatView({ currentUser }: { currentUser: UserSummary }) {
               <>
                 You can send more messages after @{chat.other_user.username}{" "}
                 replies.
+              </>
+            ) : chat.cannot_send_reason === "you_blocked" ? (
+              <>
+                You blocked @{chat.other_user.username}.{" "}
+                <button
+                  className="text-button inline"
+                  disabled={unblocking}
+                  onClick={() => void unblock()}
+                >
+                  Unblock
+                </button>{" "}
+                them to send messages again.
+              </>
+            ) : chat.cannot_send_reason === "blocked_you" ? (
+              <>
+                @{chat.other_user.username} has blocked you. You can&apos;t send
+                them messages.
               </>
             ) : (
               <>@{chat.other_user.username} doesn&apos;t accept new messages.</>

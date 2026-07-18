@@ -294,7 +294,18 @@ export type DmChat = {
   messages: DmMessage[];
   next_cursor: string | null;
   can_send: boolean;
-  cannot_send_reason: "policy" | "await_reply" | null;
+  /**
+   * "policy": their setting refuses you; "await_reply": your one opener is
+   * out; "you_blocked": you blocked them (unblock to resume);
+   * "blocked_you": they blocked you. Either block leaves the history
+   * readable; only sending ends.
+   */
+  cannot_send_reason:
+    | "policy"
+    | "await_reply"
+    | "you_blocked"
+    | "blocked_you"
+    | null;
   muted: boolean;
 };
 
