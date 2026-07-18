@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  ArrowUp,
   Check,
   Loader2,
   MailPlus,
-  SendHorizontal,
   Settings2,
   X,
 } from "lucide-react";
@@ -29,6 +29,8 @@ import type {
   UserSummary,
 } from "./types";
 import { Avatar, formatCompactDate, getErrorMessage, parseBackendDate } from "./components";
+import { EmojiPicker } from "./EmojiPicker";
+import { useEmojiField } from "./useEmojiField";
 
 const POLICY_LABELS: Record<DmPolicy, string> = {
   everyone: "Everyone",
@@ -341,6 +343,11 @@ export function ChatView({ currentUser }: { currentUser: UserSummary }) {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
+  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
+    draft,
+    setDraft,
+    1000,
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -539,25 +546,29 @@ export function ChatView({ currentUser }: { currentUser: UserSummary }) {
               void send();
             }}
           >
-            <textarea
-              value={draft}
-              maxLength={1000}
-              placeholder={`Message @${chat.other_user.username}`}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void send();
-                }
-              }}
-            />
+            <div className="chat-input-pill">
+              <textarea
+                {...fieldProps}
+                rows={1}
+                value={draft}
+                maxLength={1000}
+                placeholder={`Message @${chat.other_user.username}`}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void send();
+                  }
+                }}
+              />
+              <EmojiPicker onSelect={insertEmoji} />
+            </div>
             <button
               type="submit"
-              className="primary-button compact"
+              className="chat-send-button"
               disabled={sending || !draft.trim()}
               aria-label="Send message"
             >
-              <SendHorizontal size={16} aria-hidden="true" />
+              <ArrowUp size={18} aria-hidden="true" />
             </button>
           </form>
         ) : (

@@ -3567,20 +3567,77 @@ a.tab {
 .chat-composer {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
-.chat-composer textarea {
+/* Bluesky-style pill: soft rounded field with the emoji trigger inside.
+   Sized to the send button: 2px padding + 36px row = the button's 40px, and
+   the textarea's symmetric 8px padding around a 20px line centers a
+   single-line placeholder. Multi-line growth keeps the trigger bottom-set. */
+.chat-input-pill {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  background: var(--soft);
+  border-radius: 20px;
+  padding: 2px 6px 2px 16px;
+}
+
+.chat-input-pill textarea {
+  flex: 1;
+  min-width: 0;
   resize: none;
-  min-height: 44px;
+  min-height: 36px;
   max-height: 140px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--input);
+  padding: 8px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
   color: var(--ink);
   font: inherit;
+  line-height: 20px;
+}
+
+.chat-input-pill textarea::placeholder {
+  color: var(--muted);
+}
+
+.chat-input-pill .emoji-picker {
+  align-self: flex-end;
+}
+
+.chat-input-pill .emoji-trigger {
+  color: var(--muted);
+}
+
+.chat-input-pill .emoji-trigger:hover {
+  color: var(--accent);
+}
+
+/* ...and a round accent send button beside it. */
+.chat-send-button {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.chat-send-button:hover {
+  background: var(--accent-strong);
+}
+
+.chat-send-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .chat-locked {
