@@ -3057,6 +3057,14 @@ export function getErrorMessage(err: unknown): string {
   return "Something went wrong.";
 }
 
+/** 6 800 → "6.8K": the compact form the profile stat row uses. */
+export function formatCompactCount(value: number): string {
+  return new Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
 export function formatCompactDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
     month: "short",

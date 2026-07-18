@@ -523,12 +523,15 @@ def fetch_for_you_candidates(
     ]
 
 
-def count_tweets_by_author(db: Session, author_id: int) -> int:
+def count_posts_by_author(db: Session, author_id: int) -> int:
+    """
+    Everything the user has authored: top-level tweets, replies, and quotes
+    (a retweet is a quote post here, so it counts too). Matches the profile
+    counter semantics of Twitter and Bluesky, both of which count replies.
+    """
     return int(
         db.scalar(
-            select(func.count())
-            .select_from(Post)
-            .where(Post.user_id == author_id, Post.reply_to_id.is_(None))
+            select(func.count()).select_from(Post).where(Post.user_id == author_id)
         )
         or 0
     )

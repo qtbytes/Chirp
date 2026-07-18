@@ -37,13 +37,30 @@ def test_profile_counts_and_follow_state() -> None:
     assert body["bio"] is None
     assert body["follower_count"] == 1
     assert body["following_count"] == 0
-    assert body["tweet_count"] == 1
+    assert body["post_count"] == 1
     assert body["is_following"] is True
     assert body["is_current_user"] is False
 
     own = bob_client.get("/api/v1/users/bob/profile").json()
     assert own["is_current_user"] is True
     assert own["is_following"] is False
+
+
+def test_post_count_includes_replies_and_retweets() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    bob_tweet = bob.post("/api/v1/tweets", json={"content": "bob original"}).json()
+
+    alice.post("/api/v1/tweets", json={"content": "own tweet"})
+    alice.post(f"/api/v1/tweets/{bob_tweet['id']}/comments", json={"content": "a reply"})
+    # A bare retweet is a quote post, so it counts as a post of alice's.
+    alice.post("/api/v1/tweets", json={"quoted_post_id": bob_tweet["id"]})
+
+    profile = alice.get("/api/v1/users/alice/profile").json()
+    assert profile["post_count"] == 3
 
 
 def test_profile_unknown_username_returns_404() -> None:

@@ -34,6 +34,7 @@ import {
   CommentCard,
   ConfirmDialog,
   TweetCard,
+  formatCompactCount,
   getErrorMessage,
   parseBackendDate,
 } from "./components";
@@ -314,7 +315,7 @@ export function ProfileView({
         </button>
         <div className="profile-toolbar-copy">
           <h2>{displayName(profile)}</h2>
-          <span>{profile.tweet_count} Tweets</span>
+          <span>{formatCompactCount(profile.post_count)} posts</span>
         </div>
       </div>
 
@@ -374,11 +375,14 @@ export function ProfileView({
         </p>
         <p className="profile-stats">
           <Link to={`/${encodeURIComponent(username)}/following`}>
-            <strong>{profile.following_count}</strong> Following
+            <strong>{formatCompactCount(profile.following_count)}</strong> Following
           </Link>
           <Link to={`/${encodeURIComponent(username)}/followers`}>
-            <strong>{profile.follower_count}</strong> Followers
+            <strong>{formatCompactCount(profile.follower_count)}</strong> Followers
           </Link>
+          <span>
+            <strong>{formatCompactCount(profile.post_count)}</strong> Posts
+          </span>
         </p>
         {profileError ? <p className="form-error">{profileError}</p> : null}
       </header>

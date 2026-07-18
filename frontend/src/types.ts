@@ -123,7 +123,8 @@ export type UserProfile = {
   created_at: string;
   follower_count: number;
   following_count: number;
-  tweet_count: number;
+  /** Everything they've authored: tweets, replies, and quotes/retweets. */
+  post_count: number;
   is_following: boolean;
   is_current_user: boolean;
   /** Whether this profile belongs to a deleted (tombstoned) account. */

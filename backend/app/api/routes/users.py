@@ -78,7 +78,7 @@ def _build_profile(db: Session, user: User, current_user_id: int) -> UserProfile
         created_at=user.created_at,
         follower_count=follow_repository.count_followers(db, user.id),
         following_count=follow_repository.count_following(db, user.id),
-        tweet_count=tweet_repository.count_tweets_by_author(db, user.id),
+        post_count=tweet_repository.count_posts_by_author(db, user.id),
         is_following=follow_repository.is_following(db, current_user_id, user.id),
         is_current_user=is_current_user,
         is_deleted=user.is_deleted,

@@ -172,7 +172,9 @@ class UserProfileOut(BaseModel):
     created_at: datetime
     follower_count: int
     following_count: int
-    tweet_count: int
+    # Everything they have authored: tweets, replies, and quotes/retweets --
+    # the same semantics as Twitter's and Bluesky's profile post counters.
+    post_count: int
     is_following: bool
     is_current_user: bool
     # Whether this profile belongs to a deleted (tombstoned) account.
