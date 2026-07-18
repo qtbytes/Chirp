@@ -22,7 +22,9 @@
   --retweet: #00ba7c;
   --page: #ffffff;
   --panel: #ffffff;
-  --panel-glass: rgba(255, 255, 255, 0.92);
+  /* Twitter-style glass headers: ~15% see-through so scrolled content glows
+     through the backdrop blur instead of hitting a near-solid bar. */
+  --panel-glass: rgba(255, 255, 255, 0.85);
   --input: #ffffff;
   --soft: #f7f9f9;
   --hover: #f7f9f9;
@@ -53,7 +55,7 @@
     --retweet: #2bd891;
     --page: #000000;
     --panel: #000000;
-    --panel-glass: rgba(0, 0, 0, 0.86);
+    --panel-glass: rgba(0, 0, 0, 0.65);
     --input: #101418;
     --soft: #16181c;
     --hover: #080f16;
@@ -79,7 +81,7 @@
   --retweet: #2bd891;
   --page: #000000;
   --panel: #000000;
-  --panel-glass: rgba(0, 0, 0, 0.86);
+  --panel-glass: rgba(0, 0, 0, 0.65);
   --input: #101418;
   --soft: #16181c;
   --hover: #080f16;
