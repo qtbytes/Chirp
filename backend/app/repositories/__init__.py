@@ -1,4 +1,5 @@
 from app.repositories import (
+    dm_repository,
     engagement_repository,
     feed_repository,
     follow_repository,
@@ -16,6 +17,7 @@ __all__ = [
     "follow_repository",
     "feed_repository",
     "engagement_repository",
+    "dm_repository",
     "notification_repository",
     "block_repository",
     "mute_repository",

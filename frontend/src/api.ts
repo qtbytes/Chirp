@@ -362,10 +362,17 @@ export function getTimeline(kind: TimelineKind, cursor?: string | null): Promise
   return request<TimelinePage>(path);
 }
 
-export function listUsers(query: string): Promise<UserDiscovery[]> {
+export function listUsers(
+  query: string,
+  options: { messageable?: boolean } = {},
+): Promise<UserDiscovery[]> {
   const params = new URLSearchParams({ limit: "10" });
   if (query.trim()) {
     params.set("query", query.trim());
+  }
+  if (options.messageable) {
+    // Only accounts the caller could actually DM (policy/block filtered).
+    params.set("messageable", "true");
   }
   return request<UserDiscovery[]>(`/users?${params.toString()}`);
 }

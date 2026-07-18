@@ -7,6 +7,7 @@ from app.db.database import get_db
 from app.models.user import User
 from app.repositories import (
     block_repository,
+    dm_repository,
     engagement_repository,
     follow_repository,
     mute_repository,
@@ -48,6 +49,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 def list_users(
     query: str | None = Query(default=None, min_length=1, max_length=50),
     limit: int = Query(default=10, ge=1, le=50),
+    messageable: bool = Query(default=False),
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> list[UserDiscoveryOut]:
@@ -58,6 +60,23 @@ def list_users(
         limit=limit,
         exclude_user_ids=block_repository.hidden_user_ids(db, current_user_id),
     )
+    if messageable:
+        # The New-chat picker: only accounts the caller could actually message
+        # -- rather than listing everyone and graying out the refusals. An
+        # existing conversation awaiting a reply still qualifies (the chat
+        # opens; only the composer is capped).
+        rows = [
+            (user, is_following)
+            for user, is_following in rows
+            if user.id != current_user_id
+            and dm_repository.check_can_send(
+                db,
+                current_user_id,
+                user,
+                dm_repository.get_conversation(db, current_user_id, user.id),
+            )
+            in (None, "await_reply")
+        ]
     return [
         UserDiscoveryOut(
             id=user.id,

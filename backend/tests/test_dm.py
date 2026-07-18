@@ -278,3 +278,42 @@ def test_delete_does_not_reset_spam_opener() -> None:
     refused = send(alice, "bob", "opener again")
     assert refused.status_code == 403
     assert "wait for a reply" in refused.json()["detail"]
+
+
+def test_user_search_messageable_filter() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+    carol = TestClient(app)
+    carol_id = register(carol, "carol")["id"]
+    dave = TestClient(app)
+    register(dave, "dave")
+
+    # bob refuses DMs; carol is blocked by alice; dave is open.
+    bob.patch("/api/v1/users/me", json={"dm_policy": "none"})
+    alice.post(f"/api/v1/blocks/{carol_id}")
+
+    plain = {u["username"] for u in alice.get("/api/v1/users").json()}
+    assert "bob" in plain  # unfiltered search still lists him
+
+    names = {
+        u["username"]
+        for u in alice.get("/api/v1/users", params={"messageable": True}).json()
+    }
+    assert "dave" in names
+    assert "bob" not in names  # policy refuses alice
+    assert "carol" not in names  # blocked
+    assert "alice" not in names  # never yourself
+
+    # An established conversation overrides the policy: once bob replied to
+    # dave, bob shows up in dave's picker even with DMs off.
+    bob.patch("/api/v1/users/me", json={"dm_policy": "everyone"})
+    assert send(dave, "bob", "hi").status_code == 201
+    assert send(bob, "dave", "hello").status_code == 201
+    bob.patch("/api/v1/users/me", json={"dm_policy": "none"})
+    dave_names = {
+        u["username"]
+        for u in dave.get("/api/v1/users", params={"messageable": True}).json()
+    }
+    assert "bob" in dave_names

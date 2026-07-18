@@ -10,6 +10,7 @@ import {
   Loader2,
   MailPlus,
   MoreHorizontal,
+  Search as SearchIcon,
   Settings2,
   Trash2,
   User as UserIcon,
@@ -479,7 +480,11 @@ function DmSettingsMenu({ username }: { username: string }) {
   );
 }
 
-/** "New chat": pick a user by name, then jump into the conversation. */
+/**
+ * "New message" (Twitter-style): search people you can actually DM -- the
+ * server filters out accounts whose policy or a block refuses you, rather
+ * than listing them grayed out -- then jump into the conversation.
+ */
 function NewChatDialog({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -496,7 +501,7 @@ function NewChatDialog({ onClose }: { onClose: () => void }) {
     let cancelled = false;
     const timer = window.setTimeout(() => {
       setSearching(true);
-      listUsers(trimmed)
+      listUsers(trimmed, { messageable: true })
         .then((users) => {
           if (!cancelled) {
             setResults(users.filter((user) => !user.is_current_user));
@@ -520,35 +525,36 @@ function NewChatDialog({ onClose }: { onClose: () => void }) {
       <div
         className="modal new-chat-modal"
         role="dialog"
-        aria-label="Start a new chat"
+        aria-label="New message"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2>New chat</h2>
+          <h2>New message</h2>
           <button className="icon-button" onClick={onClose} aria-label="Close">
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <input
-          autoFocus
-          placeholder="Search people"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
+        <div className="new-chat-search">
+          <SearchIcon size={18} aria-hidden="true" />
+          <input
+            autoFocus
+            placeholder="Search people"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
         {error ? <p className="form-error">{error}</p> : null}
         <div className="new-chat-results">
           {results.map((user) => (
             <button
               key={user.id}
-              className="chat-row"
+              className="new-chat-user"
               onClick={() => navigate(`/messages/${encodeURIComponent(user.username)}`)}
             >
               <Avatar user={user} />
-              <span className="chat-row-body">
-                <span className="chat-row-top">
-                  <strong>{displayName(user)}</strong>
-                  <span className="chat-row-handle">@{user.username}</span>
-                </span>
+              <span className="new-chat-user-copy">
+                <strong>{displayName(user)}</strong>
+                <span>@{user.username}</span>
               </span>
             </button>
           ))}
@@ -557,6 +563,9 @@ function NewChatDialog({ onClose }: { onClose: () => void }) {
               <Loader2 className="spin" size={18} aria-hidden="true" />
               <span>Searching</span>
             </div>
+          ) : null}
+          {!searching && query.trim() && results.length === 0 && !error ? (
+            <p className="new-chat-empty">No one found who can be messaged.</p>
           ) : null}
         </div>
       </div>
