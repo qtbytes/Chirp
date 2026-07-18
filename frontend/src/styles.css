@@ -666,7 +666,9 @@ button.rail-link:disabled:hover {
 .feed-header {
   position: sticky;
   top: 0;
-  z-index: 3;
+  /* Above in-card chrome (.post-menu 3, .profile-menu 5) so nothing pokes
+     through the pinned bar while scrolling; below panels/modals (20+). */
+  z-index: 15;
   background: var(--panel-glass);
   backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--line);
@@ -1843,13 +1845,20 @@ button.media-grid__cell {
 }
 
 .detail-toolbar {
+  /* Pinned like .feed-header, so the back arrow stays reachable however far
+     the page (tweet detail, profile, follow lists) has been scrolled. Same
+     z-index reasoning: above in-card chrome, below panels/modals. */
+  position: sticky;
+  top: 0;
+  z-index: 15;
   min-height: 54px;
   display: flex;
   align-items: center;
   gap: 18px;
   padding: 0 14px;
   border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  background: var(--panel-glass);
+  backdrop-filter: blur(18px);
 }
 
 .detail-toolbar h2 {
