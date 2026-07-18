@@ -2,6 +2,7 @@ from app.api.routes import (
     auth,
     blocks,
     comments,
+    dm,
     follows,
     hashtags,
     interactions,
@@ -23,6 +24,7 @@ api_router.include_router(blocks.router)
 api_router.include_router(mutes.router)
 api_router.include_router(reports.router)
 api_router.include_router(comments.router)
+api_router.include_router(dm.router)
 api_router.include_router(users.router)
 api_router.include_router(follows.router)
 api_router.include_router(hashtags.router)

@@ -137,6 +137,8 @@ export type UserProfile = {
   email: string | null;
   /** Claimed but unconfirmed. Null on anyone else's profile. */
   pending_email: string | null;
+  /** Who may DM you. Null on anyone else's profile. */
+  dm_policy: DmPolicy | null;
 };
 
 export type BlockedUser = UserSummary & {
@@ -255,6 +257,42 @@ export type ProfileMediaPage = {
 export type ProfileLikesPage = {
   items: ProfilePost[];
   next_cursor: string | null;
+};
+
+/** Who may open a DM conversation with you. Like reply controls. */
+export type DmPolicy = "everyone" | "following" | "none";
+
+export type DmMessage = {
+  id: number;
+  sender_id: number;
+  content: string;
+  created_at: string;
+};
+
+export type DmConversation = {
+  id: number;
+  other_user: UserSummary;
+  last_message: DmMessage | null;
+  unread_count: number;
+};
+
+export type DmConversationPage = {
+  items: DmConversation[];
+  next_cursor: string | null;
+};
+
+/**
+ * One chat as the conversation view needs it. `messages` come newest first;
+ * `next_cursor` pages further back. When `can_send` is false,
+ * `cannot_send_reason` says why: "policy" (their setting refuses you) or
+ * "await_reply" (your one opener is out; wait for them to answer).
+ */
+export type DmChat = {
+  other_user: UserSummary;
+  messages: DmMessage[];
+  next_cursor: string | null;
+  can_send: boolean;
+  cannot_send_reason: "policy" | "await_reply" | null;
 };
 
 export type ReplyWithParent = {

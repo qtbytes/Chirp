@@ -47,6 +47,12 @@ class User(Base):
         default=utcnow,
         nullable=False,
     )
+    # Who may open a DM conversation with this user: "everyone", "following"
+    # (only people this user follows), or "none". Checked at send time for new
+    # conversations; an established chat (this user has replied) stays open.
+    dm_policy: Mapped[str] = mapped_column(
+        String(16), default="everyone", server_default="everyone", nullable=False
+    )
     # Set when the account is deleted. The row survives -- soft delete -- so that
     # posts others replied to or quoted keep an author to point at; the personal
     # fields above are scrubbed and the username is rewritten to deleted_<id>.

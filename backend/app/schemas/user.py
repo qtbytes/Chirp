@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -53,6 +53,7 @@ RESERVED_USERNAMES = frozenset(
         "reset-password",
         "verify-email",
         "forgot-password",
+        "messages",
     }
 )
 
@@ -161,6 +162,8 @@ class UserDiscoveryOut(UserSummary):
 class UserUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=50)
     bio: str | None = Field(default=None, max_length=160)
+    # Who may open a DM conversation with the user (see schemas/dm.py).
+    dm_policy: Literal["everyone", "following", "none"] | None = None
 
 
 class UserProfileOut(BaseModel):
@@ -190,3 +193,5 @@ class UserProfileOut(BaseModel):
     # UserSummary, which rides along inside every tweet as the author.
     email: str | None = None
     pending_email: str | None = None
+    # Also owner-only: the DM privacy setting, so the Messages UI can show it.
+    dm_policy: Literal["everyone", "following", "none"] | None = None

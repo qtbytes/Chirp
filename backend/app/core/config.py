@@ -132,6 +132,8 @@ class Settings(BaseSettings):
     rate_limit_like_window_seconds: int = 60
     rate_limit_comment_max_requests: int = 30
     rate_limit_comment_window_seconds: int = 60
+    rate_limit_dm_max_requests: int = 30
+    rate_limit_dm_window_seconds: int = 60
     rate_limit_report_max_requests: int = 20
     rate_limit_report_window_seconds: int = 3600
     rate_limit_timeline_max_requests: int = 120

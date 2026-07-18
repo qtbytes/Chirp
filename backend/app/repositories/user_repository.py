@@ -128,6 +128,10 @@ def update_user_profile(db: Session, user_id: int, fields: dict) -> User:
                 value = None
             setattr(user, key, value)
 
+    # Schema-validated ('everyone' / 'following' / 'none'); None means unset.
+    if fields.get("dm_policy") is not None:
+        user.dm_policy = fields["dm_policy"]
+
     db.commit()
     db.refresh(user)
     return user

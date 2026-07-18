@@ -55,6 +55,7 @@ import {
   getTweetStats,
   getUserProfile,
   recordPostViews,
+  getDmUnreadCount,
   getUnreadNotificationCount,
   listComments,
   listNotifications,
@@ -114,6 +115,7 @@ import {
 } from "./components";
 import { ProfileView } from "./ProfileView";
 import { FollowListView } from "./FollowListView";
+import { ChatView, MessagesView } from "./MessagesView";
 import { AccountView } from "./AccountView";
 import { ResetPasswordView, VerifyEmailView } from "./AuthTokenViews";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
@@ -388,6 +390,11 @@ function App() {
         <Route path="/search" element={<SearchView />} />
         <Route path="/hashtag/:tag" element={<HashtagView />} />
         <Route path="/notifications" element={<NotificationsView />} />
+        <Route path="/messages" element={<MessagesView currentUser={currentUser} />} />
+        <Route
+          path="/messages/:username"
+          element={<ChatView currentUser={currentUser} />}
+        />
         <Route
           path="/settings"
           element={
@@ -548,11 +555,13 @@ function AppLayout({
 }) {
   const [refreshToken, setRefreshToken] = useState(0);
   const [unread, setUnread] = useState(0);
+  const [dmUnread, setDmUnread] = useState(0);
   const [composing, setComposing] = useState(false);
   const [relevantPeople, setRelevantPeople] = useState<UserSummary[]>([]);
   const location = useLocation();
   const isSearchRoute = location.pathname === "/search";
   const isNotificationsRoute = location.pathname === "/notifications";
+  const isMessagesRoute = location.pathname.startsWith("/messages");
   const isSettingsRoute = location.pathname === "/settings";
   const isHomeRoute =
     location.pathname === "/" || location.pathname === "/following";
@@ -565,6 +574,14 @@ function AppLayout({
       setUnread(count);
     } catch {
       // Ignore polling failures; the badge just keeps its last value.
+    }
+    // A DM send publishes the same SSE nudge as a notification, so both
+    // badges re-read on the same triggers.
+    try {
+      const { count } = await getDmUnreadCount();
+      setDmUnread(count);
+    } catch {
+      // Same: keep the last value.
     }
   }, []);
 
@@ -625,6 +642,21 @@ function AppLayout({
               ) : null}
             </span>
             <span>Notifications</span>
+          </Link>
+          <Link
+            className={isMessagesRoute ? "rail-link active" : "rail-link"}
+            to="/messages"
+            aria-label={dmUnread > 0 ? `Messages, ${dmUnread} unread` : "Messages"}
+          >
+            <span className="rail-icon">
+              <MessageCircle size={22} aria-hidden="true" />
+              {dmUnread > 0 ? (
+                <span className="rail-badge" aria-hidden="true">
+                  {dmUnread > 99 ? "99+" : dmUnread}
+                </span>
+              ) : null}
+            </span>
+            <span>Messages</span>
           </Link>
           <Link
             className={isSettingsRoute ? "rail-link active" : "rail-link"}

@@ -1,6 +1,10 @@
 import type {
   BlockListPage,
   Comment,
+  DmChat,
+  DmConversationPage,
+  DmMessage,
+  DmPolicy,
   CommentLikeToggleResult,
   CommentStats,
   FollowListPage,
@@ -593,12 +597,55 @@ export function getUserReplies(
 }
 
 export function updateProfile(
-  fields: { display_name?: string; bio?: string },
+  fields: { display_name?: string; bio?: string; dm_policy?: DmPolicy },
 ): Promise<UserProfile> {
   return request<UserProfile>("/users/me", {
     method: "PATCH",
     body: JSON.stringify(fields),
   });
+}
+
+export function getDmConversations(
+  cursor?: string | null,
+): Promise<DmConversationPage> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<DmConversationPage>(`/dm/conversations?${params.toString()}`);
+}
+
+export function getDmChat(
+  username: string,
+  beforeId?: number | null,
+): Promise<DmChat> {
+  const params = new URLSearchParams({ limit: "30" });
+  if (beforeId) {
+    params.set("before_id", String(beforeId));
+  }
+  return request<DmChat>(
+    `/dm/with/${encodeURIComponent(username)}?${params.toString()}`,
+  );
+}
+
+export function sendDmMessage(
+  username: string,
+  content: string,
+): Promise<DmMessage> {
+  return request<DmMessage>(`/dm/with/${encodeURIComponent(username)}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function markDmRead(username: string): Promise<void> {
+  return request<void>(`/dm/with/${encodeURIComponent(username)}/read`, {
+    method: "POST",
+  });
+}
+
+export function getDmUnreadCount(): Promise<{ count: number }> {
+  return request<{ count: number }>("/dm/unread-count");
 }
 
 export function listNotifications(cursor?: string | null): Promise<NotificationPage> {
