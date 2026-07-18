@@ -6,6 +6,7 @@ import {
   Ban,
   Calendar,
   Loader2,
+  MessageCircle,
   MoreHorizontal,
   Volume2,
   VolumeX,
@@ -448,6 +449,16 @@ export function ProfileView({
                 onToggleMute={() => void toggleMute()}
                 onBlock={() => setConfirmingBlock(true)}
               />
+              <button
+                className="outline-icon-button"
+                onClick={() =>
+                  navigate(`/messages/${encodeURIComponent(profile.username)}`)
+                }
+                aria-label={`Message @${profile.username}`}
+                title="Message"
+              >
+                <MessageCircle size={18} aria-hidden="true" />
+              </button>
               <button
                 className={profile.is_following ? "outline-button following" : "primary-button compact"}
                 onClick={() => void toggleFollow()}
