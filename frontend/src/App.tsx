@@ -565,7 +565,8 @@ function AppLayout({
   const isSettingsRoute = location.pathname === "/settings";
   const isHomeRoute =
     location.pathname === "/" || location.pathname === "/following";
-  const hideDiscovery = isSearchRoute || isNotificationsRoute || isSettingsRoute;
+  const hideDiscovery =
+    isSearchRoute || isNotificationsRoute || isMessagesRoute || isSettingsRoute;
   const onDiscoveryChanged = () => setRefreshToken((value) => value + 1);
 
   const refreshUnread = useCallback(async () => {
