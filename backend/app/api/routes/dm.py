@@ -79,6 +79,7 @@ def list_conversations(
                 else None
             ),
             unread_count=row["unread_count"],
+            muted=row["muted"],
         )
         for row in page_rows
     ]
@@ -125,7 +126,7 @@ def get_chat(
     next_cursor = None
     if conversation is not None:
         rows = dm_repository.list_messages(
-            db, conversation, limit=limit, before_id=before_id
+            db, conversation, viewer_id=current_user_id, limit=limit, before_id=before_id
         )
         has_next = len(rows) > limit
         messages = rows[:limit]
@@ -140,6 +141,11 @@ def get_chat(
         can_send=reason is None,
         # 'blocked' cannot reach here (a block already 404s above).
         cannot_send_reason=reason,
+        muted=(
+            conversation.muted_for(current_user_id)
+            if conversation is not None
+            else False
+        ),
     )
 
 
@@ -191,3 +197,53 @@ def mark_chat_read(
     conversation = dm_repository.get_conversation(db, current_user_id, other.id)
     if conversation is not None:
         dm_repository.mark_read(db, conversation, current_user_id)
+
+
+@router.post("/with/{username}/mute", status_code=status.HTTP_204_NO_CONTENT)
+def mute_chat(
+    username: str,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """Mute the conversation for the caller: it stops feeding their badge."""
+    other = _load_counterpart(db, username, current_user_id)
+    conversation = dm_repository.get_conversation(db, current_user_id, other.id)
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="conversation not found",
+        )
+    dm_repository.set_conversation_muted(db, conversation, current_user_id, True)
+
+
+@router.delete("/with/{username}/mute", status_code=status.HTTP_204_NO_CONTENT)
+def unmute_chat(
+    username: str,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    other = _load_counterpart(db, username, current_user_id)
+    conversation = dm_repository.get_conversation(db, current_user_id, other.id)
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="conversation not found",
+        )
+    dm_repository.set_conversation_muted(db, conversation, current_user_id, False)
+
+
+@router.delete("/with/{username}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_chat(
+    username: str,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Delete the conversation for the caller only. The other participant keeps
+    their copy, and a later message revives the chat from that point on. Does
+    NOT reset the one-message anti-spam cap.
+    """
+    other = _load_counterpart(db, username, current_user_id)
+    conversation = dm_repository.get_conversation(db, current_user_id, other.id)
+    if conversation is not None:
+        dm_repository.clear_conversation(db, conversation, current_user_id)

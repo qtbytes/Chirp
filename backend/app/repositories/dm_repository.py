@@ -72,6 +72,9 @@ def check_can_send(
             # Established conversation: no policy, no message cap.
             return None
 
+        # Counted over ALL messages, deliberately ignoring the sender's
+        # "deleted conversation" watermark: deleting your side must not hand
+        # you a fresh opener, or the one-message cap would be trivially reset.
         sent_count = int(
             db.scalar(
                 select(func.count())
@@ -134,6 +137,19 @@ def send_message(
     return message
 
 
+def _visibility_floor(conversation: Conversation, viewer_id: int) -> int | None:
+    """Messages at or below this id are read/cleared for the viewer."""
+    markers = [
+        marker
+        for marker in (
+            conversation.last_read_id(viewer_id),
+            conversation.cleared_before_id(viewer_id),
+        )
+        if marker is not None
+    ]
+    return max(markers) if markers else None
+
+
 def _unread_count(db: Session, conversation: Conversation, viewer_id: int) -> int:
     stmt = (
         select(func.count())
@@ -143,9 +159,9 @@ def _unread_count(db: Session, conversation: Conversation, viewer_id: int) -> in
             DmMessage.sender_id != viewer_id,
         )
     )
-    last_read = conversation.last_read_id(viewer_id)
-    if last_read is not None:
-        stmt = stmt.where(DmMessage.id > last_read)
+    floor = _visibility_floor(conversation, viewer_id)
+    if floor is not None:
+        stmt = stmt.where(DmMessage.id > floor)
     return int(db.scalar(stmt) or 0)
 
 
@@ -193,18 +209,27 @@ def list_conversations(
         other = db.get(User, other_id)
         if other is None or other.is_deleted:
             continue
-        last_message = db.scalar(
+        last_stmt = (
             select(DmMessage)
             .where(DmMessage.conversation_id == conversation.id)
             .order_by(DmMessage.id.desc())
             .limit(1)
         )
+        cleared = conversation.cleared_before_id(user_id)
+        if cleared is not None:
+            last_stmt = last_stmt.where(DmMessage.id > cleared)
+        last_message = db.scalar(last_stmt)
+        if last_message is None:
+            # The viewer deleted the conversation and nothing new arrived
+            # since; their inbox no longer lists it.
+            continue
         rows.append(
             {
                 "conversation": conversation,
                 "other_user": other,
                 "last_message": last_message,
                 "unread_count": _unread_count(db, conversation, user_id),
+                "muted": conversation.muted_for(user_id),
             }
         )
     return rows
@@ -213,16 +238,23 @@ def list_conversations(
 def list_messages(
     db: Session,
     conversation: Conversation,
+    viewer_id: int,
     limit: int,
     before_id: int | None = None,
 ) -> list[DmMessage]:
-    """A page of messages newest-first; ``before_id`` pages further back."""
+    """
+    A page of messages newest-first; ``before_id`` pages further back. The
+    viewer's "deleted conversation" watermark hides everything at or below it.
+    """
     stmt = (
         select(DmMessage)
         .where(DmMessage.conversation_id == conversation.id)
         .order_by(DmMessage.id.desc())
         .limit(limit + 1)
     )
+    cleared = conversation.cleared_before_id(viewer_id)
+    if cleared is not None:
+        stmt = stmt.where(DmMessage.id > cleared)
     if before_id is not None:
         stmt = stmt.where(DmMessage.id < before_id)
     return list(db.scalars(stmt).all())
@@ -258,5 +290,34 @@ def count_unread_total(
         other_id = conversation.other_user_id(user_id)
         if exclude_user_ids and other_id in exclude_user_ids:
             continue
+        # A muted chat still shows its own unread state when opened, but does
+        # not nag from the rail badge.
+        if conversation.muted_for(user_id):
+            continue
         total += _unread_count(db, conversation, user_id)
     return total
+
+
+def set_conversation_muted(
+    db: Session, conversation: Conversation, user_id: int, muted: bool
+) -> None:
+    conversation.set_muted(user_id, muted)
+    db.commit()
+
+
+def clear_conversation(db: Session, conversation: Conversation, user_id: int) -> None:
+    """
+    "Delete" the conversation for one side: everything up to the newest
+    message becomes invisible to ``user_id`` (and counts as read). The other
+    participant is unaffected, and a later message revives the chat.
+    """
+    newest_id = db.scalar(
+        select(func.max(DmMessage.id)).where(
+            DmMessage.conversation_id == conversation.id
+        )
+    )
+    if newest_id is not None:
+        conversation.set_cleared_before_id(user_id, newest_id)
+        if (conversation.last_read_id(user_id) or 0) < newest_id:
+            conversation.set_last_read_id(user_id, newest_id)
+        db.commit()

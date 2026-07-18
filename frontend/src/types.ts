@@ -274,6 +274,8 @@ export type DmConversation = {
   other_user: UserSummary;
   last_message: DmMessage | null;
   unread_count: number;
+  /** Your own mute; the other participant never sees it. */
+  muted: boolean;
 };
 
 export type DmConversationPage = {
@@ -293,6 +295,7 @@ export type DmChat = {
   next_cursor: string | null;
   can_send: boolean;
   cannot_send_reason: "policy" | "await_reply" | null;
+  muted: boolean;
 };
 
 export type ReplyWithParent = {

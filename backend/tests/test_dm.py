@@ -191,3 +191,71 @@ def test_dm_policy_round_trips_on_own_profile_only() -> None:
         alice.patch("/api/v1/users/me", json={"dm_policy": "sometimes"}).status_code
         == 422
     )
+
+
+def test_mute_conversation_silences_badge_only() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    assert send(alice, "bob", "hi").status_code == 201
+
+    # Muting an unknown or message-less chat 404s.
+    assert bob.post("/api/v1/dm/with/ghost/mute").status_code == 404
+
+    assert bob.post("/api/v1/dm/with/alice/mute").status_code == 204
+    row = bob.get("/api/v1/dm/conversations").json()["items"][0]
+    assert row["muted"] is True
+    # The row keeps its own unread count, but the global badge skips it.
+    assert row["unread_count"] == 1
+    assert bob.get("/api/v1/dm/unread-count").json()["count"] == 0
+    assert bob.get("/api/v1/dm/with/alice").json()["muted"] is True
+
+    assert bob.delete("/api/v1/dm/with/alice/mute").status_code == 204
+    assert bob.get("/api/v1/dm/unread-count").json()["count"] == 1
+    assert bob.get("/api/v1/dm/conversations").json()["items"][0]["muted"] is False
+
+
+def test_delete_conversation_is_one_directional() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    assert send(alice, "bob", "one").status_code == 201
+    assert send(bob, "alice", "two").status_code == 201
+
+    assert alice.delete("/api/v1/dm/with/bob").status_code == 204
+
+    # Alice: inbox row gone, history empty, badge clean.
+    assert alice.get("/api/v1/dm/conversations").json()["items"] == []
+    assert alice.get("/api/v1/dm/with/bob").json()["messages"] == []
+    assert alice.get("/api/v1/dm/unread-count").json()["count"] == 0
+
+    # Bob keeps everything.
+    assert len(bob.get("/api/v1/dm/with/alice").json()["messages"]) == 2
+    assert len(bob.get("/api/v1/dm/conversations").json()["items"]) == 1
+
+    # A later message revives the chat for alice with only the new content.
+    assert send(bob, "alice", "three").status_code == 201
+    chat = alice.get("/api/v1/dm/with/bob").json()
+    assert [m["content"] for m in chat["messages"]] == ["three"]
+    rows = alice.get("/api/v1/dm/conversations").json()["items"]
+    assert len(rows) == 1
+    assert rows[0]["last_message"]["content"] == "three"
+    assert rows[0]["unread_count"] == 1
+
+
+def test_delete_does_not_reset_spam_opener() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    assert send(alice, "bob", "opener").status_code == 201
+    # Deleting her side must not grant a second unanswered opener.
+    assert alice.delete("/api/v1/dm/with/bob").status_code == 204
+    refused = send(alice, "bob", "opener again")
+    assert refused.status_code == 403
+    assert "wait for a reply" in refused.json()["detail"]

@@ -35,6 +35,8 @@ class ConversationOut(BaseModel):
     other_user: UserSummary
     last_message: DmMessageOut | None = None
     unread_count: int = 0
+    # Viewer's own mute; the other participant never sees it.
+    muted: bool = False
 
 
 class ConversationPage(BaseModel):
@@ -56,6 +58,7 @@ class ChatOut(BaseModel):
     next_cursor: str | None = None
     can_send: bool = True
     cannot_send_reason: Literal["policy", "await_reply"] | None = None
+    muted: bool = False
 
 
 class DmUnreadCountOut(BaseModel):

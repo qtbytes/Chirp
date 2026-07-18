@@ -644,6 +644,19 @@ export function markDmRead(username: string): Promise<void> {
   });
 }
 
+export function setDmChatMuted(username: string, muted: boolean): Promise<void> {
+  return request<void>(`/dm/with/${encodeURIComponent(username)}/mute`, {
+    method: muted ? "POST" : "DELETE",
+  });
+}
+
+/** Delete the conversation for you only; the other side keeps their copy. */
+export function deleteDmChat(username: string): Promise<void> {
+  return request<void>(`/dm/with/${encodeURIComponent(username)}`, {
+    method: "DELETE",
+  });
+}
+
 export function getDmUnreadCount(): Promise<{ count: number }> {
   return request<{ count: number }>("/dm/unread-count");
 }

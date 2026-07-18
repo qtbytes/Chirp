@@ -3653,3 +3653,27 @@ a.tab {
     bottom: calc(58px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+.chat-muted-icon {
+  color: var(--muted);
+  flex-shrink: 0;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.chat-row-top .chat-muted-icon {
+  margin-left: 0;
+  align-self: center;
+}
+
+.chat-row-menu {
+  flex-shrink: 0;
+}
+
+.chat-toolbar-menu {
+  margin-left: auto;
+}
+
+.chat-menu-dropdown {
+  min-width: 220px;
+}

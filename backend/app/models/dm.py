@@ -1,6 +1,14 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -45,6 +53,21 @@ class Conversation(Base):
     high_last_read_message_id: Mapped[int | None] = mapped_column(
         Integer, nullable=True
     )
+    # Per-participant mute: the chat stays, but stops counting toward the
+    # muter's unread badge. The other side is never told.
+    low_muted: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    high_muted: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # Per-participant "deleted the conversation" watermark: messages with id
+    # <= the marker are invisible to that participant, and a conversation with
+    # nothing visible left drops out of their inbox. One-directional -- the
+    # other side keeps the full history -- and messages are never actually
+    # removed, so a later message revives the chat from that point on.
+    low_cleared_before_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    high_cleared_before_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     def other_user_id(self, user_id: int) -> int:
         return self.user_high_id if user_id == self.user_low_id else self.user_low_id
@@ -59,6 +82,26 @@ class Conversation(Base):
             self.low_last_read_message_id = message_id
         else:
             self.high_last_read_message_id = message_id
+
+    def muted_for(self, user_id: int) -> bool:
+        return self.low_muted if user_id == self.user_low_id else self.high_muted
+
+    def set_muted(self, user_id: int, muted: bool) -> None:
+        if user_id == self.user_low_id:
+            self.low_muted = muted
+        else:
+            self.high_muted = muted
+
+    def cleared_before_id(self, user_id: int) -> int | None:
+        if user_id == self.user_low_id:
+            return self.low_cleared_before_id
+        return self.high_cleared_before_id
+
+    def set_cleared_before_id(self, user_id: int, message_id: int) -> None:
+        if user_id == self.user_low_id:
+            self.low_cleared_before_id = message_id
+        else:
+            self.high_cleared_before_id = message_id
 
 
 class DmMessage(Base):

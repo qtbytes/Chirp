@@ -3,14 +3,22 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowUp,
+  Ban,
+  Bell,
+  BellOff,
   Check,
   Loader2,
   MailPlus,
+  MoreHorizontal,
   Settings2,
+  Trash2,
+  User as UserIcon,
   X,
 } from "lucide-react";
 import {
   ApiError,
+  blockUser,
+  deleteDmChat,
   displayName,
   getDmChat,
   getDmConversations,
@@ -18,6 +26,7 @@ import {
   listUsers,
   markDmRead,
   sendDmMessage,
+  setDmChatMuted,
   updateProfile,
 } from "./api";
 import type {
@@ -28,7 +37,13 @@ import type {
   UserDiscovery,
   UserSummary,
 } from "./types";
-import { Avatar, formatCompactDate, getErrorMessage, parseBackendDate } from "./components";
+import {
+  Avatar,
+  ConfirmDialog,
+  formatCompactDate,
+  getErrorMessage,
+  parseBackendDate,
+} from "./components";
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
 
@@ -95,12 +110,21 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
 
       <div className="chat-list">
         {conversations.map((conversation) => (
-          <button
+          <div
             key={conversation.id}
             className="chat-row"
+            role="link"
+            tabIndex={0}
             onClick={() =>
               navigate(`/messages/${encodeURIComponent(conversation.other_user.username)}`)
             }
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && event.target === event.currentTarget) {
+                navigate(
+                  `/messages/${encodeURIComponent(conversation.other_user.username)}`,
+                );
+              }
+            }}
           >
             <Avatar user={conversation.other_user} />
             <span className="chat-row-body">
@@ -113,6 +137,13 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
                   <span className="chat-row-time">
                     · {formatCompactDate(conversation.last_message.created_at)}
                   </span>
+                ) : null}
+                {conversation.muted ? (
+                  <BellOff
+                    size={14}
+                    className="chat-muted-icon"
+                    aria-label="Muted conversation"
+                  />
                 ) : null}
               </span>
               <span
@@ -134,7 +165,29 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
                 {conversation.unread_count > 99 ? "99+" : conversation.unread_count}
               </span>
             ) : null}
-          </button>
+            <span
+              className="chat-row-menu"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <ChatMenu
+                otherUser={conversation.other_user}
+                muted={conversation.muted}
+                onMutedChange={(muted) =>
+                  setConversations((current) =>
+                    current.map((item) =>
+                      item.id === conversation.id ? { ...item, muted } : item,
+                    ),
+                  )
+                }
+                onGone={() =>
+                  setConversations((current) =>
+                    current.filter((item) => item.id !== conversation.id),
+                  )
+                }
+              />
+            </span>
+          </div>
         ))}
       </div>
 
@@ -156,6 +209,159 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
 
       {composing ? <NewChatDialog onClose={() => setComposing(false)} /> : null}
     </section>
+  );
+}
+
+/**
+ * The per-conversation "…" menu (inbox row and chat header): go to profile,
+ * mute/unmute, block the account, or delete the conversation for yourself.
+ */
+function ChatMenu({
+  otherUser,
+  muted,
+  onMutedChange,
+  onGone,
+}: {
+  otherUser: UserSummary;
+  muted: boolean;
+  onMutedChange: (muted: boolean) => void;
+  /** The chat is no longer viewable (deleted or account blocked). */
+  onGone: () => void;
+}) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState<"block" | "delete" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function onDocMouseDown(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [open]);
+
+  async function toggleMute() {
+    setOpen(false);
+    try {
+      await setDmChatMuted(otherUser.username, !muted);
+      onMutedChange(!muted);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  async function confirmAction() {
+    if (!confirming) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      if (confirming === "block") {
+        await blockUser(otherUser.id);
+      } else {
+        await deleteDmChat(otherUser.username);
+      }
+      setConfirming(null);
+      onGone();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="profile-menu" ref={ref}>
+      <button
+        type="button"
+        className="icon-button"
+        onClick={() => setOpen((value) => !value)}
+        aria-label={`Conversation options for @${otherUser.username}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <MoreHorizontal size={18} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="post-menu-dropdown chat-menu-dropdown" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              navigate(`/${encodeURIComponent(otherUser.username)}`);
+            }}
+          >
+            <UserIcon size={16} aria-hidden="true" />
+            <span>Go to profile</span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => void toggleMute()}>
+            {muted ? (
+              <Bell size={16} aria-hidden="true" />
+            ) : (
+              <BellOff size={16} aria-hidden="true" />
+            )}
+            <span>{muted ? "Unmute conversation" : "Mute conversation"}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="danger-menu-item"
+            onClick={() => {
+              setOpen(false);
+              setConfirming("block");
+            }}
+          >
+            <Ban size={16} aria-hidden="true" />
+            <span>Block account</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="danger-menu-item"
+            onClick={() => {
+              setOpen(false);
+              setConfirming("delete");
+            }}
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            <span>Delete conversation</span>
+          </button>
+          {error ? <p className="form-error">{error}</p> : null}
+        </div>
+      ) : null}
+      {confirming === "block" ? (
+        <ConfirmDialog
+          title={`Block @${otherUser.username}?`}
+          message="They won't be able to message you, follow you, or see your Tweets, and you won't see theirs."
+          confirmLabel="Block"
+          busyLabel="Blocking…"
+          busy={busy}
+          onConfirm={() => void confirmAction()}
+          onCancel={() => setConfirming(null)}
+        />
+      ) : null}
+      {confirming === "delete" ? (
+        <ConfirmDialog
+          title="Delete this conversation?"
+          message={`The messages disappear for you, but @${otherUser.username} keeps their copy. If either of you writes again, the chat starts fresh from there.`}
+          confirmLabel="Delete"
+          busyLabel="Deleting…"
+          busy={busy}
+          onConfirm={() => void confirmAction()}
+          onCancel={() => setConfirming(null)}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -487,10 +693,29 @@ export function ChatView({ currentUser }: { currentUser: UserSummary }) {
         >
           <Avatar user={chat.other_user} size="small" />
           <div className="chat-peer-copy">
-            <strong>{displayName(chat.other_user)}</strong>
+            <strong>
+              {displayName(chat.other_user)}
+              {chat.muted ? (
+                <BellOff
+                  size={14}
+                  className="chat-muted-icon"
+                  aria-label="Muted conversation"
+                />
+              ) : null}
+            </strong>
             <span>@{chat.other_user.username}</span>
           </div>
         </Link>
+        <span className="chat-toolbar-menu">
+          <ChatMenu
+            otherUser={chat.other_user}
+            muted={chat.muted}
+            onMutedChange={(muted) =>
+              setChat((current) => (current ? { ...current, muted } : current))
+            }
+            onGone={() => navigate("/messages")}
+          />
+        </span>
       </div>
 
       {error ? <div className="status-panel error">{error}</div> : null}
