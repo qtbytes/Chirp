@@ -1461,7 +1461,15 @@ function NotificationsView() {
       </header>
       {error ? <div className="status-panel error">{error}</div> : null}
       {!loading && items.length === 0 && !error ? (
-        <div className="status-panel">No notifications yet.</div>
+        <div className="empty-state">
+          <Bell
+            size={72}
+            strokeWidth={1.4}
+            className="empty-state-icon empty-state-icon--muted"
+            aria-hidden="true"
+          />
+          <p>No notifications yet!</p>
+        </div>
       ) : null}
       <ul className="notif-list">
         {items.map((notification) => {

@@ -105,10 +105,10 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
 
       {error ? <div className="status-panel error">{error}</div> : null}
       {!loading && conversations.length === 0 && !error ? (
-        <div className="chat-empty-state">
+        <div className="empty-state">
           {/* A smiling speech bubble (lucide's message-circle with a face). */}
           <svg
-            className="chat-empty-icon"
+            className="empty-state-icon"
             width="72"
             height="72"
             viewBox="0 0 24 24"
@@ -126,7 +126,7 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
           </svg>
           <p>Say hi to someone</p>
           <button
-            className="primary-button chat-empty-button"
+            className="primary-button empty-state-button"
             onClick={() => setComposing(true)}
           >
             <MessageCirclePlus size={18} aria-hidden="true" />
