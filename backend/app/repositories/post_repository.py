@@ -17,6 +17,12 @@ from app.models.notification import Notification
 from app.models.post import VISIBILITY_VALUES, Post
 from app.models.post_hashtag import PostHashtag
 from app.models.post_mention import PostMention
+from app.models.post_view import PostView
+from app.models.report import Report
+
+
+class TakenDownError(Exception):
+    """The post is under a moderation takedown and may not be deleted."""
 
 
 def _utcnow() -> datetime:
@@ -105,23 +111,38 @@ def delete_post(db: Session, post_id: int, user_id: int) -> None:
     """
     Delete a post and its whole reply subtree. Only the author may delete.
 
-    Also removes the engagement (likes), fan-out feed rows, and notifications
-    that reference any deleted post, since SQLite here does not enforce foreign
-    keys and would otherwise leave orphaned rows. Quote posts that referenced a
-    deleted post keep their dangling ``quoted_post_id`` and simply render
-    without an embed.
+    A post under a moderation takedown is *not* deletable (``TakenDownError``):
+    the surviving row is the moderation record -- the evidence behind the
+    judgement and the thing a restore would bring back -- and the one person
+    who must not be able to destroy that record is its author. Taken-down
+    *descendants* swept up by deleting an ancestor are still removed: refusing
+    would let someone else's bad reply hold the author's own post hostage.
+
+    Also removes the engagement (likes, views), fan-out feed rows,
+    notifications, and reports that reference any deleted post, since SQLite
+    here does not enforce foreign keys and would otherwise leave orphaned
+    rows. Discarding the reports is deliberate, not just hygiene: with the
+    post gone there is nothing left to judge -- the author has done what a
+    takedown would have -- and a report row whose target is missing could
+    never be shown or resolved, only haunt the queue. Quote posts that
+    referenced a deleted post keep their dangling ``quoted_post_id`` and
+    simply render without an embed.
     """
     post = db.get(Post, post_id)
     if post is None:
         raise ValueError("post not found")
     if post.user_id != user_id:
         raise PermissionError("not the author")
+    if post.is_taken_down:
+        raise TakenDownError("post is under a moderation takedown")
 
     ids = _collect_thread_ids(db, post_id)
     db.execute(delete(Like).where(Like.post_id.in_(ids)))
+    db.execute(delete(PostView).where(PostView.post_id.in_(ids)))
     db.execute(delete(FeedItem).where(FeedItem.post_id.in_(ids)))
     db.execute(delete(Notification).where(Notification.post_id.in_(ids)))
     db.execute(delete(PostHashtag).where(PostHashtag.post_id.in_(ids)))
     db.execute(delete(PostMention).where(PostMention.post_id.in_(ids)))
+    db.execute(delete(Report).where(Report.post_id.in_(ids)))
     db.execute(delete(Post).where(Post.id.in_(ids)))
     db.commit()

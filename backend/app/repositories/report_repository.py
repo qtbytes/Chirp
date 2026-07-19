@@ -121,6 +121,15 @@ def list_report_queue(
     status_predicate = (
         Report.status == "open" if status == "open" else Report.status != "open"
     )
+    # Exclude reports whose post is gone (legacy rows from before delete_post
+    # cascaded reports; users only soft-delete, so user targets always exist).
+    # This must happen in SQL, not by skipping after the fetch: skipped rows
+    # would still consume the LIMIT window, shrinking pages and ending
+    # pagination early while real queue items sit unreachable beyond it.
+    target_exists = or_(
+        Report.post_id.is_(None),
+        select(Post.id).where(Post.id == Report.post_id).exists(),
+    )
     latest_at = func.max(Report.created_at).label("latest_at")
 
     agg_stmt = (
@@ -129,7 +138,7 @@ def list_report_queue(
             func.count().label("report_count"),
             latest_at,
         )
-        .where(status_predicate)
+        .where(status_predicate, target_exists)
         .group_by(_target_key)
         .order_by(desc("latest_at"), desc("target_key"))
         .limit(limit + 1)
@@ -186,9 +195,10 @@ def list_report_queue(
         post = posts_by_id.get(key) if key > 0 else None
         reported_user = users_by_id.get(-key) if key < 0 else None
         if post is None and reported_user is None:
-            # The post was hard-deleted by its author after being reported;
-            # nothing is left to judge. (Accounts only soft-delete, and stay
-            # listed so their open reports can still be dismissed.)
+            # Unreachable while ``target_exists`` holds (and delete_post
+            # discards reports with the post); kept so a stray row degrades to
+            # a missing card rather than a 500. (Accounts only soft-delete,
+            # and stay listed so their open reports can still be dismissed.)
             continue
         queue.append(
             {

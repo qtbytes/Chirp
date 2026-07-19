@@ -337,7 +337,10 @@ def delete_tweet(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> None:
-    """Delete a tweet and its whole thread. Only the author may delete."""
+    """
+    Delete a tweet and its whole thread. Only the author may delete, and a
+    taken-down tweet is refused: the row is the moderation record.
+    """
     existing = db.get(Post, tweet_id)
     if existing is not None and existing.reply_to_id is not None:
         raise HTTPException(
@@ -350,6 +353,11 @@ def delete_tweet(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="tweet not found"
+        )
+    except post_repository.TakenDownError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="this tweet was removed by moderation and cannot be deleted",
         )
     except PermissionError:
         raise HTTPException(

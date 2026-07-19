@@ -309,6 +309,131 @@ def test_unknown_post_is_404_for_actions() -> None:
     assert mod.post("/api/v1/moderation/posts/999999/takedown").status_code == 404
 
 
+# --- author deletes vs the moderation record ---------------------------------
+
+
+def _report_rows_for_post(post_id: int) -> list:
+    from app.models.report import Report
+    from sqlalchemy import select
+
+    with TestingSessionLocal() as db:
+        return list(db.scalars(select(Report).where(Report.post_id == post_id)))
+
+
+def test_author_cannot_delete_a_taken_down_post() -> None:
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    mod, _ = register_moderator()
+
+    tweet_id = _post(bob, "the evidence")
+    _report(alice, tweet_id)
+    mod.post(f"/api/v1/moderation/posts/{tweet_id}/takedown")
+
+    # The row is the moderation record; its author may not destroy it.
+    response = bob.delete(f"/api/v1/tweets/{tweet_id}")
+    assert response.status_code == 403
+    assert "moderation" in response.json()["detail"]
+
+    # The record survives and the judgement stays reversible.
+    assert mod.post(f"/api/v1/moderation/posts/{tweet_id}/restore").status_code == 200
+    assert bob.get(f"/api/v1/tweets/{tweet_id}").json()["content"] == "the evidence"
+    # Once restored, the author's delete right returns.
+    assert bob.delete(f"/api/v1/tweets/{tweet_id}").status_code == 204
+
+
+def test_author_cannot_delete_a_taken_down_comment() -> None:
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    mod, _ = register_moderator()
+
+    tweet_id = _post(alice, "root")
+    bad = bob.post(
+        f"/api/v1/tweets/{tweet_id}/comments", json={"content": "abusive"}
+    ).json()
+    _report(alice, bad["id"], "abuse")
+    mod.post(f"/api/v1/moderation/posts/{bad['id']}/takedown")
+
+    assert bob.delete(f"/api/v1/comments/{bad['id']}").status_code == 403
+
+
+def test_deleting_a_reported_post_discards_its_reports() -> None:
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    mod, _ = register_moderator()
+
+    tweet_id = _post(bob, "reported, then thought better of it")
+    _report(alice, tweet_id)
+
+    assert bob.delete(f"/api/v1/tweets/{tweet_id}").status_code == 204
+
+    # The author removed the content themselves -- the complaint is answered.
+    # No orphaned rows linger, and the queue never shows a target-less item.
+    assert _report_rows_for_post(tweet_id) == []
+    assert mod.get("/api/v1/moderation/reports").json()["items"] == []
+
+
+def test_deleting_a_thread_discards_reports_on_its_replies() -> None:
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    mod, _ = register_moderator()
+
+    tweet_id = _post(bob, "root")
+    reply = alice.post(
+        f"/api/v1/tweets/{tweet_id}/comments", json={"content": "reported reply"}
+    ).json()
+    _report(bob, reply["id"], "abuse")
+
+    # Deleting the root sweeps the subtree; the reply's reports go with it.
+    assert bob.delete(f"/api/v1/tweets/{tweet_id}").status_code == 204
+    assert _report_rows_for_post(reply["id"]) == []
+    assert mod.get("/api/v1/moderation/reports").json()["items"] == []
+
+
+def test_queue_pagination_survives_legacy_orphaned_reports() -> None:
+    """
+    Rows from before delete_post cascaded reports point at missing posts.
+    They must be excluded in SQL: if they merely got skipped after the fetch
+    they would consume the LIMIT window and end pagination early, stranding
+    real queue items beyond it.
+    """
+    from app.models.post import Post
+    from sqlalchemy import delete as sa_delete
+
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    mod, _ = register_moderator()
+
+    tweet_ids = [_post(bob, f"real {n}") for n in range(2)]
+    for tweet_id in tweet_ids:
+        _report(alice, tweet_id)
+    # Reported last, so the orphaned group is the *newest* -- the position
+    # where, merely skipped after the fetch, it would consume the whole
+    # LIMIT-window of the first page and strand the older real item.
+    orphan_id = _post(bob, "will become an orphaned report")
+    _report(alice, orphan_id)
+
+    # Simulate the legacy hard delete: remove the post, keep its report.
+    with TestingSessionLocal() as db:
+        db.execute(sa_delete(Post).where(Post.id == orphan_id))
+        db.commit()
+
+    seen: list[int] = []
+    cursor = None
+    for _ in range(4):
+        params: dict = {"limit": 1}
+        if cursor:
+            params["cursor"] = cursor
+        page = mod.get("/api/v1/moderation/reports", params=params).json()
+        seen.extend(item["post"]["id"] for item in page["items"])
+        cursor = page["next_cursor"]
+        if cursor is None:
+            break
+
+    assert sorted(seen) == sorted(tweet_ids), (
+        "every real queue item must stay reachable past the orphan"
+    )
+
+
 # --- judgement notifications ------------------------------------------------
 
 

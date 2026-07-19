@@ -322,7 +322,10 @@ def delete_comment(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> None:
-    """Delete a comment and its sub-thread. Only the author may delete."""
+    """
+    Delete a comment and its sub-thread. Only the author may delete, and a
+    taken-down comment is refused: the row is the moderation record.
+    """
     parent = db.get(Post, comment_id)
     if parent is not None and parent.reply_to_id is None:
         raise HTTPException(
@@ -335,6 +338,11 @@ def delete_comment(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="comment not found"
+        )
+    except post_repository.TakenDownError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="this comment was removed by moderation and cannot be deleted",
         )
     except PermissionError:
         raise HTTPException(
