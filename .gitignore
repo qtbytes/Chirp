@@ -19,6 +19,8 @@ twitter_system.egg-info
 .env
 **/.env
 backend/twitter.db
+# Media files a moderation takedown moved out of the static mount's reach.
+backend/uploads_quarantine/
 backend/.pytest_cache
 backend/.pycache
 backend/twitter_system.egg-info

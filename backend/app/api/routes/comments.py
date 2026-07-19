@@ -10,6 +10,7 @@ from app.repositories import (
 )
 from app.repositories.visibility import can_view_thread
 from app.schemas.comment import CommentCreate, CommentOut, CommentStatsOut
+from app.services import media_service
 from app.schemas.user import UserSummary
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -332,7 +333,7 @@ def delete_comment(
             status_code=status.HTTP_404_NOT_FOUND, detail="comment not found"
         )
     try:
-        post_repository.delete_post(
+        media_urls = post_repository.delete_post(
             db, post_id=comment_id, user_id=current_user_id
         )
     except ValueError:
@@ -349,3 +350,4 @@ def delete_comment(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="you can only delete your own comments",
         )
+    media_service.remove_media_files(db, media_urls)

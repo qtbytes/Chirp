@@ -434,6 +434,84 @@ def test_queue_pagination_survives_legacy_orphaned_reports() -> None:
     )
 
 
+# --- media files under takedown and deletion ---------------------------------
+#
+# /uploads is a static mount with no per-request gating: hiding a post's row
+# does nothing to its files. Takedown must quarantine them (reversibly), and a
+# hard delete must unlink them -- except files another surviving post shares.
+
+
+def _upload_png(client: TestClient) -> str:
+    import io
+
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c6360000002000100057b8e9b0000000049454e44ae426082"
+    )
+    response = client.post(
+        "/api/v1/media", files={"file": ("pic.png", io.BytesIO(png), "image/png")}
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["url"]
+
+
+def test_takedown_quarantines_media_and_restore_serves_it_again() -> None:
+    from pathlib import Path
+
+    from app.core.config import settings
+
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    mod, _ = register_moderator()
+
+    url = _upload_png(bob)
+    tweet_id = bob.post(
+        "/api/v1/tweets", json={"content": "bad picture", "media_urls": [url]}
+    ).json()["id"]
+    _report(alice, tweet_id, "sensitive")
+    assert alice.get(url).status_code == 200
+
+    mod.post(f"/api/v1/moderation/posts/{tweet_id}/takedown")
+    # The URL stops resolving for everyone...
+    assert alice.get(url).status_code == 404
+    # ...but the file survives as evidence, outside the static mount.
+    uploads = Path(settings.uploads_dir)
+    quarantine = uploads.with_name(uploads.name + "_quarantine") / "media"
+    assert (quarantine / Path(url).name).exists()
+
+    mod.post(f"/api/v1/moderation/posts/{tweet_id}/restore")
+    assert alice.get(url).status_code == 200
+
+
+def test_deleting_a_post_unlinks_its_media_files() -> None:
+    from pathlib import Path
+
+    from app.core.config import settings
+
+    bob, _ = register("bob")
+    url = _upload_png(bob)
+    tweet_id = bob.post(
+        "/api/v1/tweets", json={"content": "gone soon", "media_urls": [url]}
+    ).json()["id"]
+
+    assert bob.delete(f"/api/v1/tweets/{tweet_id}").status_code == 204
+    assert bob.get(url).status_code == 404
+    assert not (Path(settings.uploads_dir) / "media" / Path(url).name).exists()
+
+
+def test_shared_media_survives_deleting_one_referencing_post() -> None:
+    bob, _ = register("bob")
+    url = _upload_png(bob)
+    first = bob.post(
+        "/api/v1/tweets", json={"content": "one", "media_urls": [url]}
+    ).json()["id"]
+    bob.post("/api/v1/tweets", json={"content": "two", "media_urls": [url]})
+
+    bob.delete(f"/api/v1/tweets/{first}")
+    # The other post still references the file; it must keep resolving.
+    assert bob.get(url).status_code == 200
+
+
 # --- judgement notifications ------------------------------------------------
 
 

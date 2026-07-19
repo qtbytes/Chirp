@@ -19,6 +19,7 @@ from app.repositories import (
 from app.repositories.visibility import can_view_post, can_view_thread
 from app.schemas.tweet import TweetCreate, TweetOut, TweetStatsOut
 from app.schemas.user import UserSummary
+from app.services import media_service
 from app.services.serializers import serialize_quoted_post
 from app.services.timeline_service import TimelineService, enqueue_feed_fanout_job
 
@@ -347,7 +348,7 @@ def delete_tweet(
             status_code=status.HTTP_404_NOT_FOUND, detail="tweet not found"
         )
     try:
-        post_repository.delete_post(
+        media_urls = post_repository.delete_post(
             db, post_id=tweet_id, user_id=current_user_id
         )
     except ValueError:
@@ -364,3 +365,4 @@ def delete_tweet(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="you can only delete your own tweets",
         )
+    media_service.remove_media_files(db, media_urls)

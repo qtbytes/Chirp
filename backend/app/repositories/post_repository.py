@@ -107,9 +107,11 @@ def _collect_thread_ids(db: Session, post_id: int) -> list[int]:
     return collected
 
 
-def delete_post(db: Session, post_id: int, user_id: int) -> None:
+def delete_post(db: Session, post_id: int, user_id: int) -> list[str]:
     """
     Delete a post and its whole reply subtree. Only the author may delete.
+    Returns the media URLs the deleted posts carried, so the route can clean
+    up the files behind them (a filesystem concern that stays out of here).
 
     A post under a moderation takedown is *not* deletable (``TakenDownError``):
     the surviving row is the moderation record -- the evidence behind the
@@ -137,6 +139,14 @@ def delete_post(db: Session, post_id: int, user_id: int) -> None:
         raise TakenDownError("post is under a moderation takedown")
 
     ids = _collect_thread_ids(db, post_id)
+    # Filtered in Python: the JSON column stores absent media as JSON 'null',
+    # which an SQL IS NOT NULL happily passes through as a Python None.
+    media_urls = [
+        url
+        for (urls,) in db.execute(select(Post.media_urls).where(Post.id.in_(ids)))
+        if urls
+        for url in urls
+    ]
     db.execute(delete(Like).where(Like.post_id.in_(ids)))
     db.execute(delete(PostView).where(PostView.post_id.in_(ids)))
     db.execute(delete(FeedItem).where(FeedItem.post_id.in_(ids)))
@@ -146,3 +156,4 @@ def delete_post(db: Session, post_id: int, user_id: int) -> None:
     db.execute(delete(Report).where(Report.post_id.in_(ids)))
     db.execute(delete(Post).where(Post.id.in_(ids)))
     db.commit()
+    return media_urls

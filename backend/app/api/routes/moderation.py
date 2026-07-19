@@ -34,6 +34,7 @@ from app.schemas.report import (
     ModerationUserActionOut,
 )
 from app.schemas.user import UserSummary
+from app.services import media_service
 from app.services.timeline_service import decode_cursor, encode_cursor
 
 router = APIRouter(prefix="/moderation", tags=["moderation"])
@@ -158,9 +159,15 @@ def take_down_post(
     moderator: User = Depends(get_current_moderator),
     db: Session = Depends(get_db),
 ) -> ModerationActionOut:
-    """Hide the post everywhere and close its open reports as actioned."""
+    """
+    Hide the post everywhere and close its open reports as actioned. Its media
+    files are quarantined out of the static mount's reach: hiding the row does
+    nothing to ``/uploads``, which would happily keep serving removed media to
+    anyone holding the URL.
+    """
     post = _get_post_or_404(db, post_id)
     resolved = report_repository.take_down_post(db, post, moderator.id)
+    media_service.quarantine_post_media(db, post)
     return ModerationActionOut(
         post_id=post.id, taken_down=True, resolved_reports=resolved
     )
@@ -172,9 +179,13 @@ def restore_post(
     _moderator: User = Depends(get_current_moderator),
     db: Session = Depends(get_db),
 ) -> ModerationActionOut:
-    """Reverse a takedown. Already-resolved reports stay resolved."""
+    """
+    Reverse a takedown, quarantined media included. Already-resolved reports
+    stay resolved.
+    """
     post = _get_post_or_404(db, post_id)
     report_repository.restore_post(db, post)
+    media_service.restore_post_media(db, post)
     return ModerationActionOut(
         post_id=post.id, taken_down=False, resolved_reports=0
     )
