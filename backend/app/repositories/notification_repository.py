@@ -17,15 +17,19 @@ def add_notification(
     actor_id: int,
     type: str,
     post_id: int | None = None,
+    allow_self: bool = False,
 ) -> None:
     """
     Stage a notification on the current session (no commit).
 
     The caller's existing commit persists it, so the notification is written in
     the same transaction as the action that triggered it. Self-actions (e.g.
-    liking your own post) never notify.
+    liking your own post) never notify -- except with ``allow_self``, which the
+    moderation notices use: they are system messages about the recipient's own
+    record, so the recipient stands in as actor rather than naming the
+    moderator who acted.
     """
-    if recipient_id == actor_id:
+    if recipient_id == actor_id and not allow_self:
         return
 
     # Collapse repeatable actions. A like can be toggled off and on all day, and

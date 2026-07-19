@@ -45,7 +45,12 @@ def sync_post_entities(db: Session, post: Post, author_id: int) -> None:
 
     for username in extract_mention_usernames(post.content):
         user = user_repository.get_user_by_username(db, username)
-        if user is None or user.deleted_at is not None or user.id == author_id:
+        if (
+            user is None
+            or user.deleted_at is not None
+            or user.suspended_at is not None
+            or user.id == author_id
+        ):
             continue
         if blocks_between(db, author_id, user.id):
             continue

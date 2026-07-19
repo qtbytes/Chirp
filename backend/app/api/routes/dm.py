@@ -27,7 +27,7 @@ def _load_counterpart(db: Session, username: str, current_user_id: int) -> User:
     kinder than the chat vanishing mid-thought.
     """
     user = user_repository.get_user_by_username(db, username)
-    if user is None or user.is_deleted:
+    if user is None or user.is_deleted or user.is_suspended:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="user not found",

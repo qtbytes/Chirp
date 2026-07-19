@@ -307,3 +307,137 @@ def test_re_reporting_after_a_judgement_reopens_the_queue_item() -> None:
 def test_unknown_post_is_404_for_actions() -> None:
     mod, _ = register_moderator()
     assert mod.post("/api/v1/moderation/posts/999999/takedown").status_code == 404
+
+
+# --- judgement notifications ------------------------------------------------
+
+
+def _notification_types(client: TestClient) -> list[str]:
+    page = client.get("/api/v1/notifications").json()
+    return [item["type"] for item in page["items"]]
+
+
+def test_takedown_notifies_the_author_and_each_open_reporter() -> None:
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    carol, _ = register("carol")
+    mod, _ = register_moderator()
+
+    tweet_id = _post(carol, "reported by two people")
+    _report(alice, tweet_id)
+    _report(bob, tweet_id, "abuse")
+
+    mod.post(f"/api/v1/moderation/posts/{tweet_id}/takedown")
+
+    assert "post_removed" in _notification_types(carol)
+    assert "report_actioned" in _notification_types(alice)
+    assert "report_actioned" in _notification_types(bob)
+
+    # The notice must not name the moderator: the actor is the recipient.
+    page = alice.get("/api/v1/notifications").json()
+    actioned = next(
+        item for item in page["items"] if item["type"] == "report_actioned"
+    )
+    assert actioned["actor"]["username"] == "alice"
+    # And the removed content must not leak through the preview.
+    assert actioned["preview"] is None
+
+
+def test_dismiss_notifies_nobody() -> None:
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    mod, _ = register_moderator()
+
+    tweet_id = _post(bob, "harmless")
+    _report(alice, tweet_id)
+    mod.post(f"/api/v1/moderation/posts/{tweet_id}/dismiss")
+
+    assert "report_actioned" not in _notification_types(alice)
+    assert "post_removed" not in _notification_types(bob)
+
+
+def test_takedown_restore_takedown_does_not_re_notify() -> None:
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    mod, _ = register_moderator()
+
+    tweet_id = _post(bob, "borderline again")
+    _report(alice, tweet_id)
+    mod.post(f"/api/v1/moderation/posts/{tweet_id}/takedown")
+    mod.post(f"/api/v1/moderation/posts/{tweet_id}/restore")
+    _report(alice, tweet_id)  # reopens
+    mod.post(f"/api/v1/moderation/posts/{tweet_id}/takedown")
+
+    assert _notification_types(bob).count("post_removed") == 1
+    assert _notification_types(alice).count("report_actioned") == 1
+
+
+# --- suspension -------------------------------------------------------------
+
+
+def test_suspend_freezes_the_account_and_unsuspend_restores_it() -> None:
+    alice, _ = register("alice")
+    bob, bob_id = register("bob")
+    mod, _ = register_moderator()
+
+    alice.post(f"/api/v1/follows/{bob_id}")
+    tweet_id = _post(bob, "soon suspended")
+
+    assert mod.post(f"/api/v1/moderation/users/{bob_id}/suspend").json() == {
+        "user_id": bob_id,
+        "suspended": True,
+    }
+
+    # Their session is revoked and login is refused with the reason.
+    assert bob.get("/api/v1/auth/me").status_code == 401
+    login = bob.post(
+        "/api/v1/auth/login",
+        json={"username": "bob", "password": "password123"},
+    )
+    assert login.status_code == 403
+    assert "suspended" in login.json()["detail"]
+
+    # Their content leaves the timeline and search; discovery skips them.
+    feed = alice.get(
+        "/api/v1/timeline/home", params={"strategy": "read", "limit": 20}
+    ).json()
+    assert tweet_id not in [item["id"] for item in feed["items"]]
+    discovery = alice.get("/api/v1/users", params={"q": "bob"}).json()
+    assert all(user["username"] != "bob" for user in discovery)
+
+    # The profile still answers, flagged, so the state is explicable.
+    profile = alice.get("/api/v1/users/bob/profile").json()
+    assert profile["is_suspended"] is True
+
+    mod.post(f"/api/v1/moderation/users/{bob_id}/unsuspend")
+
+    assert (
+        bob.post(
+            "/api/v1/auth/login",
+            json={"username": "bob", "password": "password123"},
+        ).status_code
+        == 200
+    )
+    # A different limit dodges the cached first page (the key includes it):
+    # suspension accepts the same TTL-bounded cache staleness as a takedown.
+    feed = alice.get(
+        "/api/v1/timeline/home", params={"strategy": "read", "limit": 19}
+    ).json()
+    assert tweet_id in [item["id"] for item in feed["items"]], (
+        "unsuspending must bring the content back"
+    )
+
+
+def test_a_moderator_cannot_be_suspended() -> None:
+    mod, _ = register_moderator("modone")
+    _, other_mod_id = register_moderator("modtwo")
+
+    response = mod.post(f"/api/v1/moderation/users/{other_mod_id}/suspend")
+    assert response.status_code == 400
+
+
+def test_suspend_is_a_moderator_only_surface() -> None:
+    alice, _ = register("alice")
+    _, bob_id = register("bob")
+    assert alice.post(f"/api/v1/moderation/users/{bob_id}/suspend").status_code == 404
+    assert alice.post(f"/api/v1/moderation/users/{bob_id}/unsuspend").status_code == 404

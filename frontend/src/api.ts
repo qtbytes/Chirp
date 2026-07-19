@@ -12,6 +12,7 @@ import type {
   LinkPreview,
   ModerationAction,
   ModerationQueuePage,
+  ModerationUserAction,
   MuteListPage,
   Notification,
   NotificationPage,
@@ -530,6 +531,23 @@ export function moderationTakedown(postId: number): Promise<ModerationAction> {
 /** Reverse a takedown; already-resolved reports stay resolved. */
 export function moderationRestore(postId: number): Promise<ModerationAction> {
   return request<ModerationAction>(`/moderation/posts/${postId}/restore`, {
+    method: "POST",
+  });
+}
+
+/**
+ * Freeze an account: login refused, sessions revoked, content hidden from
+ * feeds. Reversible. Moderator accounts are refused (400).
+ */
+export function moderationSuspendUser(userId: number): Promise<ModerationUserAction> {
+  return request<ModerationUserAction>(`/moderation/users/${userId}/suspend`, {
+    method: "POST",
+  });
+}
+
+/** Lift a suspension; the account and its content come back as they were. */
+export function moderationUnsuspendUser(userId: number): Promise<ModerationUserAction> {
+  return request<ModerationUserAction>(`/moderation/users/${userId}/unsuspend`, {
     method: "POST",
   });
 }

@@ -67,6 +67,12 @@ class User(Base):
     is_moderator: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # Set by a moderator suspension. Unlike ``deleted_at`` nothing is scrubbed:
+    # the account is frozen -- login refused, sessions revoked, content hidden
+    # from feeds and discovery -- and clearing the stamp restores everything.
+    suspended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     posts = relationship(
         "Post", back_populates="author", cascade="all, delete-orphan"
@@ -75,3 +81,7 @@ class User(Base):
     @property
     def is_deleted(self) -> bool:
         return self.deleted_at is not None
+
+    @property
+    def is_suspended(self) -> bool:
+        return self.suspended_at is not None

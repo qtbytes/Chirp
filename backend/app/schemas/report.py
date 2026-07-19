@@ -81,3 +81,8 @@ class ModerationActionOut(BaseModel):
     # How many open reports this action closed. 0 on a repeat of the same
     # action -- the endpoints are idempotent.
     resolved_reports: int
+
+
+class ModerationUserActionOut(BaseModel):
+    user_id: int
+    suspended: bool

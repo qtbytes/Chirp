@@ -154,6 +154,14 @@ def login(
             detail="invalid username or password",
         )
 
+    # Only after the password verified: a suspension is told to its owner, not
+    # to whoever happens to type the username.
+    if user.suspended_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="this account is suspended",
+        )
+
     _set_session_cookie(response, user.id, request)
     return CurrentUserOut.model_validate(user)
 

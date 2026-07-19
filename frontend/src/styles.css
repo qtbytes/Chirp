@@ -546,6 +546,12 @@ button.rail-link:disabled:hover {
   text-decoration: none;
 }
 
+/* Moderation notices carry no avatar; drop its column so the text doesn't
+   fall into the 36px slot. */
+.notif-link--no-avatar {
+  grid-template-columns: 20px minmax(0, 1fr);
+}
+
 .notif-link:hover {
   background: var(--soft);
 }
@@ -566,6 +572,10 @@ button.rail-link:disabled:hover {
 .notif-icon.follow,
 .notif-icon.mention {
   color: var(--accent);
+}
+
+.notif-icon.moderation {
+  color: var(--muted);
 }
 
 .notif-body {

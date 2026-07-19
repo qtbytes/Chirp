@@ -422,7 +422,7 @@ export function ProfileView({
       <header className="profile-header">
         <div className="profile-header-top">
           <Avatar user={profile} size="large" />
-          {profile.is_deleted ? null : profile.is_current_user ? (
+          {profile.is_deleted || profile.is_suspended ? null : profile.is_current_user ? (
             <div className="profile-actions">
               <button className="outline-button" onClick={() => setEditing(true)}>
                 Edit profile
@@ -474,6 +474,10 @@ export function ProfileView({
         {profile.is_deleted ? (
           <p className="profile-bio profile-deleted-note">
             This account has been deleted.
+          </p>
+        ) : profile.is_suspended ? (
+          <p className="profile-bio profile-deleted-note">
+            This account is suspended.
           </p>
         ) : profile.bio ? (
           <p className="profile-bio">{profile.bio}</p>

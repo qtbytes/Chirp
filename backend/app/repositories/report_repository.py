@@ -174,9 +174,43 @@ def take_down_post(db: Session, post: Post, moderator_id: int) -> int:
     Hide the post and close its open reports as ``actioned``, in one
     transaction. Idempotent: a second takedown re-resolves nothing and keeps
     the original timestamp.
+
+    Both sides of the judgement are notified in the same commit: the author
+    that their post was removed, and each open reporter that their report was
+    acted on. The notifications carry the recipient as their own actor
+    (``allow_self``) so the moderator is never named, and the usual dedupe
+    means a takedown -> restore -> takedown cycle does not re-notify.
     """
+    from app.repositories.notification_repository import add_notification
+
+    reporter_ids = list(
+        db.scalars(
+            select(Report.reporter_id)
+            .where(Report.post_id == post.id, Report.status == "open")
+            .distinct()
+        )
+    )
+
     if post.taken_down_at is None:
         post.taken_down_at = datetime.now(timezone.utc)
+        add_notification(
+            db,
+            recipient_id=post.user_id,
+            actor_id=post.user_id,
+            type="post_removed",
+            post_id=post.id,
+            allow_self=True,
+        )
+    for reporter_id in reporter_ids:
+        add_notification(
+            db,
+            recipient_id=reporter_id,
+            actor_id=reporter_id,
+            type="report_actioned",
+            post_id=post.id,
+            allow_self=True,
+        )
+
     resolved = _resolve_open_reports(db, post.id, "actioned", moderator_id)
     db.commit()
     return resolved

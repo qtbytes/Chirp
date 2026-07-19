@@ -90,6 +90,10 @@ class UserSummary(BaseModel):
     # True once the account is deleted, so the UI can tombstone the author of a
     # post that outlived its owner. Read from the User.is_deleted property.
     is_deleted: bool = False
+    # True while a moderator suspension stands. Public by design (Twitter shows
+    # suspended state too): the author's existing posts stay visible in threads
+    # and the UI needs to explain who wrote them.
+    is_suspended: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -196,6 +200,8 @@ class UserProfileOut(BaseModel):
     is_current_user: bool
     # Whether this profile belongs to a deleted (tombstoned) account.
     is_deleted: bool = False
+    # Whether a moderator suspension currently stands on this account.
+    is_suspended: bool = False
     # Whether the viewer has blocked this profile's owner.
     is_blocked: bool = False
     # Whether the viewer has muted this profile's owner. Like is_blocked, this is

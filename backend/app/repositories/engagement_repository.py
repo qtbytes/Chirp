@@ -559,6 +559,7 @@ def list_liked_posts_by_user(
         .where(
             Like.user_id == user_id,
             User.deleted_at.is_(None),
+            User.suspended_at.is_(None),
             Post.taken_down_at.is_(None),
             visible_root_predicate(user_id, Root),
         )

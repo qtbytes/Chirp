@@ -14,14 +14,18 @@ from app.repositories.notification_repository import add_notification
 from app.repositories.visibility import can_view_thread, visible_root_predicate
 
 
-def deleted_author_ids():
+def hidden_author_ids():
     """
-    A subquery of the ids of deleted (tombstoned) accounts, for use with
-    ``Post.user_id.not_in(...)``. Feeds filter these out so a deleted account's
+    A subquery of the ids of deleted (tombstoned) and suspended accounts, for
+    use with ``Post.user_id.not_in(...)``. Feeds filter these out so their
     posts stop surfacing in timelines and discovery -- but a profile still shows
-    them, because that path deliberately does not apply this filter.
+    them, because that path deliberately does not apply this filter. A
+    suspension rides the exact same rails as a deletion; the difference is that
+    clearing ``suspended_at`` brings everything back.
     """
-    return select(User.id).where(User.deleted_at.is_not(None))
+    return select(User.id).where(
+        or_(User.deleted_at.is_not(None), User.suspended_at.is_not(None))
+    )
 
 
 def _quote_counts_subquery(post_ids: list[int] | None = None):
@@ -304,7 +308,7 @@ def list_feed_with_retweets(
     if exclude_author_ids:
         ident_stmt = ident_stmt.where(Post.user_id.not_in(exclude_author_ids))
     if exclude_deleted_authors:
-        ident_stmt = ident_stmt.where(Post.user_id.not_in(deleted_author_ids()))
+        ident_stmt = ident_stmt.where(Post.user_id.not_in(hidden_author_ids()))
     if cursor_created_at is not None and cursor_id is not None:
         ident_stmt = ident_stmt.where(
             or_(
@@ -371,7 +375,7 @@ def list_tweets_by_hashtag(
     if exclude_author_ids:
         ident_stmt = ident_stmt.where(Post.user_id.not_in(exclude_author_ids))
     if exclude_deleted_authors:
-        ident_stmt = ident_stmt.where(Post.user_id.not_in(deleted_author_ids()))
+        ident_stmt = ident_stmt.where(Post.user_id.not_in(hidden_author_ids()))
     if cursor_created_at is not None and cursor_id is not None:
         ident_stmt = ident_stmt.where(
             or_(
@@ -467,7 +471,7 @@ def fetch_for_you_candidates(
     if exclude_author_ids:
         stmt = stmt.where(Post.user_id.not_in(exclude_author_ids))
     if exclude_deleted_authors:
-        stmt = stmt.where(Post.user_id.not_in(deleted_author_ids()))
+        stmt = stmt.where(Post.user_id.not_in(hidden_author_ids()))
     stmt = stmt.where(visible_root_predicate(current_user_id))
     stmt = stmt.order_by(Post.created_at.desc(), Post.id.desc()).limit(limit)
 

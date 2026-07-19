@@ -88,7 +88,9 @@ def list_users(
     limit: int,
     exclude_user_ids: set[int] | None = None,
 ) -> list[tuple[User, bool]]:
-    stmt = select(User).where(User.deleted_at.is_(None))
+    stmt = select(User).where(
+        User.deleted_at.is_(None), User.suspended_at.is_(None)
+    )
     if query:
         stmt = stmt.where(User.username.ilike(f"%{query}%"))
     # Blocked (and blocking) users do not surface in discovery.

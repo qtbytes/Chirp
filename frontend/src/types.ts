@@ -11,6 +11,8 @@ export type UserSummary = {
    * moderation UI. Never sent on tweet authors, so the roster stays private.
    */
   is_moderator?: boolean;
+  /** True while a moderator suspension stands. Public, like Twitter's. */
+  is_suspended?: boolean;
 };
 
 export type UserDiscovery = UserSummary & {
@@ -140,6 +142,8 @@ export type UserProfile = {
   is_current_user: boolean;
   /** Whether this profile belongs to a deleted (tombstoned) account. */
   is_deleted: boolean;
+  /** Whether a moderator suspension currently stands on this account. */
+  is_suspended: boolean;
   /** Whether you have blocked this account. */
   is_blocked: boolean;
   /** Whether you have muted this account. One-directional; they aren't told. */
@@ -219,6 +223,11 @@ export type ModerationAction = {
   resolved_reports: number;
 };
 
+export type ModerationUserAction = {
+  user_id: number;
+  suspended: boolean;
+};
+
 export type MutedUser = UserSummary & {
   muted_at: string;
 };
@@ -272,7 +281,10 @@ export type NotificationType =
   | "comment"
   | "reply"
   | "follow"
-  | "mention";
+  | "mention"
+  /** Moderation notices. The actor is the recipient (never the moderator). */
+  | "report_actioned"
+  | "post_removed";
 
 export type Notification = {
   id: number;

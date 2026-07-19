@@ -1374,9 +1374,21 @@ const NOTIFICATION_TEXT: Record<Notification["type"], string> = {
   reply: "replied to your comment",
   follow: "followed you",
   mention: "mentioned you",
+  // Moderation notices are complete sentences: they render without the
+  // "@actor" prefix, since the actor is the recipient, not the moderator.
+  report_actioned: "A post you reported was removed for violating the rules.",
+  post_removed: "Your post was removed for violating the rules.",
 };
 
+/** Notices that speak for the platform, not for another user. */
+function isModerationNotice(type: Notification["type"]): boolean {
+  return type === "report_actioned" || type === "post_removed";
+}
+
 function NotificationIcon({ type }: { type: Notification["type"] }) {
+  if (isModerationNotice(type)) {
+    return <Shield size={16} className="notif-icon moderation" aria-hidden="true" />;
+  }
   if (type === "follow") {
     return <UserPlus size={16} className="notif-icon follow" aria-hidden="true" />;
   }
@@ -1509,14 +1521,24 @@ function NotificationsView() {
             >
               <Link
                 to={to}
-                className="notif-link"
+                className={
+                  isModerationNotice(notification.type)
+                    ? "notif-link notif-link--no-avatar"
+                    : "notif-link"
+                }
                 onClick={() => void markOneRead(notification)}
               >
                 <NotificationIcon type={notification.type} />
-                <Avatar user={notification.actor} size="small" />
+                {isModerationNotice(notification.type) ? null : (
+                  <Avatar user={notification.actor} size="small" />
+                )}
                 <div className="notif-body">
                   <p>
-                    <strong>@{notification.actor.username}</strong>{" "}
+                    {isModerationNotice(notification.type) ? null : (
+                      <>
+                        <strong>@{notification.actor.username}</strong>{" "}
+                      </>
+                    )}
                     {NOTIFICATION_TEXT[notification.type]}
                   </p>
                   {notification.preview ? (

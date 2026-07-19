@@ -7,7 +7,9 @@ import {
   getModerationQueue,
   moderationDismiss,
   moderationRestore,
+  moderationSuspendUser,
   moderationTakedown,
+  moderationUnsuspendUser,
 } from "./api";
 import { Avatar, formatCompactDate, getErrorMessage } from "./components";
 import type { ModerationQueueItem } from "./types";
@@ -86,6 +88,35 @@ export default function ModerationView() {
     }
   }
 
+  async function toggleSuspension(item: ModerationQueueItem) {
+    const author = item.post.author;
+    setActingOn(item.post.id);
+    setError("");
+    try {
+      const result = author.is_suspended
+        ? await moderationUnsuspendUser(author.id)
+        : await moderationSuspendUser(author.id);
+      // The author may appear on several queue items; keep them all honest.
+      setItems((current) =>
+        current.map((row) =>
+          row.post.author.id === author.id
+            ? {
+                ...row,
+                post: {
+                  ...row.post,
+                  author: { ...row.post.author, is_suspended: result.suspended },
+                },
+              }
+            : row,
+        ),
+      );
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setActingOn(null);
+    }
+  }
+
   return (
     <>
       <header className="feed-header">
@@ -142,6 +173,9 @@ export default function ModerationView() {
                   {post.taken_down ? (
                     <span className="mod-flag">taken down</span>
                   ) : null}
+                  {post.author.is_suspended ? (
+                    <span className="mod-flag">author suspended</span>
+                  ) : null}
                 </div>
                 <p className="mod-content">{post.content || "(no text)"}</p>
                 {post.media_urls.length > 0 ? (
@@ -171,6 +205,13 @@ export default function ModerationView() {
               </div>
 
               <div className="mod-actions">
+                <button
+                  className="mod-pill-button"
+                  disabled={acting}
+                  onClick={() => void toggleSuspension(item)}
+                >
+                  {post.author.is_suspended ? "Unsuspend author" : "Suspend author"}
+                </button>
                 {tab === "open" ? (
                   <>
                     <button

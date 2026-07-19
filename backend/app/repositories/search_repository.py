@@ -77,7 +77,11 @@ def _relevance_hits(
     viewer_id: int,
 ) -> list[tuple[int, float]]:
     """Matching post ids ordered by BM25 relevance, each with its score."""
-    conditions = ["u.deleted_at IS NULL", "p.taken_down_at IS NULL"]
+    conditions = [
+        "u.deleted_at IS NULL",
+        "u.suspended_at IS NULL",
+        "p.taken_down_at IS NULL",
+    ]
     params: dict = {"match": match, "row_limit": limit + 1, "viewer": viewer_id}
     expanding = []
 
@@ -154,6 +158,7 @@ def _recent_hits(
         .where(
             Post.id.in_(match_ids),
             User.deleted_at.is_(None),
+            User.suspended_at.is_(None),
             Post.taken_down_at.is_(None),
             visible_root_predicate(viewer_id, Root),
         )

@@ -13,8 +13,8 @@ work — with a real UI on top rather than a toy script.
 Posting with images and video, threaded comments and replies, likes, quote
 tweets, follows, profiles, full-text search with hashtags and mentions, direct
 messages, blocking and muting, reporting with a moderation queue (operator-
-granted moderators; reversible takedowns), per-tweet audience controls, view
-counts, email
+granted moderators; reversible takedowns and account suspensions; judgement
+notifications), per-tweet audience controls, view counts, email
 confirmation, password change and reset, active session management, live
 notifications over SSE, emoji picker, and Open Graph link preview cards.
 

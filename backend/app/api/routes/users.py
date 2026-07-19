@@ -107,6 +107,7 @@ def _build_profile(db: Session, user: User, current_user_id: int) -> UserProfile
         is_following=follow_repository.is_following(db, current_user_id, user.id),
         is_current_user=is_current_user,
         is_deleted=user.is_deleted,
+        is_suspended=user.is_suspended,
         # Whether *you* have blocked them, so the UI can offer "Unblock". Their
         # having blocked you is deliberately not surfaced as a flag -- its effect
         # (their content simply isn't there) is the only signal.

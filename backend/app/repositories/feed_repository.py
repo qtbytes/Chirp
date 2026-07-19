@@ -8,7 +8,7 @@ from app.models.like import Like
 from app.models.post import Post
 from app.repositories.tweet_repository import (
     _quote_counts_subquery,
-    deleted_author_ids,
+    hidden_author_ids,
 )
 from app.repositories.visibility import visible_root_predicate
 
@@ -129,7 +129,7 @@ def list_feed_tweets(
     # A stale feed row can also outlive its author's account; a deleted account's
     # posts should leave the timeline even though the rows linger.
     if exclude_deleted_authors:
-        stmt = stmt.where(Post.user_id.not_in(deleted_author_ids()))
+        stmt = stmt.where(Post.user_id.not_in(hidden_author_ids()))
     # A precomputed row can also outlive the audience it was fanned out for (e.g.
     # a followers-only author the owner later unfollowed). Gate on the post's
     # audience at read time so it never surfaces to someone who can't see it.

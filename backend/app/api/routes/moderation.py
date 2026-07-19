@@ -16,7 +16,10 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from datetime import datetime, timezone
+
 from app.api.deps import get_current_user_id
+from app.core.session_store import SessionBackendUnavailable, revoke_user_sessions
 from app.db.database import get_db
 from app.models.post import Post
 from app.models.user import User
@@ -27,6 +30,7 @@ from app.schemas.report import (
     ModerationQueueItem,
     ModerationQueuePage,
     ModerationReportOut,
+    ModerationUserActionOut,
 )
 from app.schemas.user import UserSummary
 from app.services.timeline_service import decode_cursor, encode_cursor
@@ -166,3 +170,63 @@ def restore_post(
     return ModerationActionOut(
         post_id=post.id, taken_down=False, resolved_reports=0
     )
+
+
+@router.post("/users/{user_id}/suspend", response_model=ModerationUserActionOut)
+def suspend_user(
+    user_id: int,
+    _moderator: User = Depends(get_current_moderator),
+    db: Session = Depends(get_db),
+) -> ModerationUserActionOut:
+    """
+    Freeze the account: login refused, sessions revoked, content hidden from
+    feeds and discovery. Reversible -- nothing is scrubbed.
+
+    Sessions are revoked *before* the stamp is written, mirroring
+    change-password's ordering: if the session store is unreachable the
+    request fails having changed nothing, rather than leaving a "suspended"
+    account still signed in everywhere.
+    """
+    user = db.get(User, user_id)
+    if user is None or user.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
+        )
+    # Moderators are not suspendable from the API: otherwise any moderator
+    # could lock out the rest. Demote via the operator script first.
+    if user.is_moderator:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="cannot suspend a moderator",
+        )
+
+    try:
+        revoke_user_sessions(user.id)
+    except SessionBackendUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Session storage is unavailable.",
+        ) from exc
+
+    if user.suspended_at is None:
+        user.suspended_at = datetime.now(timezone.utc)
+        db.commit()
+    return ModerationUserActionOut(user_id=user.id, suspended=True)
+
+
+@router.post("/users/{user_id}/unsuspend", response_model=ModerationUserActionOut)
+def unsuspend_user(
+    user_id: int,
+    _moderator: User = Depends(get_current_moderator),
+    db: Session = Depends(get_db),
+) -> ModerationUserActionOut:
+    """Lift a suspension. The account and all its content come back as they were."""
+    user = db.get(User, user_id)
+    if user is None or user.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
+        )
+    if user.suspended_at is not None:
+        user.suspended_at = None
+        db.commit()
+    return ModerationUserActionOut(user_id=user.id, suspended=False)

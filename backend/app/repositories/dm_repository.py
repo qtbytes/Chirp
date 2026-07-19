@@ -57,7 +57,13 @@ def check_can_send(
     """
     if is_blocking(db, sender_id, recipient.id):
         return "you_blocked"
-    if recipient.is_deleted or is_blocking(db, recipient.id, sender_id):
+    # A suspended recipient reads like a deleted one: "gone", never "suspended
+    # but reachable later" -- the sender is not owed the distinction here.
+    if (
+        recipient.is_deleted
+        or recipient.is_suspended
+        or is_blocking(db, recipient.id, sender_id)
+    ):
         return "blocked_you"
 
     if conversation is not None:
@@ -211,7 +217,7 @@ def list_conversations(
         if exclude_user_ids and other_id in exclude_user_ids:
             continue
         other = db.get(User, other_id)
-        if other is None or other.is_deleted:
+        if other is None or other.is_deleted or other.is_suspended:
             continue
         last_stmt = (
             select(DmMessage)
