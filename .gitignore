@@ -6,8 +6,6 @@
 *.db-wal
 *.db-shm
 
-# Staged deploy payload: pruned production database + user uploads.
-deploy/out/
 # Per-host deploy settings; git pull must never overwrite them.
 deploy/deploy.conf
 # Build fingerprints written by deploy.sh on the server.

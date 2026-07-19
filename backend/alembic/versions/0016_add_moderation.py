@@ -11,8 +11,7 @@
 
 Autogenerate against the dev database also proposed dropping the pre-refactor
 legacy tables (``tweets``, ``comments``, ``retweets``, ...) that still linger
-there; those drops were removed by hand -- a fresh database never had them, and
-``deploy/prune_db.py`` already strips them from anything shipped.
+there; those drops were removed by hand -- a fresh database never had them.
 
 Revision ID: 0016
 Revises: 0015

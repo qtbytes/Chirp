@@ -1,14 +1,13 @@
 """
 Set a user's password directly in a Chirp database.
 
-There is no password-*reset* endpoint -- ``User`` carries no email, so there is
-nowhere to send a token, and a forgotten password stays an operator job. (A
-signed-in user can rotate their own via ``POST /auth/change-password``.) After
-``prune_db.py --reset-passwords`` the kept accounts have a blank hash and cannot
-log in at all; this script gives them a new one, using the same
-``pbkdf2_sha256`` hashing the app uses.
+The operator path for an account the normal flows cannot help: one with no
+confirmed email to receive a reset link, or whose hash was blanked after a
+leak (a blank hash rejects every password). It writes a new hash using the
+same ``pbkdf2_sha256`` hashing the app uses. (A signed-in user can rotate
+their own via ``POST /auth/change-password``.)
 
-Run it against the staged database before shipping:
+Run it against the local dev database:
 
     uv run --project backend python deploy/set_password.py --user dev
 

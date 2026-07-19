@@ -197,9 +197,8 @@ chown "$APP_USER:$APP_USER" "$STAMP_DIR"/*.stamp 2>/dev/null || true
 
 if [[ ! -f "$BACKEND/twitter.db" ]]; then
     warn "no $BACKEND/twitter.db -- alembic will create an empty one below."
-    warn "To keep the dev/test data, copy the pruned database over before starting:"
-    warn "    scp deploy/out/twitter.db root@$DOMAIN:$BACKEND/twitter.db"
-    warn "    scp -r deploy/out/uploads/ root@$DOMAIN:$BACKEND/"
+    warn "If this box should carry existing data, stop the services and restore a"
+    warn "backup first -- all three WAL files, see deploy/README.md."
 fi
 
 # ---------------------------------------------------------------- systemd
@@ -450,8 +449,8 @@ USER_COUNT="$(sudo -u "$APP_USER" sqlite3 "$BACKEND/twitter.db" \
     'SELECT COUNT(*) FROM users' 2>/dev/null || echo '?')"
 log "database: $USER_COUNT users"
 if [[ "$USER_COUNT" == "0" ]]; then
-    warn "the database has no users. If you expected the pruned dev/test data,"
-    warn "a stale twitter.db-wal probably overwrote it -- see deploy/README.md."
+    warn "the database has no users. If you expected existing data, a stale"
+    warn "twitter.db-wal probably overwrote it -- see deploy/README.md."
 fi
 
 # Must be 401: X-User-Id is not a credential.

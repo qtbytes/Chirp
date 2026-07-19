@@ -48,63 +48,12 @@ nginx -t && systemctl reload nginx
 > Until TLS is up the site is HTTP, and `SESSION_COOKIE_SECURE=true` means the
 > browser will refuse to store the login cookie. Log in only after certbot runs.
 
-## Bringing the dev/test data over
+## Setting a password
 
-`twitter.db` and `uploads/` are gitignored, so they never travel through git.
-Build a pruned database locally — only the `dev` and `test` users — and copy it
-once.
-
-> **A SQLite database in WAL mode is three files, not one.** Copying `twitter.db`
-> on top of a running database leaves the old `twitter.db-wal` and
-> `twitter.db-shm` beside it. On the next open, SQLite replays that stale log
-> into the file you just copied and **silently overwrites it**. Always stop the
-> services and delete all three files first.
->
-> The same trap bit `prune_db.py`, which used `shutil.copyfile` to snapshot the
-> dev database and so shipped a build missing every row — and every migration —
-> still sitting in the WAL. It now uses SQLite's backup API, which folds the WAL
-> in. `deploy.sh` takes its pre-migration backup the same way.
-
-```sh
-# locally, from the repo root
-uv run --project backend python deploy/prune_db.py --apply --copy-uploads --reset-passwords
-
-# stop the app and clear the old database *and its WAL sidecars*
-ssh root@vthe.shop 'systemctl stop chirp-api chirp-worker &&
-    rm -f /srv/chirp/backend/twitter.db /srv/chirp/backend/twitter.db-wal \
-          /srv/chirp/backend/twitter.db-shm'
-
-scp deploy/out/twitter.db root@vthe.shop:/srv/chirp/backend/twitter.db
-scp -r deploy/out/uploads/. root@vthe.shop:/srv/chirp/backend/uploads/
-
-ssh root@vthe.shop '
-    chown -R chirp:chirp /srv/chirp/backend
-    chmod -R a+rX /srv/chirp/backend/uploads   # nginx (www-data) must read these
-    sqlite3 /srv/chirp/backend/twitter.db "SELECT COUNT(*) || \" users\" FROM users"
-    systemctl start chirp-api chirp-worker
-'
-```
-
-That `SELECT COUNT(*)` should print `2 users`. If it prints `0`, a stale WAL
-overwrote the copy — repeat with the services stopped and all three files removed.
-`deploy.sh` prints the same count after every deploy for this reason.
-
-Run `prune_db.py` with no flags first for a dry-run report. Add
-`--reset-passwords` to blank the two password hashes — those hashes were public
-on GitHub, so unless you have rotated the passwords you want this.
-
-### Setting a password after `--reset-passwords`
-
-A blank hash rejects every password, and there is no reset endpoint, so the
-accounts cannot log in until you give them one. Do it on the staged database
-before shipping:
-
-```sh
-uv run --project backend python deploy/set_password.py --user dev
-uv run --project backend python deploy/set_password.py --user test
-```
-
-Or on the live database, after deploying:
+`deploy/set_password.py` writes a user's password hash directly into a
+database, using the same `pbkdf2_sha256` hashing the app does — the operator
+path for an account that cannot use the normal flows (a blanked hash, no
+confirmed email):
 
 ```sh
 cd /srv/chirp
@@ -150,6 +99,16 @@ SQLite runs in WAL mode, so copy it with the backup API, not `cp`:
 sudo -u chirp sqlite3 /srv/chirp/backend/twitter.db ".backup '/srv/chirp/backup-$(date +%F).db'"
 tar czf /srv/chirp/uploads-$(date +%F).tar.gz -C /srv/chirp/backend uploads
 ```
+
+> **A WAL-mode database is three files, not one.** Copying `twitter.db` on top
+> of a running database leaves the old `twitter.db-wal` and `twitter.db-shm`
+> beside it; on the next open, SQLite replays that stale log into the file you
+> just copied and **silently overwrites it**. When restoring a copy, stop the
+> services and delete all three files first. The backup API folds the WAL into
+> one consistent file — which is why this command and `deploy.sh`'s
+> pre-migration snapshot both use it, and why `deploy.sh` prints the user
+> count after every deploy: a database clobbered by a stale WAL looks like a
+> perfectly healthy empty site.
 
 ## Schema migrations
 
@@ -205,11 +164,6 @@ journalctl -u chirp-api | grep 'could not send'
 ```
 
 ## Things worth knowing
-
-**Emails never reach production.** `prune_db.py` clears `email` and
-`pending_email` on every surviving row, and refuses to write the database if one
-survives. The dev/test accounts' addresses belong to whoever was testing, and
-shipping them would point live reset mail at real inboxes.
 
 **Redis is mandatory.** The timeline and link-preview caches degrade gracefully
 without it, but sessions and rate limiting do not: auth returns **503** and the
