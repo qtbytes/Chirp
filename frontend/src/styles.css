@@ -1921,6 +1921,13 @@ button.media-grid__cell {
   border-bottom: 1px solid var(--line);
 }
 
+/* A taken-down post has no action bar, so the divider that would separate
+   the timestamp from it has nothing to separate. */
+.detail-timestamp--no-actions {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
 .detail-tweet > p {
   margin: 0 0 18px;
   /* Larger than the 16px timeline body so the focused post reads as the
@@ -3794,13 +3801,10 @@ a.tab {
 
 /* ------------------------------------------------------------- moderation */
 
+/* Reads as the post body's stand-in, not a banner: muted italic text in the
+   body's slot, no box around it. */
 .takedown-notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  margin: 0 0 18px;
   color: var(--muted);
   font-style: italic;
 }

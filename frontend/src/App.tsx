@@ -36,7 +36,6 @@ import {
   Search,
   Settings,
   Shield,
-  ShieldOff,
   Sun,
   UserPlus,
   X,
@@ -2462,7 +2461,6 @@ function TweetDetail({
         </div>
         {tweet.taken_down ? (
           <div className="takedown-notice">
-            <ShieldOff size={16} aria-hidden="true" />
             <span>This post was removed for violating the rules.</span>
           </div>
         ) : (
@@ -2486,7 +2484,13 @@ function TweetDetail({
         ) : null}
         {tweet.quoted_post ? <QuotedPostCard post={tweet.quoted_post} /> : null}
         {error ? <p className="tweet-error">{error}</p> : null}
-        <div className="detail-timestamp">
+        <div
+          className={
+            tweet.taken_down
+              ? "detail-timestamp detail-timestamp--no-actions"
+              : "detail-timestamp"
+          }
+        >
           <span>{displayDate}</span>
           {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
           <VisibilityBadge visibility={tweet.visibility} />
