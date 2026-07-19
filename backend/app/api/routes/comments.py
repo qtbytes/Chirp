@@ -60,7 +60,9 @@ def get_comment(
 ) -> CommentOut:
     """Load one comment with stats -- backs the comment detail page."""
     comment = tweet_repository.get_tweet(db, comment_id)
-    if comment is None or comment.reply_to_id is None:
+    # A taken-down comment reads as missing -- unlike a taken-down tweet there
+    # is no tombstone, because the thread listing drops it with its subtree.
+    if comment is None or comment.reply_to_id is None or comment.is_taken_down:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="comment not found",

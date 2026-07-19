@@ -238,11 +238,15 @@ def get_tweet(
         "liked_by_me": False,
     }
 
+    # A taken-down tweet answers as a tombstone rather than a 404: its replies
+    # are other people's posts and keep the thread alive, so the anchor must
+    # stay reachable -- but with the offending content and media masked.
+    taken_down = tweet.is_taken_down
     return TweetOut(
         id=tweet.id,
-        content=tweet.content,
-        media_urls=tweet.media_urls or [],
-        media_alts=tweet.media_alts or [],
+        content="" if taken_down else tweet.content,
+        media_urls=[] if taken_down else tweet.media_urls or [],
+        media_alts=[] if taken_down else tweet.media_alts or [],
         created_at=tweet.created_at,
         edited_at=tweet.edited_at,
         author=UserSummary.model_validate(tweet.author),
@@ -253,10 +257,11 @@ def get_tweet(
         liked_by_me=stats["liked_by_me"],
         quoted_post=(
             serialize_quoted_post(tweet.quoted_post)
-            if can_view_post(db, current_user_id, tweet.quoted_post)
+            if not taken_down and can_view_post(db, current_user_id, tweet.quoted_post)
             else None
         ),
         visibility=tweet.visibility,
+        taken_down=taken_down,
     )
 
 

@@ -116,6 +116,7 @@ def _build_profile(db: Session, user: User, current_user_id: int) -> UserProfile
         email=user.email if is_current_user else None,
         pending_email=user.pending_email if is_current_user else None,
         dm_policy=user.dm_policy if is_current_user else None,
+        is_moderator=user.is_moderator if is_current_user else False,
     )
 
 

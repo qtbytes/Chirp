@@ -10,6 +10,8 @@ import type {
   FollowListPage,
   LikeToggleResult,
   LinkPreview,
+  ModerationAction,
+  ModerationQueuePage,
   MuteListPage,
   Notification,
   NotificationPage,
@@ -492,6 +494,43 @@ export function reportPost(
   return request<Report>(`/reports/posts/${postId}`, {
     method: "POST",
     body: JSON.stringify({ reason, details: details?.trim() || null }),
+  });
+}
+
+/**
+ * The moderation queue: reported posts grouped by post, newest report first.
+ * Moderators only -- everyone else gets 404. `status: "resolved"` lists judged
+ * posts, where a wrong takedown can be found and restored.
+ */
+export function getModerationQueue(
+  status: "open" | "resolved" = "open",
+  cursor?: string | null,
+): Promise<ModerationQueuePage> {
+  const params = new URLSearchParams({ status, limit: "20" });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return request<ModerationQueuePage>(`/moderation/reports?${params.toString()}`);
+}
+
+/** Nothing wrong with the post: close its open reports, change nothing else. */
+export function moderationDismiss(postId: number): Promise<ModerationAction> {
+  return request<ModerationAction>(`/moderation/posts/${postId}/dismiss`, {
+    method: "POST",
+  });
+}
+
+/** Hide the post everywhere and close its open reports as actioned. */
+export function moderationTakedown(postId: number): Promise<ModerationAction> {
+  return request<ModerationAction>(`/moderation/posts/${postId}/takedown`, {
+    method: "POST",
+  });
+}
+
+/** Reverse a takedown; already-resolved reports stay resolved. */
+export function moderationRestore(postId: number): Promise<ModerationAction> {
+  return request<ModerationAction>(`/moderation/posts/${postId}/restore`, {
+    method: "POST",
   });
 }
 

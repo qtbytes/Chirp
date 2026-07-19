@@ -79,6 +79,9 @@ def create_tweet(
         # private thread) -- also reported as "not found".
         if not can_view_thread(db, author_id, quoted):
             raise ValueError("quoted post not found")
+        # Nor one a moderator removed -- it is hidden like a missing post.
+        if quoted.is_taken_down:
+            raise ValueError("quoted post not found")
 
     post = Post(
         user_id=author_id,
@@ -290,6 +293,7 @@ def list_feed_with_retweets(
         .where(
             Post.user_id.in_(author_ids),
             Post.reply_to_id.is_(None),
+            Post.taken_down_at.is_(None),
             # These are top-level tweets, so each is its own thread root; gate on
             # the tweet's own audience for the viewer.
             visible_root_predicate(current_user_id),
@@ -358,6 +362,7 @@ def list_tweets_by_hashtag(
         .where(
             PostHashtag.tag == tag,
             Post.reply_to_id.is_(None),
+            Post.taken_down_at.is_(None),
             visible_root_predicate(current_user_id),
         )
         .order_by(Post.created_at.desc(), Post.id.desc())
@@ -449,7 +454,7 @@ def fetch_for_you_candidates(
         .outerjoin(like_counts, like_counts.c.post_id == Post.id)
         .outerjoin(comment_counts, comment_counts.c.post_id == Post.id)
         .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
-        .where(Post.reply_to_id.is_(None))
+        .where(Post.reply_to_id.is_(None), Post.taken_down_at.is_(None))
     )
     if tag is not None:
         stmt = stmt.join(PostHashtag, PostHashtag.post_id == Post.id).where(

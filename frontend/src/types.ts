@@ -6,6 +6,11 @@ export type UserSummary = {
   avatar_url: string | null;
   /** True once the account is deleted; the UI renders it as a tombstone. */
   is_deleted?: boolean;
+  /**
+   * Present only on the caller's own record (register/login/me); gates the
+   * moderation UI. Never sent on tweet authors, so the roster stays private.
+   */
+  is_moderator?: boolean;
 };
 
 export type UserDiscovery = UserSummary & {
@@ -55,6 +60,12 @@ export type Tweet = {
   liked_by_me: boolean;
   quoted_post: QuotedPost | null;
   visibility: TweetVisibility;
+  /**
+   * True when a moderator removed this post. The detail endpoint still
+   * answers -- content and media arrive masked -- so the thread stays
+   * reachable and the UI shows a tombstone instead of the body.
+   */
+  taken_down?: boolean;
 };
 
 export type LikeToggleResult = {
@@ -164,6 +175,48 @@ export type Report = {
   post_id: number;
   reason: ReportReason;
   created_at: string;
+};
+
+export type ReportStatus = "open" | "dismissed" | "actioned";
+
+/** One reporter's complaint, as the moderation queue shows it. */
+export type ModerationReport = {
+  id: number;
+  reporter: UserSummary;
+  reason: ReportReason;
+  details: string | null;
+  created_at: string;
+  status: ReportStatus;
+};
+
+/** The reported post, unmasked (a moderator judges the evidence). */
+export type ModerationPost = {
+  id: number;
+  content: string;
+  media_urls: string[];
+  created_at: string;
+  author: UserSummary;
+  is_reply: boolean;
+  thread_id: number;
+  taken_down: boolean;
+};
+
+export type ModerationQueueItem = {
+  post: ModerationPost;
+  report_count: number;
+  latest_report_at: string;
+  reports: ModerationReport[];
+};
+
+export type ModerationQueuePage = {
+  items: ModerationQueueItem[];
+  next_cursor: string | null;
+};
+
+export type ModerationAction = {
+  post_id: number;
+  taken_down: boolean;
+  resolved_reports: number;
 };
 
 export type MutedUser = UserSummary & {

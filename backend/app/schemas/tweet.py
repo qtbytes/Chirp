@@ -69,6 +69,10 @@ class TweetOut(BaseModel):
     liked_by_me: bool = False
     quoted_post: QuotedPostOut | None = None
     visibility: TweetVisibility = DEFAULT_VISIBILITY
+    # True when a moderator removed this tweet. The detail endpoint still
+    # answers -- with content and media masked -- so the thread underneath a
+    # removed tweet stays reachable and the UI can render a tombstone.
+    taken_down: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

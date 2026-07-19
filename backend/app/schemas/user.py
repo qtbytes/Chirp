@@ -54,6 +54,7 @@ RESERVED_USERNAMES = frozenset(
         "verify-email",
         "forgot-password",
         "messages",
+        "moderation",
     }
 )
 
@@ -91,6 +92,19 @@ class UserSummary(BaseModel):
     is_deleted: bool = False
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CurrentUserOut(UserSummary):
+    """
+    The caller's own record, as register/login/me return it.
+
+    Extends ``UserSummary`` with ``is_moderator`` so the client can gate the
+    moderation UI. Only these self-describing endpoints use it -- the flag must
+    not ride along on tweet authors, where it would make the moderator roster
+    browsable.
+    """
+
+    is_moderator: bool = False
 
 
 class UserLogin(BaseModel):
@@ -195,3 +209,7 @@ class UserProfileOut(BaseModel):
     pending_email: str | None = None
     # Also owner-only: the DM privacy setting, so the Messages UI can show it.
     dm_policy: Literal["everyone", "following", "none"] | None = None
+    # Owner-only too: gates the moderation UI. Kept off everyone else's profile
+    # so the moderator roster is not browsable -- the same non-disclosure rule
+    # as the 404 on /moderation itself.
+    is_moderator: bool = False

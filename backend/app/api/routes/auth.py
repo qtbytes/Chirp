@@ -38,7 +38,7 @@ from app.schemas.user import (
     SessionOut,
     UserCreate,
     UserLogin,
-    UserSummary,
+    CurrentUserOut,
 )
 from app.services import mailer
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
@@ -74,7 +74,7 @@ def _send_verification(user: User) -> None:
 
 @router.post(
     "/register",
-    response_model=UserSummary,
+    response_model=CurrentUserOut,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(rate_limiter("register", identity="ip"))],
 )
@@ -83,7 +83,7 @@ def register(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
-) -> UserSummary:
+) -> CurrentUserOut:
     """
     Create an account and mail a confirmation link.
 
@@ -113,12 +113,12 @@ def register(
         logger.exception("could not send a verification email to user %s", user.id)
 
     _set_session_cookie(response, user.id, request)
-    return UserSummary.model_validate(user)
+    return CurrentUserOut.model_validate(user)
 
 
 @router.post(
     "/login",
-    response_model=UserSummary,
+    response_model=CurrentUserOut,
     dependencies=[Depends(rate_limiter("login", identity="ip"))],
 )
 def login(
@@ -126,7 +126,7 @@ def login(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
-) -> UserSummary:
+) -> CurrentUserOut:
     """
     Exchange credentials for a session cookie.
 
@@ -155,7 +155,7 @@ def login(
         )
 
     _set_session_cookie(response, user.id, request)
-    return UserSummary.model_validate(user)
+    return CurrentUserOut.model_validate(user)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -665,18 +665,18 @@ def revoke_session(
         )
 
 
-@router.get("/me", response_model=UserSummary)
+@router.get("/me", response_model=CurrentUserOut)
 def me(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
-) -> UserSummary:
+) -> CurrentUserOut:
     user = user_repository.get_user(db, current_user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="session user not found",
         )
-    return UserSummary.model_validate(user)
+    return CurrentUserOut.model_validate(user)
 
 
 # A user agent is a client-supplied string; cap it so a hostile client cannot

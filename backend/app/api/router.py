@@ -8,6 +8,7 @@ from app.api.routes import (
     interactions,
     link_preview,
     media,
+    moderation,
     mutes,
     notifications,
     reports,
@@ -23,6 +24,7 @@ api_router.include_router(auth.router)
 api_router.include_router(blocks.router)
 api_router.include_router(mutes.router)
 api_router.include_router(reports.router)
+api_router.include_router(moderation.router)
 api_router.include_router(comments.router)
 api_router.include_router(dm.router)
 api_router.include_router(users.router)

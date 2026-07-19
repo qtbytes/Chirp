@@ -3781,3 +3781,134 @@ a.tab {
 .empty-state-icon--muted {
   color: var(--muted);
 }
+
+/* ------------------------------------------------------------- moderation */
+
+.takedown-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.mod-queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mod-item {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mod-post-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mod-username,
+.mod-time {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.mod-username {
+  margin-left: 6px;
+}
+
+.mod-flag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, crimson 14%, transparent);
+  color: crimson;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mod-content {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mod-media-note,
+.mod-resolved-note {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.mod-thread-link {
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.mod-reports {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
+.mod-count {
+  font-weight: 700;
+}
+
+.mod-reports ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.mod-reports strong {
+  color: var(--ink);
+}
+
+.mod-reason {
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.mod-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+/* Same pill as .danger-button, in a neutral tone -- the two actions carry
+   equal visual weight, differing only in color. */
+.mod-pill-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mod-pill-button:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: var(--muted);
+}
+
+.mod-pill-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

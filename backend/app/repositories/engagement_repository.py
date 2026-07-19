@@ -22,7 +22,7 @@ from app.repositories.visibility import can_view_thread, visible_root_predicate
 
 def _like_post(db: Session, user_id: int, post_id: int) -> bool:
     post = db.get(Post, post_id)
-    if post is None:
+    if post is None or post.is_taken_down:
         raise ValueError("post not found")
 
     # A blocked user must not be able to like the blocker's post, nor vice versa.
@@ -133,7 +133,7 @@ def create_comment(
     ``reply_to_id`` is the tweet (top-level comment) or the parent comment.
     """
     tweet = db.get(Post, tweet_id)
-    if tweet is None or tweet.reply_to_id is not None:
+    if tweet is None or tweet.reply_to_id is not None or tweet.is_taken_down:
         raise ValueError("tweet not found")
 
     # No commenting across a block, in either direction -- reported as a missing
@@ -154,7 +154,11 @@ def create_comment(
     reply_to_id = tweet_id
     if parent_comment_id is not None:
         parent_comment = db.get(Post, parent_comment_id)
-        if parent_comment is None or parent_comment.root_id != tweet_id:
+        if (
+            parent_comment is None
+            or parent_comment.root_id != tweet_id
+            or parent_comment.is_taken_down
+        ):
             raise ValueError("parent comment not found")
         # Also honour a block against the specific comment's author.
         if blocks_between(db, user_id, parent_comment.user_id):
@@ -270,7 +274,14 @@ def list_comments_by_tweet(
         .outerjoin(like_counts, like_counts.c.post_id == Post.id)
         .outerjoin(reply_counts, reply_counts.c.comment_id == Post.id)
         .outerjoin(retweet_counts, retweet_counts.c.post_id == Post.id)
-        .where(Post.root_id == tweet_id, Post.id != tweet_id)
+        .where(
+            Post.root_id == tweet_id,
+            Post.id != tweet_id,
+            # A taken-down comment drops with its subtree, exactly like a
+            # blocked author's below: the pre-order walk never reaches replies
+            # whose parent is gone.
+            Post.taken_down_at.is_(None),
+        )
         .order_by(Post.created_at.asc(), Post.id.asc())
     )
     if exclude_author_ids:
@@ -435,6 +446,7 @@ def list_replies_by_user(
         .where(
             Post.user_id == user_id,
             Post.reply_to_id.is_not(None),
+            Post.taken_down_at.is_(None),
             visible_root_predicate(current_user_id, Root),
         )
         .order_by(Post.created_at.desc(), Post.id.desc())
@@ -497,6 +509,7 @@ def list_media_posts_by_user(
             Post.user_id == user_id,
             Post.media_urls.is_not(None),
             func.json_array_length(Post.media_urls) > 0,
+            Post.taken_down_at.is_(None),
             visible_root_predicate(current_user_id, Root),
         )
         .order_by(Post.created_at.desc(), Post.id.desc())
@@ -546,6 +559,7 @@ def list_liked_posts_by_user(
         .where(
             Like.user_id == user_id,
             User.deleted_at.is_(None),
+            Post.taken_down_at.is_(None),
             visible_root_predicate(user_id, Root),
         )
         .order_by(Like.created_at.desc(), Post.id.desc())

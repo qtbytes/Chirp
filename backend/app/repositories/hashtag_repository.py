@@ -32,6 +32,7 @@ def search_tags(db: Session, prefix: str, limit: int) -> list[dict]:
         .where(
             PostHashtag.tag.like(f"{escaped}%", escape="\\"),
             User.deleted_at.is_(None),
+            Post.taken_down_at.is_(None),
             Post.visibility == "public",
         )
         .group_by(PostHashtag.tag)
@@ -103,6 +104,7 @@ def list_trending(
         .where(
             PostHashtag.created_at >= baseline_cutoff,
             User.deleted_at.is_(None),
+            Post.taken_down_at.is_(None),
             # Only public tweets feed trending -- a followers-only or private
             # tweet must never move (or leak into) a figure shared across all
             # viewers.
@@ -139,6 +141,7 @@ def list_trending(
             .where(
                 PostView.created_at >= baseline_cutoff,
                 User.deleted_at.is_(None),
+                Post.taken_down_at.is_(None),
                 Post.visibility == "public",
             )
             .group_by(PostHashtag.tag)

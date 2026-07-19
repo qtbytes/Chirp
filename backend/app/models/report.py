@@ -26,6 +26,8 @@ class Report(Base):
         UniqueConstraint("reporter_id", "post_id", name="uq_report_reporter_post"),
         # "Everything reported about post X", the moderator's read.
         Index("ix_reports_post", "post_id"),
+        # The queue's read: open reports grouped by post.
+        Index("ix_reports_status_post", "status", "post_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -37,4 +39,16 @@ class Report(Base):
         DateTime(timezone=True),
         default=utcnow,
         nullable=False,
+    )
+    # Moderation lifecycle. A report is ``open`` until a moderator judges the
+    # *post*, at which point every open report about it closes together:
+    # ``dismissed`` (nothing wrong) or ``actioned`` (the post was taken down).
+    status: Mapped[str] = mapped_column(
+        String(16), default="open", server_default="open", nullable=False
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolved_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
     )

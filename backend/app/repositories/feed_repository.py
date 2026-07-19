@@ -134,6 +134,9 @@ def list_feed_tweets(
     # a followers-only author the owner later unfollowed). Gate on the post's
     # audience at read time so it never surfaces to someone who can't see it.
     stmt = stmt.where(visible_root_predicate(owner_id))
+    # And it can outlive the post's standing: a moderator takedown after fan-out
+    # must pull the post from every feed it already reached.
+    stmt = stmt.where(Post.taken_down_at.is_(None))
 
     if cursor_created_at is not None and cursor_id is not None:
         stmt = stmt.where(

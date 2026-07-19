@@ -35,6 +35,8 @@ import {
   Repeat2,
   Search,
   Settings,
+  Shield,
+  ShieldOff,
   Sun,
   UserPlus,
   X,
@@ -113,6 +115,7 @@ import {
   mergeTweetStats,
   parseBackendDate,
 } from "./components";
+import ModerationView from "./ModerationView";
 import { ProfileView } from "./ProfileView";
 import { FollowListView } from "./FollowListView";
 import { ChatView, MessagesView } from "./MessagesView";
@@ -390,6 +393,11 @@ function App() {
         <Route path="/search" element={<SearchView />} />
         <Route path="/hashtag/:tag" element={<HashtagView />} />
         <Route path="/notifications" element={<NotificationsView />} />
+        {/* Only mounted for moderators; anyone else typing the URL falls into
+            the catch-all redirect. The API 404s them regardless. */}
+        {currentUser.is_moderator ? (
+          <Route path="/moderation" element={<ModerationView />} />
+        ) : null}
         <Route path="/messages" element={<MessagesView currentUser={currentUser} />} />
         <Route
           path="/messages/:username"
@@ -563,10 +571,15 @@ function AppLayout({
   const isNotificationsRoute = location.pathname === "/notifications";
   const isMessagesRoute = location.pathname.startsWith("/messages");
   const isSettingsRoute = location.pathname === "/settings";
+  const isModerationRoute = location.pathname === "/moderation";
   const isHomeRoute =
     location.pathname === "/" || location.pathname === "/following";
   const hideDiscovery =
-    isSearchRoute || isNotificationsRoute || isMessagesRoute || isSettingsRoute;
+    isSearchRoute ||
+    isNotificationsRoute ||
+    isMessagesRoute ||
+    isSettingsRoute ||
+    isModerationRoute;
   const onDiscoveryChanged = () => setRefreshToken((value) => value + 1);
 
   const refreshUnread = useCallback(async () => {
@@ -659,6 +672,15 @@ function AppLayout({
             </span>
             <span>Messages</span>
           </Link>
+          {currentUser.is_moderator ? (
+            <Link
+              className={isModerationRoute ? "rail-link active" : "rail-link"}
+              to="/moderation"
+            >
+              <Shield size={22} aria-hidden="true" />
+              <span>Moderation</span>
+            </Link>
+          ) : null}
           <Link
             className={isSettingsRoute ? "rail-link active" : "rail-link"}
             to="/settings"
@@ -2389,7 +2411,7 @@ function TweetDetail({
       </div>
 
       <article id={`post-${tweet.id}`} className="detail-tweet">
-        {isOwn ? (
+        {isOwn && !tweet.taken_down ? (
           <PostMenu
             onEdit={startEditing}
             onDelete={() => setConfirmingDelete(true)}
@@ -2413,7 +2435,14 @@ function TweetDetail({
             <span>@{tweet.author.username}</span>
           </div>
         </div>
-        <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
+        {tweet.taken_down ? (
+          <div className="takedown-notice">
+            <ShieldOff size={16} aria-hidden="true" />
+            <span>This post was removed for violating the rules.</span>
+          </div>
+        ) : (
+          <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
+        )}
         {editing ? (
           <PostEditor
             initialContent={tweet.content}
@@ -2437,41 +2466,43 @@ function TweetDetail({
           {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
           <VisibilityBadge visibility={tweet.visibility} />
         </div>
-        <div className="tweet-actions detail-actions">
-          <button
-            className="tweet-action comment"
-            onClick={() => setReplying(true)}
-            aria-label="Reply"
-          >
-            <MessageCircle size={18} aria-hidden="true" />
-            <span>{tweet.comment_count}</span>
-          </button>
-          <button
-            className="tweet-action retweet"
-            onClick={() => setQuoting(true)}
-            aria-label="Quote"
-          >
-            <Repeat2 size={18} aria-hidden="true" />
-            <span>{tweet.retweet_count}</span>
-          </button>
-          <button
-            className={tweet.liked_by_me ? "tweet-action like active" : "tweet-action like"}
-            onClick={() => void toggleDetailLikeAction()}
-            disabled={acting === "like"}
-            aria-pressed={tweet.liked_by_me}
-          >
-            <Heart
-              size={18}
-              aria-hidden="true"
-              fill={tweet.liked_by_me ? "currentColor" : "none"}
-            />
-            <span>{tweet.like_count}</span>
-          </button>
-          <span className="tweet-action views" aria-label="Views">
-            <BarChart2 size={18} aria-hidden="true" />
-            <span>{tweet.view_count}</span>
-          </span>
-        </div>
+        {tweet.taken_down ? null : (
+          <div className="tweet-actions detail-actions">
+            <button
+              className="tweet-action comment"
+              onClick={() => setReplying(true)}
+              aria-label="Reply"
+            >
+              <MessageCircle size={18} aria-hidden="true" />
+              <span>{tweet.comment_count}</span>
+            </button>
+            <button
+              className="tweet-action retweet"
+              onClick={() => setQuoting(true)}
+              aria-label="Quote"
+            >
+              <Repeat2 size={18} aria-hidden="true" />
+              <span>{tweet.retweet_count}</span>
+            </button>
+            <button
+              className={tweet.liked_by_me ? "tweet-action like active" : "tweet-action like"}
+              onClick={() => void toggleDetailLikeAction()}
+              disabled={acting === "like"}
+              aria-pressed={tweet.liked_by_me}
+            >
+              <Heart
+                size={18}
+                aria-hidden="true"
+                fill={tweet.liked_by_me ? "currentColor" : "none"}
+              />
+              <span>{tweet.like_count}</span>
+            </button>
+            <span className="tweet-action views" aria-label="Views">
+              <BarChart2 size={18} aria-hidden="true" />
+              <span>{tweet.view_count}</span>
+            </span>
+          </div>
+        )}
       </article>
 
       {replying ? (

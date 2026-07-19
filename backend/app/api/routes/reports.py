@@ -30,7 +30,9 @@ def report_post(
     so the block is never disclosed.
     """
     post = tweet_repository.get_tweet(db, post_id)
-    if post is None:
+    # A post a moderator already took down reads as missing: it is hidden from
+    # the reporter anyway, and the report it would file is already answered.
+    if post is None or post.is_taken_down:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="post not found",

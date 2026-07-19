@@ -9,11 +9,12 @@ def serialize_quoted_post(quoted: Post | None) -> QuotedPostOut | None:
     """
     Build the compact embedded view of a quoted post.
 
-    Returns ``None`` when there is no quote or the quoted post has been deleted
-    (a dangling ``quoted_post_id``), so callers can simply pass
-    ``post.quoted_post`` through.
+    Returns ``None`` when there is no quote, the quoted post has been deleted
+    (a dangling ``quoted_post_id``), or a moderator took the quoted post down --
+    so callers can simply pass ``post.quoted_post`` through and a removed quote
+    renders exactly like a deleted one.
     """
-    if quoted is None:
+    if quoted is None or quoted.is_taken_down:
         return None
     return QuotedPostOut(
         id=quoted.id,

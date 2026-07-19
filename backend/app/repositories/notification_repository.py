@@ -189,7 +189,9 @@ def list_notifications(
         comment_id: int | None = None
         preview: str | None = None
         if post is not None:
-            preview = post.content
+            # A taken-down post's content must not leak through the preview;
+            # the notification itself survives, and its link tombstones.
+            preview = None if post.is_taken_down else post.content
             if post.reply_to_id is not None:
                 comment_id = post.id
                 tweet_id = post.root_id

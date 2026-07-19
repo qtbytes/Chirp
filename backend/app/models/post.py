@@ -78,6 +78,12 @@ class Post(Base):
     view_count: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+    # Set by a moderator takedown. Unlike an author delete the row survives, so
+    # the action is reversible and the reports about it keep something to point
+    # at; read paths hide the post and detail views render a tombstone.
+    taken_down_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     author = relationship("User", back_populates="posts")
     quoted_post = relationship(
@@ -90,6 +96,10 @@ class Post(Base):
     @property
     def is_reply(self) -> bool:
         return self.reply_to_id is not None
+
+    @property
+    def is_taken_down(self) -> bool:
+        return self.taken_down_at is not None
 
     # Backward-compatible aliases so tweet/comment-shaped API code keeps working
     # against the unified model without change.

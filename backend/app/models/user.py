@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -60,6 +60,12 @@ class User(Base):
     # "Deleted account".
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    # Grants access to the moderation queue and its actions. There is no
+    # in-app way to set this: the operator grants it from the server
+    # (deploy/set_moderator.py), so moderation cannot be self-served.
+    is_moderator: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
     )
 
     posts = relationship(
