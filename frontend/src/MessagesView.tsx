@@ -7,6 +7,7 @@ import {
   Bell,
   BellOff,
   Check,
+  Flag,
   Loader2,
   MailPlus,
   MessageCirclePlus,
@@ -43,6 +44,7 @@ import type {
 import {
   Avatar,
   ConfirmDialog,
+  ReportModal,
   formatCompactDate,
   getErrorMessage,
   parseBackendDate,
@@ -243,7 +245,8 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
 
 /**
  * The per-conversation "…" menu (inbox row and chat header): go to profile,
- * mute/unmute, block the account, or delete the conversation for yourself.
+ * mute/unmute, report or block the account, or delete the conversation for
+ * yourself.
  */
 function ChatMenu({
   otherUser,
@@ -266,6 +269,7 @@ function ChatMenu({
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState<"block" | "delete" | null>(null);
+  const [reporting, setReporting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const ref = useRef<HTMLDivElement>(null);
@@ -384,6 +388,18 @@ function ChatMenu({
             className="danger-menu-item"
             onClick={() => {
               setOpen(false);
+              setReporting(true);
+            }}
+          >
+            <Flag size={16} aria-hidden="true" />
+            <span>Report account</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="danger-menu-item"
+            onClick={() => {
+              setOpen(false);
               setConfirming("delete");
             }}
           >
@@ -402,6 +418,13 @@ function ChatMenu({
           busy={busy}
           onConfirm={() => void confirmAction()}
           onCancel={() => setConfirming(null)}
+        />
+      ) : null}
+      {reporting ? (
+        <ReportModal
+          userId={otherUser.id}
+          username={otherUser.username}
+          onClose={() => setReporting(false)}
         />
       ) : null}
       {confirming === "delete" ? (

@@ -386,6 +386,7 @@ def test_suspend_freezes_the_account_and_unsuspend_restores_it() -> None:
     assert mod.post(f"/api/v1/moderation/users/{bob_id}/suspend").json() == {
         "user_id": bob_id,
         "suspended": True,
+        "resolved_reports": 0,
     }
 
     # Their session is revoked and login is refused with the reason.
@@ -426,6 +427,152 @@ def test_suspend_freezes_the_account_and_unsuspend_restores_it() -> None:
     assert tweet_id in [item["id"] for item in feed["items"]], (
         "unsuspending must bring the content back"
     )
+
+
+# --- user reports in the queue ----------------------------------------------
+
+
+def _report_user(client: TestClient, user_id: int, reason: str = "abuse") -> None:
+    response = client.post(
+        f"/api/v1/reports/users/{user_id}", json={"reason": reason}
+    )
+    assert response.status_code == 201, response.text
+
+
+def test_queue_mixes_post_and_user_items() -> None:
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    carol, carol_id = register("carol")
+    mod, _ = register_moderator()
+
+    tweet_id = _post(carol, "reported post")
+    _report(alice, tweet_id, "spam")
+    _report_user(alice, carol_id, "abuse")
+    _report_user(bob, carol_id, "spam")
+
+    page = mod.get("/api/v1/moderation/reports").json()
+    assert len(page["items"]) == 2, "the post and the account are separate items"
+
+    user_item = next(item for item in page["items"] if item["reported_user"])
+    post_item = next(item for item in page["items"] if item["post"])
+    assert user_item["post"] is None
+    assert post_item["reported_user"] is None
+    assert user_item["reported_user"]["username"] == "carol"
+    assert user_item["report_count"] == 2
+    assert {r["reason"] for r in user_item["reports"]} == {"abuse", "spam"}
+    assert post_item["post"]["id"] == tweet_id
+
+
+def test_queue_paginates_across_mixed_targets() -> None:
+    alice, _ = register("alice")
+    bob, bob_id = register("bob")
+    carol, carol_id = register("carol")
+    mod, _ = register_moderator()
+
+    tweet_ids = [_post(bob, f"post {n}") for n in range(2)]
+    for tweet_id in tweet_ids:
+        _report(alice, tweet_id)
+    _report_user(alice, bob_id)
+    _report_user(alice, carol_id)
+
+    seen: list[tuple] = []
+    cursor = None
+    for _ in range(4):
+        params = {"limit": 1}
+        if cursor:
+            params["cursor"] = cursor
+        page = mod.get("/api/v1/moderation/reports", params=params).json()
+        for item in page["items"]:
+            if item["post"]:
+                seen.append(("post", item["post"]["id"]))
+            else:
+                seen.append(("user", item["reported_user"]["id"]))
+        cursor = page["next_cursor"]
+        if cursor is None:
+            break
+
+    expected = {("post", tweet_ids[0]), ("post", tweet_ids[1]), ("user", bob_id), ("user", carol_id)}
+    assert set(seen) == expected
+    assert len(seen) == len(set(seen)), "pages must not overlap"
+
+
+def test_dismiss_user_reports_closes_them_and_changes_nothing_else() -> None:
+    alice, _ = register("alice")
+    bob, bob_id = register("bob")
+    mod, _ = register_moderator()
+
+    _report_user(alice, bob_id)
+
+    body = mod.post(f"/api/v1/moderation/users/{bob_id}/dismiss").json()
+    assert body["resolved_reports"] == 1
+    assert body["suspended"] is False
+
+    assert mod.get("/api/v1/moderation/reports").json()["items"] == []
+    # The account is untouched.
+    assert bob.get("/api/v1/auth/me").status_code == 200
+
+    resolved = mod.get(
+        "/api/v1/moderation/reports", params={"status": "resolved"}
+    ).json()
+    item = resolved["items"][0]
+    assert item["reported_user"]["id"] == bob_id
+    assert item["reports"][0]["status"] == "dismissed"
+
+
+def test_suspend_resolves_open_user_reports_as_actioned() -> None:
+    alice, _ = register("alice")
+    _, bob_id = register("bob")
+    mod, _ = register_moderator()
+
+    _report_user(alice, bob_id)
+
+    body = mod.post(f"/api/v1/moderation/users/{bob_id}/suspend").json()
+    assert body["suspended"] is True
+    assert body["resolved_reports"] == 1
+
+    assert mod.get("/api/v1/moderation/reports").json()["items"] == []
+    resolved = mod.get(
+        "/api/v1/moderation/reports", params={"status": "resolved"}
+    ).json()
+    item = resolved["items"][0]
+    assert item["reported_user"]["is_suspended"] is True
+    assert item["reports"][0]["status"] == "actioned"
+
+    # A repeat suspension has nothing left to resolve.
+    assert (
+        mod.post(f"/api/v1/moderation/users/{bob_id}/suspend").json()[
+            "resolved_reports"
+        ]
+        == 0
+    )
+
+    # Deliberately no notification: the dedupe key has no user-target column,
+    # and the suspension is already public on the profile.
+    assert "report_actioned" not in _notification_types(alice)
+
+
+def test_unsuspend_leaves_user_reports_resolved_until_re_reported() -> None:
+    alice, _ = register("alice")
+    _, bob_id = register("bob")
+    mod, _ = register_moderator()
+
+    _report_user(alice, bob_id)
+    mod.post(f"/api/v1/moderation/users/{bob_id}/suspend")
+    mod.post(f"/api/v1/moderation/users/{bob_id}/unsuspend")
+
+    # The judgement stands; lifting it reopens nothing.
+    assert mod.get("/api/v1/moderation/reports").json()["items"] == []
+
+    # The reporter insists: the amended report re-enters the queue.
+    _report_user(alice, bob_id, "spam")
+    reopened = mod.get("/api/v1/moderation/reports").json()
+    assert [item["reported_user"]["id"] for item in reopened["items"]] == [bob_id]
+
+
+def test_user_report_moderation_is_a_moderator_only_surface() -> None:
+    alice, _ = register("alice")
+    _, bob_id = register("bob")
+    assert alice.post(f"/api/v1/moderation/users/{bob_id}/dismiss").status_code == 404
 
 
 def test_a_moderator_cannot_be_suspended() -> None:

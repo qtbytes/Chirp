@@ -174,9 +174,11 @@ export type ReportReason =
   | "misinformation"
   | "other";
 
+/** Exactly one of `post_id` / `reported_user_id` is set. */
 export type Report = {
   id: number;
-  post_id: number;
+  post_id: number | null;
+  reported_user_id: number | null;
   reason: ReportReason;
   created_at: string;
 };
@@ -205,8 +207,14 @@ export type ModerationPost = {
   taken_down: boolean;
 };
 
+/**
+ * One judged-together target. Exactly one of `post` / `reported_user` is set:
+ * a reported post carries its evidence inline; a reported account *is* the
+ * evidence — the moderator follows the profile link.
+ */
 export type ModerationQueueItem = {
-  post: ModerationPost;
+  post: ModerationPost | null;
+  reported_user: UserSummary | null;
   report_count: number;
   latest_report_at: string;
   reports: ModerationReport[];
@@ -226,6 +234,8 @@ export type ModerationAction = {
 export type ModerationUserAction = {
   user_id: number;
   suspended: boolean;
+  /** Open reports about the account this action closed. */
+  resolved_reports: number;
 };
 
 export type MutedUser = UserSummary & {

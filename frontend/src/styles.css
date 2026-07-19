@@ -3844,10 +3844,21 @@ a.tab {
   font-weight: 700;
 }
 
+/* The neutral "this item is an account, not a post" badge. */
+.mod-flag--kind {
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  color: var(--muted);
+}
+
 .mod-content {
   margin: 6px 0 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.mod-content--account {
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .mod-media-note,

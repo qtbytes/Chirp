@@ -5,10 +5,11 @@ Access is gated by ``users.is_moderator``, which only the operator can grant
 (deploy/set_moderator.py). A non-moderator gets **404, never 403**, for the
 same reason a block does: a 403 would confirm the surface exists.
 
-Actions judge the *post* and close all of its open reports together --
-``dismiss`` (nothing wrong) or ``takedown`` (hide the post). A takedown is
-reversible (``restore``) because the post row survives; cached first-page
-timelines may show a taken-down post until their short TTL expires.
+Actions judge the *target* -- a post or a reported account -- and close all of
+its open reports together: ``dismiss`` (nothing wrong), ``takedown`` (hide the
+post), or ``suspend`` (freeze the account). Takedowns and suspensions are
+reversible (``restore`` / ``unsuspend``) because the rows survive; cached
+first-page timelines may show a taken-down post until their short TTL expires.
 """
 
 from typing import Literal
@@ -52,7 +53,8 @@ def get_current_moderator(
 
 
 def _serialize_item(row: dict) -> ModerationQueueItem:
-    post: Post = row["post"]
+    post: Post | None = row["post"]
+    reported_user: User | None = row["reported_user"]
     return ModerationQueueItem(
         post=ModerationPostOut(
             id=post.id,
@@ -63,7 +65,12 @@ def _serialize_item(row: dict) -> ModerationQueueItem:
             is_reply=post.reply_to_id is not None,
             thread_id=post.root_id or post.id,
             taken_down=post.is_taken_down,
-        ),
+        )
+        if post is not None
+        else None,
+        reported_user=UserSummary.model_validate(reported_user)
+        if reported_user is not None
+        else None,
         report_count=row["report_count"],
         latest_report_at=row["latest_at"],
         reports=[
@@ -89,13 +96,14 @@ def list_report_queue(
     db: Session = Depends(get_db),
 ) -> ModerationQueuePage:
     """
-    Reported posts, grouped by post, newest report first.
+    Reported targets -- posts and accounts -- grouped by target, newest report
+    first.
 
     ``status=open`` is the working queue; ``status=resolved`` shows judged
-    posts -- where a wrong takedown can be found and restored.
+    targets -- where a wrong takedown or suspension can be found and reversed.
     """
-    cursor_latest_at, cursor_post_id = decode_cursor(cursor)
-    if cursor and (cursor_latest_at is None or cursor_post_id is None):
+    cursor_latest_at, cursor_target_key = decode_cursor(cursor)
+    if cursor and (cursor_latest_at is None or cursor_target_key is None):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="invalid cursor"
         )
@@ -105,7 +113,7 @@ def list_report_queue(
         status=status_filter,
         limit=limit,
         cursor_latest_at=cursor_latest_at,
-        cursor_post_id=cursor_post_id,
+        cursor_target_key=cursor_target_key,
     )
 
     has_next = len(rows) > limit
@@ -113,7 +121,7 @@ def list_report_queue(
     next_cursor = None
     if has_next and page_rows:
         last = page_rows[-1]
-        next_cursor = encode_cursor(last["latest_at"], last["post"].id)
+        next_cursor = encode_cursor(last["latest_at"], last["target_key"])
 
     return ModerationQueuePage(
         items=[_serialize_item(row) for row in page_rows],
@@ -172,15 +180,41 @@ def restore_post(
     )
 
 
+@router.post("/users/{user_id}/dismiss", response_model=ModerationUserActionOut)
+def dismiss_user_reports(
+    user_id: int,
+    moderator: User = Depends(get_current_moderator),
+    db: Session = Depends(get_db),
+) -> ModerationUserActionOut:
+    """
+    Nothing wrong with the account: close its open reports, change nothing
+    else. Deleted accounts stay dismissable -- they keep their queue item, and
+    "the account is gone" is itself the judgement.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
+        )
+    resolved = report_repository.dismiss_user_reports(db, user.id, moderator.id)
+    return ModerationUserActionOut(
+        user_id=user.id,
+        suspended=user.suspended_at is not None,
+        resolved_reports=resolved,
+    )
+
+
 @router.post("/users/{user_id}/suspend", response_model=ModerationUserActionOut)
 def suspend_user(
     user_id: int,
-    _moderator: User = Depends(get_current_moderator),
+    moderator: User = Depends(get_current_moderator),
     db: Session = Depends(get_db),
 ) -> ModerationUserActionOut:
     """
     Freeze the account: login refused, sessions revoked, content hidden from
-    feeds and discovery. Reversible -- nothing is scrubbed.
+    feeds and discovery. Reversible -- nothing is scrubbed. Open reports about
+    the account close as ``actioned`` in the same transaction; the suspension
+    is their answer.
 
     Sessions are revoked *before* the stamp is written, mirroring
     change-password's ordering: if the session store is unreachable the
@@ -208,10 +242,15 @@ def suspend_user(
             detail="Session storage is unavailable.",
         ) from exc
 
+    # Re-suspending resolves whatever re-reports have opened since; the first
+    # call resolves the original batch.
+    resolved = report_repository.resolve_user_reports(db, user.id, moderator.id)
     if user.suspended_at is None:
         user.suspended_at = datetime.now(timezone.utc)
-        db.commit()
-    return ModerationUserActionOut(user_id=user.id, suspended=True)
+    db.commit()
+    return ModerationUserActionOut(
+        user_id=user.id, suspended=True, resolved_reports=resolved
+    )
 
 
 @router.post("/users/{user_id}/unsuspend", response_model=ModerationUserActionOut)
@@ -220,7 +259,10 @@ def unsuspend_user(
     _moderator: User = Depends(get_current_moderator),
     db: Session = Depends(get_db),
 ) -> ModerationUserActionOut:
-    """Lift a suspension. The account and all its content come back as they were."""
+    """
+    Lift a suspension. The account and all its content come back as they
+    were; like restore, already-resolved reports stay resolved.
+    """
     user = db.get(User, user_id)
     if user is None or user.is_deleted:
         raise HTTPException(

@@ -1,6 +1,7 @@
 from app.api.deps import get_current_user_id
 from app.core.rate_limit import rate_limiter
 from app.db.database import get_db
+from app.models.user import User
 from app.repositories import block_repository, report_repository, tweet_repository
 from app.schemas.report import ReportCreate, ReportOut
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -60,6 +61,56 @@ def report_post(
     return ReportOut(
         id=report.id,
         post_id=report.post_id,
+        reason=report.reason,
+        created_at=report.created_at,
+    )
+
+
+@router.post(
+    "/users/{user_id}",
+    response_model=ReportOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limiter("report"))],
+)
+def report_user(
+    user_id: int,
+    payload: ReportCreate,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> ReportOut:
+    """
+    Report an account -- conduct no single post captures: a profile, a DM
+    pattern. Idempotent per (reporter, user), like a post report.
+
+    You can report whom you can see, and profiles stay world-readable across
+    blocks, so unlike a post report a block does not close this surface --
+    blocking a harasser must not revoke the ability to report them. A suspended
+    account is likewise still reportable: the state is public and reversible,
+    and the complaint informs whether it stays.
+    """
+    user = db.get(User, user_id)
+    if user is None or user.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+
+    if user.id == current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="you cannot report yourself",
+        )
+
+    report = report_repository.create_user_report(
+        db,
+        reporter_id=current_user_id,
+        reported_user_id=user_id,
+        reason=payload.reason,
+        details=payload.details,
+    )
+    return ReportOut(
+        id=report.id,
+        reported_user_id=report.reported_user_id,
         reason=report.reason,
         created_at=report.created_at,
     )

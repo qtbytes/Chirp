@@ -8,27 +8,35 @@ from app.models.report import Report
 from app.models.user import User
 
 
-def create_report(
+def _upsert_report(
     db: Session,
     reporter_id: int,
-    post_id: int,
     reason: str,
-    details: str | None = None,
+    details: str | None,
+    *,
+    post_id: int | None = None,
+    reported_user_id: int | None = None,
 ) -> Report:
     """
-    Record a report, idempotently per (reporter, post).
+    Record a report, idempotently per (reporter, target).
 
-    Re-reporting the same post is treated as amending the earlier report -- the
-    reason and details are overwritten rather than inserting a duplicate row --
-    so a moderator sees one entry per reporter, carrying their latest complaint.
+    Re-reporting the same target is treated as amending the earlier report --
+    the reason and details are overwritten rather than inserting a duplicate
+    row -- so a moderator sees one entry per reporter, carrying their latest
+    complaint.
 
     Amending also *reopens* a resolved report: the reporter is saying the
-    problem persists (perhaps after a restore), and a complaint that could
-    never re-enter the queue would be silently unanswerable.
+    problem persists (perhaps after a restore or an unsuspension), and a
+    complaint that could never re-enter the queue would be silently
+    unanswerable.
     """
+    # ``== None`` renders as IS NULL, so this matches only the caller's target
+    # kind: a user's post reports never collide with their report of its author.
     existing = db.scalar(
         select(Report).where(
-            Report.reporter_id == reporter_id, Report.post_id == post_id
+            Report.reporter_id == reporter_id,
+            Report.post_id == post_id,
+            Report.reported_user_id == reported_user_id,
         )
     )
     if existing is not None:
@@ -43,6 +51,7 @@ def create_report(
     report = Report(
         reporter_id=reporter_id,
         post_id=post_id,
+        reported_user_id=reported_user_id,
         reason=reason,
         details=details,
     )
@@ -51,12 +60,42 @@ def create_report(
     return report
 
 
+def create_report(
+    db: Session,
+    reporter_id: int,
+    post_id: int,
+    reason: str,
+    details: str | None = None,
+) -> Report:
+    """Report a post. See ``_upsert_report`` for the amend/reopen semantics."""
+    return _upsert_report(db, reporter_id, reason, details, post_id=post_id)
+
+
+def create_user_report(
+    db: Session,
+    reporter_id: int,
+    reported_user_id: int,
+    reason: str,
+    details: str | None = None,
+) -> Report:
+    """Report an account. See ``_upsert_report`` for the amend/reopen semantics."""
+    return _upsert_report(
+        db, reporter_id, reason, details, reported_user_id=reported_user_id
+    )
+
+
 # --- moderation ------------------------------------------------------------
 #
-# The queue's unit of work is the *post*, not the report row: dedupe-per-
-# reporter means each row is one person's complaint, and a moderator judges
-# the post once for all of them. Every action below therefore resolves all of
-# a post's open reports together.
+# The queue's unit of work is the *target* -- a post or an account -- not the
+# report row: dedupe-per-reporter means each row is one person's complaint,
+# and a moderator judges the target once for all of them. Every action below
+# therefore resolves all of a target's open reports together.
+
+# One integer keys both target kinds: post ids as themselves (positive),
+# reported-user ids negated. Exactly one side is set per row, so the key is
+# total and collision-free, and the queue keeps the plain (timestamp, int)
+# cursor every other feed uses.
+_target_key = func.coalesce(Report.post_id, -Report.reported_user_id)
 
 
 def list_report_queue(
@@ -64,15 +103,17 @@ def list_report_queue(
     status: str = "open",
     limit: int = 20,
     cursor_latest_at: datetime | None = None,
-    cursor_post_id: int | None = None,
+    cursor_target_key: int | None = None,
 ) -> list[dict]:
     """
-    Reported posts grouped by post, newest report first.
+    Reported targets grouped by target, newest report first. Each returned row
+    has exactly one of ``post`` / ``reported_user`` set, plus ``target_key``
+    for the cursor.
 
-    ``status`` is ``open`` (the working queue) or ``resolved`` (judged posts,
-    for review and for undoing a takedown). Pages by ``(latest_at, post_id)``
-    like every other feed; fetches ``limit + 1`` so the caller can detect the
-    next page.
+    ``status`` is ``open`` (the working queue) or ``resolved`` (judged targets,
+    for review and for undoing a takedown or suspension). Pages by
+    ``(latest_at, target_key)``; fetches ``limit + 1`` so the caller can detect
+    the next page.
 
     Deliberately no block or visibility filtering: a moderator judges reported
     content regardless of their personal block list or the post's audience.
@@ -84,29 +125,30 @@ def list_report_queue(
 
     agg_stmt = (
         select(
-            Report.post_id.label("post_id"),
+            _target_key.label("target_key"),
             func.count().label("report_count"),
             latest_at,
         )
         .where(status_predicate)
-        .group_by(Report.post_id)
-        .order_by(desc("latest_at"), Report.post_id.desc())
+        .group_by(_target_key)
+        .order_by(desc("latest_at"), desc("target_key"))
         .limit(limit + 1)
     )
-    if cursor_latest_at is not None and cursor_post_id is not None:
+    if cursor_latest_at is not None and cursor_target_key is not None:
         agg_stmt = agg_stmt.having(
             or_(
                 func.max(Report.created_at) < cursor_latest_at,
                 and_(
                     func.max(Report.created_at) == cursor_latest_at,
-                    Report.post_id < cursor_post_id,
+                    _target_key < cursor_target_key,
                 ),
             )
         )
 
     agg_rows = db.execute(agg_stmt).all()
-    post_ids = [row.post_id for row in agg_rows]
-    if not post_ids:
+    post_ids = [row.target_key for row in agg_rows if row.target_key > 0]
+    user_ids = [-row.target_key for row in agg_rows if row.target_key < 0]
+    if not post_ids and not user_ids:
         return []
 
     posts_by_id = {
@@ -116,43 +158,58 @@ def list_report_queue(
             .options(joinedload(Post.author))
             .where(Post.id.in_(post_ids))
         ).all()
-    }
+    } if post_ids else {}
+    users_by_id = {
+        user.id: user
+        for user in db.scalars(select(User).where(User.id.in_(user_ids))).all()
+    } if user_ids else {}
 
+    target_predicates = []
+    if post_ids:
+        target_predicates.append(Report.post_id.in_(post_ids))
+    if user_ids:
+        target_predicates.append(Report.reported_user_id.in_(user_ids))
     report_rows = db.execute(
         select(Report, User)
         .join(User, User.id == Report.reporter_id)
-        .where(Report.post_id.in_(post_ids), status_predicate)
+        .where(or_(*target_predicates), status_predicate)
         .order_by(Report.created_at.desc(), Report.id.desc())
     ).all()
-    reports_by_post: dict[int, list[tuple[Report, User]]] = {}
+    reports_by_key: dict[int, list[tuple[Report, User]]] = {}
     for report, reporter in report_rows:
-        reports_by_post.setdefault(report.post_id, []).append((report, reporter))
+        key = report.post_id if report.post_id is not None else -report.reported_user_id
+        reports_by_key.setdefault(key, []).append((report, reporter))
 
     queue: list[dict] = []
     for row in agg_rows:
-        post = posts_by_id.get(row.post_id)
-        if post is None:
+        key = row.target_key
+        post = posts_by_id.get(key) if key > 0 else None
+        reported_user = users_by_id.get(-key) if key < 0 else None
+        if post is None and reported_user is None:
             # The post was hard-deleted by its author after being reported;
-            # nothing is left to judge.
+            # nothing is left to judge. (Accounts only soft-delete, and stay
+            # listed so their open reports can still be dismissed.)
             continue
         queue.append(
             {
+                "target_key": key,
                 "post": post,
+                "reported_user": reported_user,
                 "report_count": int(row.report_count),
                 "latest_at": row.latest_at,
-                "reports": reports_by_post.get(row.post_id, []),
+                "reports": reports_by_key.get(key, []),
             }
         )
     return queue
 
 
 def _resolve_open_reports(
-    db: Session, post_id: int, resolution: str, moderator_id: int
+    db: Session, target_predicate, resolution: str, moderator_id: int
 ) -> int:
-    """Close every open report on the post; returns how many were closed."""
+    """Close every open report on the target; returns how many were closed."""
     result = db.execute(
         update(Report)
-        .where(Report.post_id == post_id, Report.status == "open")
+        .where(target_predicate, Report.status == "open")
         .values(
             status=resolution,
             resolved_at=datetime.now(timezone.utc),
@@ -164,9 +221,36 @@ def _resolve_open_reports(
 
 def dismiss_reports(db: Session, post_id: int, moderator_id: int) -> int:
     """Nothing wrong with the post: close its open reports as ``dismissed``."""
-    resolved = _resolve_open_reports(db, post_id, "dismissed", moderator_id)
+    resolved = _resolve_open_reports(
+        db, Report.post_id == post_id, "dismissed", moderator_id
+    )
     db.commit()
     return resolved
+
+
+def dismiss_user_reports(db: Session, user_id: int, moderator_id: int) -> int:
+    """Nothing wrong with the account: close its open reports as ``dismissed``."""
+    resolved = _resolve_open_reports(
+        db, Report.reported_user_id == user_id, "dismissed", moderator_id
+    )
+    db.commit()
+    return resolved
+
+
+def resolve_user_reports(db: Session, user_id: int, moderator_id: int) -> int:
+    """
+    Close the account's open reports as ``actioned``; the suspension answered
+    them. Stages only -- the caller commits, so the resolutions land in the
+    same transaction as the suspension stamp.
+
+    Unlike a takedown, no notifications: the notification dedupe key has no
+    user-target column (a second "account you reported was actioned" notice
+    would be swallowed as a repeat of the first), and the outcome is already
+    public -- the profile shows the suspension.
+    """
+    return _resolve_open_reports(
+        db, Report.reported_user_id == user_id, "actioned", moderator_id
+    )
 
 
 def take_down_post(db: Session, post: Post, moderator_id: int) -> int:
@@ -211,7 +295,9 @@ def take_down_post(db: Session, post: Post, moderator_id: int) -> int:
             allow_self=True,
         )
 
-    resolved = _resolve_open_reports(db, post.id, "actioned", moderator_id)
+    resolved = _resolve_open_reports(
+        db, Report.post_id == post.id, "actioned", moderator_id
+    )
     db.commit()
     return resolved
 

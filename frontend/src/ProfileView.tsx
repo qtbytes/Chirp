@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Ban,
   Calendar,
+  Flag,
   Loader2,
   MessageCircle,
   MoreHorizontal,
@@ -37,6 +38,7 @@ import {
   Avatar,
   CommentCard,
   ConfirmDialog,
+  ReportModal,
   TweetCard,
   formatCompactCount,
   getErrorMessage,
@@ -70,6 +72,7 @@ export function ProfileView({
   const [blockBusy, setBlockBusy] = useState(false);
   const [muteBusy, setMuteBusy] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
+  const [reportingUser, setReportingUser] = useState(false);
   const [editing, setEditing] = useState(false);
 
   const [tweets, setTweets] = useState<Tweet[]>([]);
@@ -448,6 +451,7 @@ export function ProfileView({
                 blockBusy={blockBusy}
                 onToggleMute={() => void toggleMute()}
                 onBlock={() => setConfirmingBlock(true)}
+                onReport={() => setReportingUser(true)}
               />
               <button
                 className="outline-icon-button"
@@ -717,6 +721,13 @@ export function ProfileView({
         </div>
       ) : null}
 
+      {reportingUser ? (
+        <ReportModal
+          userId={profile.id}
+          username={profile.username}
+          onClose={() => setReportingUser(false)}
+        />
+      ) : null}
       {confirmingBlock ? (
         <ConfirmDialog
           title={`Block @${profile.username}?`}
@@ -821,12 +832,14 @@ function ProfileOverflowMenu({
   blockBusy,
   onToggleMute,
   onBlock,
+  onReport,
 }: {
   isMuted: boolean;
   muteBusy: boolean;
   blockBusy: boolean;
   onToggleMute: () => void;
   onBlock: () => void;
+  onReport: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -885,6 +898,18 @@ function ProfileOverflowMenu({
           >
             <Ban size={16} aria-hidden="true" />
             <span>Block</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="danger-menu-item"
+            onClick={() => {
+              setOpen(false);
+              onReport();
+            }}
+          >
+            <Flag size={16} aria-hidden="true" />
+            <span>Report</span>
           </button>
         </div>
       ) : null}

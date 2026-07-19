@@ -24,8 +24,11 @@ class ReportCreate(BaseModel):
 
 
 class ReportOut(BaseModel):
+    """Exactly one of ``post_id`` / ``reported_user_id`` is set."""
+
     id: int
-    post_id: int
+    post_id: int | None = None
+    reported_user_id: int | None = None
     reason: ReportReason
     created_at: datetime
 
@@ -64,7 +67,14 @@ class ModerationPostOut(BaseModel):
 
 
 class ModerationQueueItem(BaseModel):
-    post: ModerationPostOut
+    """
+    One judged-together target. Exactly one of ``post`` / ``reported_user`` is
+    set: a reported post carries its evidence inline; a reported account is the
+    evidence -- the moderator follows the profile link.
+    """
+
+    post: ModerationPostOut | None = None
+    reported_user: UserSummary | None = None
     report_count: int
     latest_report_at: datetime
     reports: list[ModerationReportOut]
@@ -86,3 +96,6 @@ class ModerationActionOut(BaseModel):
 class ModerationUserActionOut(BaseModel):
     user_id: int
     suspended: bool
+    # How many open reports about the account this action closed (suspend
+    # actions them, dismiss dismisses them; unsuspend closes nothing).
+    resolved_reports: int = 0

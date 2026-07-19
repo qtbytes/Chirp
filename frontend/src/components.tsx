@@ -55,6 +55,7 @@ import {
   recordPostViews,
   replyToComment,
   reportPost,
+  reportUser,
   resolveMediaUrl,
   suggestHashtags,
   toggleCommentLike,
@@ -1398,18 +1399,23 @@ const REPORT_REASONS: { value: ReportReason; label: string }[] = [
   { value: "other", label: "Something else" },
 ];
 
-// Modal for reporting a post: pick a reason, add optional detail, submit. On
-// success it swaps to a confirmation -- a report is a moderation signal, so it
-// deliberately does not hide the post from the reporter afterwards.
+// Modal for reporting a post or an account: pick a reason, add optional
+// detail, submit. On success it swaps to a confirmation -- a report is a
+// moderation signal, so it deliberately does not hide anything from the
+// reporter afterwards.
 export function ReportModal({
   postId,
-  authorUsername,
+  userId,
+  username,
   onClose,
 }: {
-  postId: number;
-  authorUsername: string;
+  /** Exactly one of `postId` / `userId` — the report's target. */
+  postId?: number;
+  userId?: number;
+  username: string;
   onClose: () => void;
 }) {
+  const reportingUser = userId != null;
   const [reason, setReason] = useState<ReportReason | null>(null);
   const [details, setDetails] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -1423,7 +1429,11 @@ export function ReportModal({
     setSubmitting(true);
     setError("");
     try {
-      await reportPost(postId, reason, details);
+      if (userId != null) {
+        await reportUser(userId, reason, details);
+      } else {
+        await reportPost(postId!, reason, details);
+      }
       setDone(true);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1444,7 +1454,9 @@ export function ReportModal({
         className="modal report-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={`Report @${authorUsername}'s post`}
+        aria-label={
+          reportingUser ? `Report @${username}` : `Report @${username}'s post`
+        }
         onClick={(event) => event.stopPropagation()}
       >
         {done ? (
@@ -1462,9 +1474,11 @@ export function ReportModal({
           </>
         ) : (
           <>
-            <h2>Report post</h2>
+            <h2>{reportingUser ? `Report @${username}` : "Report post"}</h2>
             <p className="report-modal-intro">
-              Why are you reporting @{authorUsername}&apos;s post?
+              {reportingUser
+                ? `Why are you reporting @${username}?`
+                : `Why are you reporting @${username}'s post?`}
             </p>
             <fieldset className="report-reasons">
               {REPORT_REASONS.map((option) => (
@@ -2637,7 +2651,7 @@ export function TweetCard({
       {reporting ? (
         <ReportModal
           postId={tweet.id}
-          authorUsername={tweet.author.username}
+          username={tweet.author.username}
           onClose={() => setReporting(false)}
         />
       ) : null}
@@ -2970,7 +2984,7 @@ export function CommentCard({
       {reporting ? (
         <ReportModal
           postId={localComment.id}
-          authorUsername={localComment.author.username}
+          username={localComment.author.username}
           onClose={() => setReporting(false)}
         />
       ) : null}

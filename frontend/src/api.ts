@@ -499,6 +499,22 @@ export function reportPost(
 }
 
 /**
+ * Report an account — conduct no single post captures (a profile, a DM
+ * pattern). Works across blocks: profiles stay visible, so blocking a
+ * harasser does not revoke the ability to report them.
+ */
+export function reportUser(
+  userId: number,
+  reason: ReportReason,
+  details?: string,
+): Promise<Report> {
+  return request<Report>(`/reports/users/${userId}`, {
+    method: "POST",
+    body: JSON.stringify({ reason, details: details?.trim() || null }),
+  });
+}
+
+/**
  * The moderation queue: reported posts grouped by post, newest report first.
  * Moderators only -- everyone else gets 404. `status: "resolved"` lists judged
  * posts, where a wrong takedown can be found and restored.
@@ -535,9 +551,19 @@ export function moderationRestore(postId: number): Promise<ModerationAction> {
   });
 }
 
+/** Nothing wrong with the account: close its open reports, change nothing else. */
+export function moderationDismissUserReports(
+  userId: number,
+): Promise<ModerationUserAction> {
+  return request<ModerationUserAction>(`/moderation/users/${userId}/dismiss`, {
+    method: "POST",
+  });
+}
+
 /**
  * Freeze an account: login refused, sessions revoked, content hidden from
- * feeds. Reversible. Moderator accounts are refused (400).
+ * feeds, open reports about it closed as actioned. Reversible. Moderator
+ * accounts are refused (400).
  */
 export function moderationSuspendUser(userId: number): Promise<ModerationUserAction> {
   return request<ModerationUserAction>(`/moderation/users/${userId}/suspend`, {
