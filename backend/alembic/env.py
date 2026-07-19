@@ -1,9 +1,7 @@
 from logging.config import fileConfig
 
 from alembic import context
-from alembic.runtime.migration import MigrationContext
-from alembic.script import ScriptDirectory
-from sqlalchemy import Connection, create_engine, inspect
+from sqlalchemy import create_engine
 
 from app.core.config import settings
 from app.db.database import Base, engine
@@ -31,9 +29,6 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# The first revision: a full CREATE of the schema as the models define it.
-BASELINE_REVISION = "0001"
-
 
 def _url_override() -> str | None:
     """
@@ -45,30 +40,6 @@ def _url_override() -> str | None:
     twitter.db.
     """
     return config.get_main_option("sqlalchemy.url")
-
-
-def _adopt_pre_alembic_database(connection: Connection) -> None:
-    """
-    Stamp a database that predates Alembic rather than trying to recreate it.
-
-    The dev and production databases were built by ``create_all()`` plus the old
-    ``sync_sqlite_dev_schema`` helper, so their tables already exist while no
-    ``alembic_version`` row does. Running the baseline against them would fail on
-    its first ``CREATE TABLE``.
-
-    Recording the baseline as already applied keeps ``alembic upgrade head`` the
-    single safe command everywhere: a fresh database runs the baseline, an
-    adopted one skips straight to the revisions after it. Where the baseline and
-    an adopted schema actually disagree, revision 0002 reconciles them.
-    """
-    table_names = set(inspect(connection).get_table_names())
-
-    if "alembic_version" in table_names or "users" not in table_names:
-        return
-
-    MigrationContext.configure(connection).stamp(
-        ScriptDirectory.from_config(config), BASELINE_REVISION
-    )
 
 
 def run_migrations_offline() -> None:
@@ -100,9 +71,6 @@ def run_migrations_online() -> None:
     connectable = create_engine(override) if override else engine
 
     with connectable.connect() as connection:
-        _adopt_pre_alembic_database(connection)
-        connection.commit()
-
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

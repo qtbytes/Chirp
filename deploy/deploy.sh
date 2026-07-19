@@ -400,8 +400,7 @@ chmod -R a+rX "$BACKEND/uploads"
 # ---------------------------------------------------------------- migrations
 # Runs before the restart so the new code never meets the old schema. Must run
 # after the chown above: alembic writes as $APP_USER and cannot open a
-# root-owned database. Creates twitter.db from scratch if it is missing, and
-# adopts a pre-Alembic database by stamping it (see backend/alembic/env.py).
+# root-owned database. Creates twitter.db from scratch if it is missing.
 if [[ -f "$BACKEND/twitter.db" ]]; then
     BACKUP="$BACKEND/twitter.db.bak-$(date +%Y%m%d-%H%M%S)"
     log "backing up database to $(basename "$BACKUP")"

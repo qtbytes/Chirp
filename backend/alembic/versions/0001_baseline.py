@@ -1,9 +1,9 @@
 """baseline
 
 The schema as the models define it, and the point at which this project adopted
-Alembic. Databases that predate Alembic are stamped with this revision rather
-than running it -- see ``_adopt_pre_alembic_database`` in ``alembic/env.py`` --
-so their real, drifted schema is reconciled by revision 0002 instead.
+Alembic. The one-time machinery that adopted databases predating Alembic --
+stamping in ``env.py`` plus a reconciliation revision 0002 -- was removed once
+every real database had been migrated past it, which is why 0003 revises 0001.
 
 Revision ID: 0001
 Revises:

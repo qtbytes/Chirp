@@ -167,24 +167,6 @@ Run it from `backend/`: `alembic/env.py` reads `DATABASE_URL` out of `backend/.e
 through the app's own `Settings`, so it can never target a different file than the
 API does.
 
-**A database created before Alembic is adopted, not rebuilt.** If `twitter.db` has
-tables but no `alembic_version`, `env.py` stamps it with the baseline revision
-rather than replaying it, then applies everything after. That is what makes
-`upgrade head` safe to run against the live database and against an empty one.
-
-**Stop the services for the deploy that first applies `0002`.** Migrations run
-while the old code is still serving, and `0002` rebuilds `posts`, `likes` and
-`notifications` (SQLite cannot `ALTER` a column type in place). At this data size
-the rebuild takes milliseconds and the API's 5s busy timeout would ride it out,
-but there is no reason to race it:
-
-```sh
-systemctl stop chirp-api chirp-worker && ./deploy/deploy.sh
-```
-
-Only that one deploy needs it — `0002` is a no-op once applied, and every later
-revision should be written to run online.
-
 If a migration fails, the deploy aborts before the services restart, and the
 snapshot it just took is sitting next to the database:
 

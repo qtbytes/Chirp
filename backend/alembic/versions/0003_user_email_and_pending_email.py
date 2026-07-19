@@ -8,7 +8,7 @@ claim) is not. SQLite, like every backend here, allows any number of NULLs in a
 unique index, so the existing rows do not collide with one another.
 
 Revision ID: 0003
-Revises: 0002
+Revises: 0001
 Create Date: 2026-07-10
 
 """
@@ -20,7 +20,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '0003'
-down_revision: Union[str, Sequence[str], None] = '0002'
+down_revision: Union[str, Sequence[str], None] = '0001'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
