@@ -396,7 +396,10 @@ function App() {
         {/* Only mounted for moderators; anyone else typing the URL falls into
             the catch-all redirect. The API 404s them regardless. */}
         {currentUser.is_moderator ? (
-          <Route path="/moderation" element={<ModerationView />} />
+          <>
+            <Route path="/moderation" element={<ModerationView />} />
+            <Route path="/moderation/resolved" element={<ModerationView />} />
+          </>
         ) : null}
         <Route path="/messages" element={<MessagesView currentUser={currentUser} />} />
         <Route
@@ -571,7 +574,7 @@ function AppLayout({
   const isNotificationsRoute = location.pathname === "/notifications";
   const isMessagesRoute = location.pathname.startsWith("/messages");
   const isSettingsRoute = location.pathname === "/settings";
-  const isModerationRoute = location.pathname === "/moderation";
+  const isModerationRoute = location.pathname.startsWith("/moderation");
   const isHomeRoute =
     location.pathname === "/" || location.pathname === "/following";
   const hideDiscovery =

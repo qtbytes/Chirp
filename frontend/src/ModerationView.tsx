@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Loader2, ShieldCheck } from "lucide-react";
+
+import { useFeedMemory } from "./useFeedMemory";
 
 import {
   displayName,
@@ -26,14 +28,28 @@ function targetKey(item: ModerationQueueItem): string {
  * The moderation queue: reported posts and reported accounts, one card per
  * target, judged with one action each. Reachable only through the rail link
  * the server-side `is_moderator` flag reveals; the API 404s anyone else.
+ *
+ * The tab lives in the URL (like profile tabs) so back/forward lands on the
+ * queue the moderator left, and `useFeedMemory` re-hydrates its loaded pages
+ * — without it, ScrollMemory's restored offset would point into a list that
+ * a fresh first-page fetch no longer contains.
  */
 export default function ModerationView() {
-  const [tab, setTab] = useState<QueueTab>("open");
+  const location = useLocation();
+  const tab: QueueTab = location.pathname.endsWith("/resolved")
+    ? "resolved"
+    : "open";
   const [items, setItems] = useState<ModerationQueueItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actingOn, setActingOn] = useState<string | null>(null);
+
+  const takeFeedMemory = useFeedMemory(
+    `moderation:${tab}`,
+    { items, cursor },
+    items.length === 0,
+  );
 
   const load = useCallback(
     async (activeTab: QueueTab, nextCursor?: string | null, append = false) => {
@@ -55,8 +71,16 @@ export default function ModerationView() {
   useEffect(() => {
     setItems([]);
     setCursor(null);
+    // Back/forward restores the queue as the moderator left it.
+    const cached = takeFeedMemory();
+    if (cached) {
+      setItems(cached.items);
+      setCursor(cached.cursor);
+      setLoading(false);
+      return;
+    }
     void load(tab);
-  }, [tab, load]);
+  }, [tab, load, takeFeedMemory]);
 
   async function act(
     item: ModerationQueueItem,
@@ -172,19 +196,23 @@ export default function ModerationView() {
         <div className="feed-title-row">
           <h1>Moderation</h1>
         </div>
-        <nav className="tab-list" aria-label="Report queues">
-          <button
+        <nav className="tab-list" role="tablist" aria-label="Report queues">
+          <Link
+            to="/moderation"
             className={tab === "open" ? "tab active" : "tab"}
-            onClick={() => setTab("open")}
+            role="tab"
+            aria-selected={tab === "open"}
           >
             Open
-          </button>
-          <button
+          </Link>
+          <Link
+            to="/moderation/resolved"
             className={tab === "resolved" ? "tab active" : "tab"}
-            onClick={() => setTab("resolved")}
+            role="tab"
+            aria-selected={tab === "resolved"}
           >
             Resolved
-          </button>
+          </Link>
         </nav>
       </header>
 
