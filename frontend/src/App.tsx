@@ -125,6 +125,7 @@ import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
 import { useFeedMemory } from "./useFeedMemory";
 import { useMediaAttachment } from "./useMediaAttachment";
+import { InfiniteScroll } from "./InfiniteScroll";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
@@ -1183,15 +1184,11 @@ function SearchPostsPanel({
           <span>Searching</span>
         </div>
       ) : null}
-      {cursor ? (
-        <button
-          className="load-more"
-          onClick={() => void runSearch(query, cursor, true)}
-          disabled={loading}
-        >
-          Load more
-        </button>
-      ) : null}
+      <InfiniteScroll
+        hasMore={!!cursor}
+        loading={loading}
+        onLoadMore={() => void runSearch(query, cursor, true)}
+      />
     </section>
   );
 }
@@ -1356,15 +1353,11 @@ function HashtagView() {
           <span>Loading</span>
         </div>
       ) : null}
-      {page?.next_cursor ? (
-        <button
-          className="load-more"
-          onClick={() => void load(page.next_cursor, true)}
-          disabled={loading}
-        >
-          Load more
-        </button>
-      ) : null}
+      <InfiniteScroll
+        hasMore={!!page?.next_cursor}
+        loading={loading}
+        onLoadMore={() => void load(page?.next_cursor, true)}
+      />
     </>
   );
 }
@@ -1555,21 +1548,17 @@ function NotificationsView() {
           );
         })}
       </ul>
-      {cursor ? (
-        <button
-          className="load-more"
-          onClick={() => void load(cursor, true)}
-          disabled={loading}
-        >
-          Load more
-        </button>
-      ) : null}
       {loading ? (
         <div className="loading-row">
           <Loader2 className="spin" size={18} aria-hidden="true" />
           <span>Loading notifications</span>
         </div>
       ) : null}
+      <InfiniteScroll
+        hasMore={!!cursor}
+        loading={loading}
+        onLoadMore={() => void load(cursor, true)}
+      />
     </>
   );
 }
@@ -1778,15 +1767,11 @@ function HomeView() {
           <span>Loading</span>
         </div>
       ) : null}
-      {page?.next_cursor ? (
-        <button
-          className="load-more"
-          onClick={() => void loadFeed(page.next_cursor, true)}
-          disabled={loadingFeed}
-        >
-          Load more
-        </button>
-      ) : null}
+      <InfiniteScroll
+        hasMore={!!page?.next_cursor}
+        loading={loadingFeed}
+        onLoadMore={() => void loadFeed(page?.next_cursor, true)}
+      />
     </>
   );
 }

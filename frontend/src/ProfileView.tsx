@@ -23,9 +23,11 @@ import {
   getUserReplies,
   getUserTweets,
   muteUser,
+  pinTweet,
   unblockUser,
   unfollowUser,
   unmuteUser,
+  unpinTweet,
 } from "./api";
 import type {
   ProfilePost,
@@ -45,6 +47,7 @@ import {
   parseBackendDate,
 } from "./components";
 import { EditProfileModal } from "./EditProfileModal";
+import { InfiniteScroll } from "./InfiniteScroll";
 
 export function ProfileView({
   currentUser,
@@ -77,6 +80,7 @@ export function ProfileView({
 
   const [tweets, setTweets] = useState<Tweet[]>([]);
   const [tweetsCursor, setTweetsCursor] = useState<string | null>(null);
+  const [pinnedTweet, setPinnedTweet] = useState<Tweet | null>(null);
   const [replies, setReplies] = useState<ReplyWithParent[]>([]);
   const [repliesCursor, setRepliesCursor] = useState<string | null>(null);
   const [mediaPosts, setMediaPosts] = useState<ProfilePost[]>([]);
@@ -88,8 +92,8 @@ export function ProfileView({
 
   const takeTweetsMemory = useFeedMemory(
     `profile:${username}:tweets`,
-    { tweets, cursor: tweetsCursor },
-    tweets.length === 0,
+    { tweets, cursor: tweetsCursor, pinnedTweet },
+    tweets.length === 0 && !pinnedTweet,
   );
   const takeRepliesMemory = useFeedMemory(
     `profile:${username}:replies`,
@@ -137,6 +141,11 @@ export function ProfileView({
         const page = await getUserTweets(username, cursor);
         setTweets((current) => (append ? [...current, ...page.items] : page.items));
         setTweetsCursor(page.next_cursor);
+        // The pinned tweet rides on the first page only; leave it untouched when
+        // appending later pages.
+        if (!append) {
+          setPinnedTweet(page.pinned_tweet);
+        }
       } catch (err) {
         setFeedError(getErrorMessage(err));
       } finally {
@@ -215,6 +224,7 @@ export function ProfileView({
       if (cached) {
         setTweets(cached.tweets);
         setTweetsCursor(cached.cursor);
+        setPinnedTweet(cached.pinnedTweet);
         return;
       }
       void loadTweets();
@@ -250,7 +260,40 @@ export function ProfileView({
     setTweets((current) =>
       current.map((tweet) => (tweet.id === tweetId ? { ...tweet, ...patch } : tweet)),
     );
+    // The pinned tweet lives in its own slot, so engagement on it must patch here
+    // too or its like/count would freeze until reload.
+    setPinnedTweet((current) =>
+      current && current.id === tweetId ? { ...current, ...patch } : current,
+    );
   }, []);
+
+  const handlePin = useCallback(
+    async (tweetId: number) => {
+      setFeedError("");
+      try {
+        await pinTweet(tweetId);
+        // Reload so the pin moves to its slot and leaves the chronological list.
+        await loadTweets();
+      } catch (err) {
+        setFeedError(getErrorMessage(err));
+      }
+    },
+    [loadTweets],
+  );
+
+  const handleUnpin = useCallback(
+    async (tweetId: number) => {
+      setFeedError("");
+      try {
+        await unpinTweet(tweetId);
+        // Reload so the tweet returns to its chronological position.
+        await loadTweets();
+      } catch (err) {
+        setFeedError(getErrorMessage(err));
+      }
+    },
+    [loadTweets],
+  );
 
   const patchMediaPost = useCallback((postId: number, patch: Partial<Tweet>) => {
     setMediaPosts((current) =>
@@ -578,10 +621,31 @@ export function ProfileView({
         </div>
       ) : activeTab === "tweets" ? (
         <>
-          {!loadingFeed && tweets.length === 0 && !feedError ? (
+          {!loadingFeed && tweets.length === 0 && !pinnedTweet && !feedError ? (
             <div className="status-panel">No tweets yet.</div>
           ) : null}
           <section className="tweet-list">
+            {pinnedTweet ? (
+              <TweetCard
+                key={`pinned-${pinnedTweet.id}`}
+                tweet={pinnedTweet}
+                pinned
+                onOpen={() => navigate(`/tweet/${pinnedTweet.id}`)}
+                onTweetPatch={patchTweet}
+                currentUserId={currentUser.id}
+                onUnpin={
+                  profile.is_current_user
+                    ? () => void handleUnpin(pinnedTweet.id)
+                    : undefined
+                }
+                onDeleted={() => {
+                  setPinnedTweet(null);
+                  void loadTweets();
+                }}
+                onAuthorMuted={() => void refreshAfterModeration()}
+                onAuthorBlocked={() => void refreshAfterModeration()}
+              />
+            ) : null}
             {tweets.map((tweet) => (
               <TweetCard
                 key={tweet.id}
@@ -589,6 +653,11 @@ export function ProfileView({
                 onOpen={() => navigate(`/tweet/${tweet.id}`)}
                 onTweetPatch={patchTweet}
                 currentUserId={currentUser.id}
+                onPin={
+                  profile.is_current_user
+                    ? () => void handlePin(tweet.id)
+                    : undefined
+                }
                 onDeleted={(id) =>
                   setTweets((current) => current.filter((item) => item.id !== id))
                 }
@@ -597,15 +666,11 @@ export function ProfileView({
               />
             ))}
           </section>
-          {tweetsCursor ? (
-            <button
-              className="load-more"
-              onClick={() => void loadTweets(tweetsCursor, true)}
-              disabled={loadingFeed}
-            >
-              Load more
-            </button>
-          ) : null}
+          <InfiniteScroll
+            hasMore={!!tweetsCursor}
+            loading={loadingFeed}
+            onLoadMore={() => void loadTweets(tweetsCursor, true)}
+          />
         </>
       ) : activeTab === "media" ? (
         <>
@@ -629,15 +694,11 @@ export function ProfileView({
               />
             ))}
           </section>
-          {mediaCursor ? (
-            <button
-              className="load-more"
-              onClick={() => void loadMedia(mediaCursor, true)}
-              disabled={loadingFeed}
-            >
-              Load more
-            </button>
-          ) : null}
+          <InfiniteScroll
+            hasMore={!!mediaCursor}
+            loading={loadingFeed}
+            onLoadMore={() => void loadMedia(mediaCursor, true)}
+          />
         </>
       ) : activeTab === "likes" ? (
         <>
@@ -661,15 +722,11 @@ export function ProfileView({
               />
             ))}
           </section>
-          {likesCursor ? (
-            <button
-              className="load-more"
-              onClick={() => void loadLikes(likesCursor, true)}
-              disabled={loadingFeed}
-            >
-              Load more
-            </button>
-          ) : null}
+          <InfiniteScroll
+            hasMore={!!likesCursor}
+            loading={loadingFeed}
+            onLoadMore={() => void loadLikes(likesCursor, true)}
+          />
         </>
       ) : (
         <>
@@ -702,15 +759,11 @@ export function ProfileView({
               </div>
             ))}
           </section>
-          {repliesCursor ? (
-            <button
-              className="load-more"
-              onClick={() => void loadReplies(repliesCursor, true)}
-              disabled={loadingFeed}
-            >
-              Load more
-            </button>
-          ) : null}
+          <InfiniteScroll
+            hasMore={!!repliesCursor}
+            loading={loadingFeed}
+            onLoadMore={() => void loadReplies(repliesCursor, true)}
+          />
         </>
       )}
 

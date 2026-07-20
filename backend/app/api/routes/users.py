@@ -4,6 +4,7 @@ from pathlib import Path
 from app.api.deps import get_current_user_id
 from app.core.config import settings
 from app.db.database import get_db
+from app.models.post import Post
 from app.models.user import User
 from app.repositories import (
     block_repository,
@@ -136,6 +137,30 @@ def get_user_profile(
     return _build_profile(db, user, current_user_id)
 
 
+def _serialize_pinned_tweet(
+    service: TimelineService, db: Session, post: Post, current_user_id: int
+) -> TweetOut:
+    """Serialize a lone pinned post to ``TweetOut``, fetching its stats."""
+    stats_rows = tweet_repository.list_tweet_stats(
+        db, tweet_ids=[post.id], current_user_id=current_user_id
+    )
+    stats = stats_rows[0] if stats_rows else {
+        "like_count": 0,
+        "comment_count": 0,
+        "retweet_count": 0,
+        "liked_by_me": False,
+    }
+    return service.serialize_tweet(
+        {
+            "tweet": post,
+            "like_count": stats["like_count"],
+            "comment_count": stats["comment_count"],
+            "retweet_count": stats["retweet_count"],
+            "liked_by_me": stats["liked_by_me"],
+        }
+    )
+
+
 @router.get("/{username}/tweets", response_model=ProfileTweetsPage)
 def list_user_tweets(
     username: str,
@@ -163,6 +188,25 @@ def list_user_tweets(
     if block_repository.blocks_between(db, current_user_id, user.id):
         return ProfileTweetsPage(items=[], next_cursor=None)
 
+    service = TimelineService(db, viewer_id=current_user_id)
+
+    # The pinned tweet rides above the chronological list, and only on the first
+    # page. Skip it if it's gone (a dangling pin) or the viewer may not see it (a
+    # followers-only / private pin), and exclude it from the list below so it
+    # never appears twice.
+    pinned_tweet = None
+    pinned_id = user.pinned_post_id
+    if pinned_id is not None:
+        pinned_post = tweet_repository.get_tweet(db, pinned_id)
+        if pinned_post is None or not can_view_post(
+            db, current_user_id, pinned_post
+        ):
+            pinned_id = None
+        elif cursor is None:
+            pinned_tweet = _serialize_pinned_tweet(
+                service, db, pinned_post, current_user_id
+            )
+
     rows = tweet_repository.list_feed_with_retweets(
         db,
         author_ids=[user.id],
@@ -170,11 +214,11 @@ def list_user_tweets(
         current_user_id=current_user_id,
         cursor_created_at=cursor_created_at,
         cursor_id=cursor_id,
+        exclude_post_id=pinned_id,
     )
 
     has_next = len(rows) > limit
     page_rows = rows[:limit]
-    service = TimelineService(db, viewer_id=current_user_id)
     items = [service.serialize_tweet(row) for row in page_rows]
 
     next_cursor = None
@@ -185,7 +229,9 @@ def list_user_tweets(
             last_row["cursor_id"],
         )
 
-    return ProfileTweetsPage(items=items, next_cursor=next_cursor)
+    return ProfileTweetsPage(
+        items=items, next_cursor=next_cursor, pinned_tweet=pinned_tweet
+    )
 
 
 @router.get("/{username}/media", response_model=ProfileMediaPage)

@@ -8,7 +8,7 @@ the tweet/comment repositories. Both enforce that the caller owns the post.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.feed import FeedItem
@@ -19,6 +19,7 @@ from app.models.post_hashtag import PostHashtag
 from app.models.post_mention import PostMention
 from app.models.post_view import PostView
 from app.models.report import Report
+from app.models.user import User
 
 
 class TakenDownError(Exception):
@@ -121,14 +122,14 @@ def delete_post(db: Session, post_id: int, user_id: int) -> list[str]:
     would let someone else's bad reply hold the author's own post hostage.
 
     Also removes the engagement (likes, views), fan-out feed rows,
-    notifications, and reports that reference any deleted post, since SQLite
-    here does not enforce foreign keys and would otherwise leave orphaned
-    rows. Discarding the reports is deliberate, not just hygiene: with the
-    post gone there is nothing left to judge -- the author has done what a
-    takedown would have -- and a report row whose target is missing could
-    never be shown or resolved, only haunt the queue. Quote posts that
-    referenced a deleted post keep their dangling ``quoted_post_id`` and
-    simply render without an embed.
+    notifications, and reports that reference any deleted post, and clears any
+    profile pin pointing at one, since SQLite here does not enforce foreign keys
+    and would otherwise leave orphaned rows. Discarding the reports is
+    deliberate, not just hygiene: with the post gone there is nothing left to
+    judge -- the author has done what a takedown would have -- and a report row
+    whose target is missing could never be shown or resolved, only haunt the
+    queue. Quote posts that referenced a deleted post keep their dangling
+    ``quoted_post_id`` and simply render without an embed.
     """
     post = db.get(Post, post_id)
     if post is None:
@@ -154,6 +155,11 @@ def delete_post(db: Session, post_id: int, user_id: int) -> list[str]:
     db.execute(delete(PostHashtag).where(PostHashtag.post_id.in_(ids)))
     db.execute(delete(PostMention).where(PostMention.post_id.in_(ids)))
     db.execute(delete(Report).where(Report.post_id.in_(ids)))
+    db.execute(
+        update(User)
+        .where(User.pinned_post_id.in_(ids))
+        .values(pinned_post_id=None)
+    )
     db.execute(delete(Post).where(Post.id.in_(ids)))
     db.commit()
     return media_urls

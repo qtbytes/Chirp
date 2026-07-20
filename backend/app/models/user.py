@@ -73,6 +73,12 @@ class User(Base):
     suspended_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # One of the user's own top-level tweets, pinned to the top of their profile
+    # (Twitter-style). NULL when nothing is pinned. A plain id, deliberately not a
+    # FK constraint: SQLite here runs with foreign keys off (and a real FK to
+    # posts.id would form a cycle with posts.user_id), so delete_post nulls a
+    # dangling pin by hand instead.
+    pinned_post_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     posts = relationship(
         "Post", back_populates="author", cascade="all, delete-orphan"

@@ -32,6 +32,8 @@ import {
   MoreHorizontal,
   MoreVertical,
   Pencil,
+  Pin,
+  PinOff,
   Repeat2,
   Share2,
   Trash2,
@@ -1286,6 +1288,8 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
 export function PostMenu({
   onEdit,
   onDelete,
+  onPin,
+  onUnpin,
   authorUsername,
   onMute,
   onBlock,
@@ -1293,6 +1297,8 @@ export function PostMenu({
 }: {
   onEdit?: () => void;
   onDelete?: () => void;
+  onPin?: () => void;
+  onUnpin?: () => void;
   authorUsername?: string;
   onMute?: () => void;
   onBlock?: () => void;
@@ -1340,6 +1346,18 @@ export function PostMenu({
             <button type="button" role="menuitem" onClick={() => choose(onEdit)}>
               <Pencil size={16} aria-hidden="true" />
               <span>Edit</span>
+            </button>
+          ) : null}
+          {onPin ? (
+            <button type="button" role="menuitem" onClick={() => choose(onPin)}>
+              <Pin size={16} aria-hidden="true" />
+              <span>Pin to your profile</span>
+            </button>
+          ) : null}
+          {onUnpin ? (
+            <button type="button" role="menuitem" onClick={() => choose(onUnpin)}>
+              <PinOff size={16} aria-hidden="true" />
+              <span>Unpin from profile</span>
             </button>
           ) : null}
           {onDelete ? (
@@ -2318,6 +2336,9 @@ export function TweetCard({
   onAuthorMuted,
   onAuthorBlocked,
   onQuoted,
+  pinned = false,
+  onPin,
+  onUnpin,
 }: {
   tweet: Tweet;
   onOpen: () => void;
@@ -2338,6 +2359,13 @@ export function TweetCard({
    */
   onAuthorBlocked?: (authorId: number) => void;
   onQuoted?: (tweet: Tweet) => void;
+  /** Marks this card as the profile's pinned tweet: shows a "Pinned" label and,
+   *  for the owner, turns the menu's action into "Unpin". */
+  pinned?: boolean;
+  /** Offered in the owner's menu on a non-pinned tweet to pin it. */
+  onPin?: () => void;
+  /** Offered in the owner's menu on the pinned tweet to unpin it. */
+  onUnpin?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2529,6 +2557,8 @@ export function TweetCard({
         <PostMenu
           onEdit={startEditing}
           onDelete={() => setConfirmingDelete(true)}
+          onPin={onPin && !pinned ? onPin : undefined}
+          onUnpin={onUnpin && pinned ? onUnpin : undefined}
         />
       ) : (
         <PostMenu
@@ -2539,6 +2569,12 @@ export function TweetCard({
         />
       )}
       <div className="tweet-body" onClickCapture={queueEngagement}>
+        {pinned ? (
+          <div className="pinned-tag">
+            <Pin size={13} aria-hidden="true" />
+            <span>Pinned</span>
+          </div>
+        ) : null}
         <header>
           <Link
             to={`/${encodeURIComponent(tweet.author.username)}`}

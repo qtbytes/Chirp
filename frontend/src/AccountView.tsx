@@ -28,6 +28,7 @@ import type {
   UserSummary,
 } from "./types";
 import { Avatar, formatCompactDate, getErrorMessage } from "./components";
+import { InfiniteScroll } from "./InfiniteScroll";
 import { ChangeEmailModal } from "./ChangeEmailModal";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 
@@ -296,8 +297,10 @@ function BlockedSection() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(async (nextCursor?: string | null, append = false) => {
+    setLoading(true);
     setError("");
     try {
       const page = await listBlocked(nextCursor);
@@ -307,6 +310,8 @@ function BlockedSection() {
       setCursor(page.next_cursor);
     } catch (err) {
       setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -372,11 +377,11 @@ function BlockedSection() {
         </div>
       )}
 
-      {cursor ? (
-        <button className="load-more" onClick={() => void load(cursor, true)}>
-          Load more
-        </button>
-      ) : null}
+      <InfiniteScroll
+        hasMore={!!cursor}
+        loading={loading}
+        onLoadMore={() => void load(cursor, true)}
+      />
     </section>
   );
 }
@@ -386,8 +391,10 @@ function MutedSection() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(async (nextCursor?: string | null, append = false) => {
+    setLoading(true);
     setError("");
     try {
       const page = await listMuted(nextCursor);
@@ -397,6 +404,8 @@ function MutedSection() {
       setCursor(page.next_cursor);
     } catch (err) {
       setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -462,11 +471,11 @@ function MutedSection() {
         </div>
       )}
 
-      {cursor ? (
-        <button className="load-more" onClick={() => void load(cursor, true)}>
-          Load more
-        </button>
-      ) : null}
+      <InfiniteScroll
+        hasMore={!!cursor}
+        loading={loading}
+        onLoadMore={() => void load(cursor, true)}
+      />
     </section>
   );
 }

@@ -366,3 +366,40 @@ def delete_tweet(
             detail="you can only delete your own tweets",
         )
     media_service.remove_media_files(db, media_urls)
+
+
+@router.put("/{tweet_id}/pin", status_code=status.HTTP_204_NO_CONTENT)
+def pin_tweet(
+    tweet_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Pin one of your own top-level tweets to the top of your profile. Only the
+    author may pin, and only a top-level tweet -- not a reply. Pinning replaces
+    any previous pin: one per profile, Twitter-style.
+    """
+    post = db.get(Post, tweet_id)
+    if post is None or post.reply_to_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="tweet not found"
+        )
+    if post.user_id != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="you can only pin your own tweets",
+        )
+    user_repository.set_pinned_post(db, current_user_id, tweet_id)
+
+
+@router.delete("/{tweet_id}/pin", status_code=status.HTTP_204_NO_CONTENT)
+def unpin_tweet(
+    tweet_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Unpin the tweet. Scoped to this tweet and idempotent: a no-op if it isn't the
+    caller's current pin, so it never clobbers a pin set on another tweet.
+    """
+    user_repository.clear_pinned_post(db, current_user_id, tweet_id)
