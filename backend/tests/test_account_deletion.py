@@ -224,6 +224,34 @@ def test_delete_retains_the_dm_messages_the_account_wrote() -> None:
     assert bob.get("/api/v1/dm/conversations").json()["items"] == []
 
 
+def test_delete_discards_reports_filed_against_the_account() -> None:
+    """
+    Deleting an account discards the open reports *targeting* it, not only the
+    ones it filed: the account is gone, so a report against it could never be
+    actioned -- it would only haunt the moderation queue as a tombstone card.
+    """
+    from app.models.report import Report
+    from sqlalchemy import select
+
+    alice, alice_id = register("alice")
+    bob, _ = register("bob")
+    assert (
+        bob.post(f"/api/v1/reports/users/{alice_id}", json={"reason": "abuse"}).status_code
+        == 201
+    )
+
+    def _reports_against(user_id: int) -> int:
+        with TestingSessionLocal() as db:
+            return len(
+                list(db.scalars(select(Report).where(Report.reported_user_id == user_id)))
+            )
+
+    assert _reports_against(alice_id) == 1, "precondition: the report exists"
+
+    _delete(alice)
+    assert _reports_against(alice_id) == 0, "the target's reports go with the account"
+
+
 def test_deleted_account_disappears_from_discovery() -> None:
     alice, alice_id = register("alice")
     bob, _ = register("bob")
