@@ -278,10 +278,12 @@ def take_down_post(db: Session, post: Post, moderator_id: int) -> int:
     the original timestamp.
 
     Both sides of the judgement are notified in the same commit: the author
-    that their post was removed, and each open reporter that their report was
-    acted on. The notifications carry the recipient as their own actor
-    (``allow_self``) so the moderator is never named, and the usual dedupe
-    means a takedown -> restore -> takedown cycle does not re-notify.
+    that their post was removed (unless the author has since deleted their
+    account -- a tombstone has no notification inbox), and each open reporter
+    that their report was acted on. The notifications carry the recipient as
+    their own actor (``allow_self``) so the moderator is never named, and the
+    usual dedupe means a takedown -> restore -> takedown cycle does not
+    re-notify.
     """
     from app.repositories.notification_repository import add_notification
 
@@ -295,14 +297,21 @@ def take_down_post(db: Session, post: Post, moderator_id: int) -> int:
 
     if post.taken_down_at is None:
         post.taken_down_at = datetime.now(timezone.utc)
-        add_notification(
-            db,
-            recipient_id=post.user_id,
-            actor_id=post.user_id,
-            type="post_removed",
-            post_id=post.id,
-            allow_self=True,
-        )
+        # A deleted author is a tombstone: their notification history was
+        # scrubbed on deletion and they can never sign in to read a new notice,
+        # so minting one only leaves a stray row. A *suspended* author still gets
+        # it -- suspension is reversible, so the notice should be waiting when
+        # they return.
+        author = db.get(User, post.user_id)
+        if author is not None and not author.is_deleted:
+            add_notification(
+                db,
+                recipient_id=post.user_id,
+                actor_id=post.user_id,
+                type="post_removed",
+                post_id=post.id,
+                allow_self=True,
+            )
     for reporter_id in reporter_ids:
         add_notification(
             db,

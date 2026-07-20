@@ -601,6 +601,41 @@ def test_takedown_restore_takedown_does_not_re_notify() -> None:
     assert _notification_types(alice).count("report_actioned") == 1
 
 
+def test_takedown_does_not_notify_a_deleted_author() -> None:
+    """
+    A tombstoned author has no notification inbox -- deletion scrubbed it and
+    they can never sign in again. Taking down a post they left behind must not
+    mint a stray ``post_removed`` row, though the reporter is still answered.
+    """
+    from app.models.notification import Notification
+    from sqlalchemy import select
+
+    alice, alice_id = register("alice")
+    bob, _ = register("bob")
+    mod, _ = register_moderator()
+
+    tweet_id = _post(alice, "left behind")
+    _report(bob, tweet_id)
+    # Alice deletes her account; her post survives as a tombstone, and bob's
+    # report on it survives with her.
+    assert (
+        alice.request(
+            "DELETE", "/api/v1/auth/account", json={"password": "password123"}
+        ).status_code
+        == 204
+    )
+
+    mod.post(f"/api/v1/moderation/posts/{tweet_id}/takedown")
+
+    with TestingSessionLocal() as db:
+        author_notices = db.scalars(
+            select(Notification).where(Notification.user_id == alice_id)
+        ).all()
+    assert list(author_notices) == [], "no notice is minted for a deleted author"
+    # The reporter is still told their report was acted on.
+    assert "report_actioned" in _notification_types(bob)
+
+
 # --- suspension -------------------------------------------------------------
 
 
