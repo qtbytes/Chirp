@@ -12,6 +12,7 @@ import {
 import type { UserDiscovery } from "./types";
 import { Avatar, getErrorMessage } from "./components";
 import { useFeedMemory } from "./useFeedMemory";
+import { InfiniteScroll } from "./InfiniteScroll";
 
 type Tab = "followers" | "following";
 
@@ -175,15 +176,11 @@ export function FollowListView() {
         </div>
       ) : null}
 
-      {cursor ? (
-        <button
-          className="load-more"
-          onClick={() => void load(cursor, true)}
-          disabled={loading}
-        >
-          Load more
-        </button>
-      ) : null}
+      <InfiniteScroll
+        hasMore={!!cursor}
+        loading={loading}
+        onLoadMore={() => void load(cursor, true)}
+      />
 
       {loading ? (
         <div className="loading-row">

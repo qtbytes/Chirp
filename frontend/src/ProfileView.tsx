@@ -43,6 +43,7 @@ import {
   parseBackendDate,
 } from "./components";
 import { EditProfileModal } from "./EditProfileModal";
+import { InfiniteScroll } from "./InfiniteScroll";
 
 export function ProfileView({
   currentUser,
@@ -589,15 +590,11 @@ export function ProfileView({
               />
             ))}
           </section>
-          {tweetsCursor ? (
-            <button
-              className="load-more"
-              onClick={() => void loadTweets(tweetsCursor, true)}
-              disabled={loadingFeed}
-            >
-              Load more
-            </button>
-          ) : null}
+          <InfiniteScroll
+            hasMore={!!tweetsCursor}
+            loading={loadingFeed}
+            onLoadMore={() => void loadTweets(tweetsCursor, true)}
+          />
         </>
       ) : activeTab === "media" ? (
         <>
@@ -621,15 +618,11 @@ export function ProfileView({
               />
             ))}
           </section>
-          {mediaCursor ? (
-            <button
-              className="load-more"
-              onClick={() => void loadMedia(mediaCursor, true)}
-              disabled={loadingFeed}
-            >
-              Load more
-            </button>
-          ) : null}
+          <InfiniteScroll
+            hasMore={!!mediaCursor}
+            loading={loadingFeed}
+            onLoadMore={() => void loadMedia(mediaCursor, true)}
+          />
         </>
       ) : activeTab === "likes" ? (
         <>
@@ -653,15 +646,11 @@ export function ProfileView({
               />
             ))}
           </section>
-          {likesCursor ? (
-            <button
-              className="load-more"
-              onClick={() => void loadLikes(likesCursor, true)}
-              disabled={loadingFeed}
-            >
-              Load more
-            </button>
-          ) : null}
+          <InfiniteScroll
+            hasMore={!!likesCursor}
+            loading={loadingFeed}
+            onLoadMore={() => void loadLikes(likesCursor, true)}
+          />
         </>
       ) : (
         <>
@@ -694,15 +683,11 @@ export function ProfileView({
               </div>
             ))}
           </section>
-          {repliesCursor ? (
-            <button
-              className="load-more"
-              onClick={() => void loadReplies(repliesCursor, true)}
-              disabled={loadingFeed}
-            >
-              Load more
-            </button>
-          ) : null}
+          <InfiniteScroll
+            hasMore={!!repliesCursor}
+            loading={loadingFeed}
+            onLoadMore={() => void loadReplies(repliesCursor, true)}
+          />
         </>
       )}
 

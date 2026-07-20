@@ -49,6 +49,7 @@ import {
 } from "./components";
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
+import { InfiniteScroll } from "./InfiniteScroll";
 
 const POLICY_LABELS: Record<DmPolicy, string> = {
   everyone: "Everyone",
@@ -220,15 +221,11 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
         ))}
       </div>
 
-      {cursor ? (
-        <button
-          className="load-more"
-          onClick={() => void load(cursor, true)}
-          disabled={loading}
-        >
-          Load more
-        </button>
-      ) : null}
+      <InfiniteScroll
+        hasMore={!!cursor}
+        loading={loading}
+        onLoadMore={() => void load(cursor, true)}
+      />
       {loading ? (
         <div className="loading-row">
           <Loader2 className="spin" size={18} aria-hidden="true" />

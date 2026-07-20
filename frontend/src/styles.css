@@ -1993,6 +1993,13 @@ button.media-grid__cell {
   border-bottom: 1px solid var(--line);
 }
 
+/* Invisible tripwire for auto-load-more: the element the IntersectionObserver
+   watches at the end of a list. Kept a hair tall so it always has a box to
+   observe even when the list ends flush against it. */
+.infinite-scroll-sentinel {
+  height: 1px;
+}
+
 .status-panel.error {
   color: var(--danger);
 }
