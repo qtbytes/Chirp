@@ -3129,6 +3129,9 @@ a.tab {
   color: var(--ink);
   font: inherit;
   text-align: left;
+  /* Keep each item on one line; the dropdown (min-width only) grows to fit the
+     widest label instead of wrapping "Pin to your profile". */
+  white-space: nowrap;
 }
 
 .post-menu-dropdown button:hover {
