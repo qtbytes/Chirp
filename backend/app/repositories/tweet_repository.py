@@ -266,6 +266,7 @@ def list_feed_with_retweets(
     cursor_id: int | None = None,
     exclude_author_ids: set[int] | None = None,
     exclude_deleted_authors: bool = False,
+    exclude_post_id: int | None = None,
 ) -> list[dict]:
     """
     Return the given authors' top-level posts newest-first.
@@ -281,6 +282,11 @@ def list_feed_with_retweets(
     ``exclude_deleted_authors`` drops posts by tombstoned accounts. It is off by
     default so a profile still lists its owner's posts even once deleted; the
     timeline turns it on.
+
+    ``exclude_post_id`` drops a single post from the results. The profile uses it
+    to keep the pinned tweet -- surfaced separately at the top -- from also
+    appearing in the chronological list. Excluded in SQL (not after the fetch) so
+    the ``limit + 1`` next-page probe stays accurate.
     """
     if not author_ids:
         return []
@@ -299,6 +305,8 @@ def list_feed_with_retweets(
     )
     if exclude_author_ids:
         ident_stmt = ident_stmt.where(Post.user_id.not_in(exclude_author_ids))
+    if exclude_post_id is not None:
+        ident_stmt = ident_stmt.where(Post.id != exclude_post_id)
     if exclude_deleted_authors:
         ident_stmt = ident_stmt.where(Post.user_id.not_in(deleted_author_ids()))
     if cursor_created_at is not None and cursor_id is not None:

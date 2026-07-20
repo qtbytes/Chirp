@@ -8,7 +8,7 @@ the tweet/comment repositories. Both enforce that the caller owns the post.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.feed import FeedItem
@@ -17,6 +17,7 @@ from app.models.notification import Notification
 from app.models.post import VISIBILITY_VALUES, Post
 from app.models.post_hashtag import PostHashtag
 from app.models.post_mention import PostMention
+from app.models.user import User
 
 
 def _utcnow() -> datetime:
@@ -107,7 +108,8 @@ def delete_post(db: Session, post_id: int, user_id: int) -> None:
 
     Also removes the engagement (likes), fan-out feed rows, and notifications
     that reference any deleted post, since SQLite here does not enforce foreign
-    keys and would otherwise leave orphaned rows. Quote posts that referenced a
+    keys and would otherwise leave orphaned rows -- and clears any profile pin
+    pointing at a deleted post for the same reason. Quote posts that referenced a
     deleted post keep their dangling ``quoted_post_id`` and simply render
     without an embed.
     """
@@ -123,5 +125,10 @@ def delete_post(db: Session, post_id: int, user_id: int) -> None:
     db.execute(delete(Notification).where(Notification.post_id.in_(ids)))
     db.execute(delete(PostHashtag).where(PostHashtag.post_id.in_(ids)))
     db.execute(delete(PostMention).where(PostMention.post_id.in_(ids)))
+    db.execute(
+        update(User)
+        .where(User.pinned_post_id.in_(ids))
+        .values(pinned_post_id=None)
+    )
     db.execute(delete(Post).where(Post.id.in_(ids)))
     db.commit()

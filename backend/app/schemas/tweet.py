@@ -91,6 +91,10 @@ class TimelinePage(BaseModel):
 class ProfileTweetsPage(BaseModel):
     items: list[TweetOut]
     next_cursor: str | None = None
+    # The profile owner's pinned tweet, shown above the chronological list.
+    # Present only on the first page (no cursor) and only when the viewer may see
+    # it; excluded from ``items`` so it never appears twice.
+    pinned_tweet: TweetOut | None = None
 
 
 class HashtagPostsPage(BaseModel):

@@ -159,6 +159,27 @@ def update_user_avatar(db: Session, user_id: int, avatar_url: str) -> User:
     return user
 
 
+def set_pinned_post(db: Session, user_id: int, post_id: int) -> None:
+    """Pin ``post_id`` to the user's profile. The caller vets ownership."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise ValueError("user not found")
+    user.pinned_post_id = post_id
+    db.commit()
+
+
+def clear_pinned_post(db: Session, user_id: int, post_id: int) -> None:
+    """
+    Unpin ``post_id`` if it is the user's currently pinned post. Idempotent and
+    scoped to that post, so unpinning a tweet that isn't pinned is a quiet no-op
+    rather than clobbering whatever else happens to be pinned.
+    """
+    user = db.get(User, user_id)
+    if user is not None and user.pinned_post_id == post_id:
+        user.pinned_post_id = None
+        db.commit()
+
+
 def soft_delete_user(
     db: Session, user_id: int, scrubbed_password_hash: str
 ) -> User | None:

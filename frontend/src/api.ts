@@ -278,6 +278,16 @@ export function deleteTweet(tweetId: number): Promise<void> {
   return request<void>(`/tweets/${tweetId}`, { method: "DELETE" });
 }
 
+/** Pin one of your own top-level tweets to the top of your profile. */
+export function pinTweet(tweetId: number): Promise<void> {
+  return request<void>(`/tweets/${tweetId}/pin`, { method: "PUT" });
+}
+
+/** Unpin the tweet (no-op if it isn't your current pin). */
+export function unpinTweet(tweetId: number): Promise<void> {
+  return request<void>(`/tweets/${tweetId}/pin`, { method: "DELETE" });
+}
+
 export function toggleTweetLike(tweetId: number): Promise<LikeToggleResult> {
   return request<LikeToggleResult>(`/tweets/${tweetId}/likes/toggle`, {
     method: "POST",

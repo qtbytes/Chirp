@@ -1324,6 +1324,22 @@ button.rail-link:disabled:hover {
   min-width: 0;
 }
 
+/* "Pinned" marker above a pinned tweet, aligned with the author row -- the
+   Twitter cue that this post is fixed to the top of the profile. */
+.pinned-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pinned-tag svg {
+  flex-shrink: 0;
+}
+
 /* Embedded quoted post (Twitter-style quote tweet) */
 .quoted-post {
   margin: 10px 0 2px;
