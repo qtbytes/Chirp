@@ -1,11 +1,48 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import and_, desc, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.post import Post
 from app.models.report import Report
 from app.models.user import User
+
+
+def _find_existing_report(
+    db: Session,
+    reporter_id: int,
+    post_id: int | None,
+    reported_user_id: int | None,
+) -> Report | None:
+    # ``== None`` renders as IS NULL, so this matches only the caller's target
+    # kind: a user's post reports never collide with their report of its author.
+    return db.scalar(
+        select(Report).where(
+            Report.reporter_id == reporter_id,
+            Report.post_id == post_id,
+            Report.reported_user_id == reported_user_id,
+        )
+    )
+
+
+def _amend_report(report: Report, reason: str, details: str | None) -> None:
+    """
+    Overwrite a report with the latest complaint and (re)open it.
+
+    ``created_at`` is bumped to now. The queue orders targets by their newest
+    report (``max(created_at)``), so without this a re-report -- especially one
+    reopening a long-resolved report -- would re-enter the queue at its stale
+    original position, buried where a moderator working newest-first might never
+    reach it. Bumping it resurfaces the target, which is the whole point of
+    re-reporting.
+    """
+    report.reason = reason
+    report.details = details
+    report.status = "open"
+    report.resolved_at = None
+    report.resolved_by = None
+    report.created_at = datetime.now(timezone.utc)
 
 
 def _upsert_report(
@@ -30,29 +67,17 @@ def _upsert_report(
     complaint that could never re-enter the queue would be silently
     unanswerable.
 
-    ``created_at`` is bumped to now on every amend. The queue orders targets by
-    their newest report (``max(created_at)``), so without this a re-report --
-    especially one reopening a long-resolved report -- would re-enter the queue
-    at its stale original position, buried where a moderator working newest-first
-    might never reach it. Bumping it resurfaces the target, which is the whole
-    point of re-reporting.
+    The insert is guarded against a race: two reports from the same reporter on
+    the same target can both miss the existence check and race to INSERT, and
+    the loser hits the ``uq_report_reporter_*`` unique constraint. Rather than
+    surface that as a 500, the loser rolls back and falls through to the amend
+    path -- the row the winner created is exactly what an amend would have
+    updated, so the two orderings converge on one row carrying the later
+    complaint.
     """
-    # ``== None`` renders as IS NULL, so this matches only the caller's target
-    # kind: a user's post reports never collide with their report of its author.
-    existing = db.scalar(
-        select(Report).where(
-            Report.reporter_id == reporter_id,
-            Report.post_id == post_id,
-            Report.reported_user_id == reported_user_id,
-        )
-    )
+    existing = _find_existing_report(db, reporter_id, post_id, reported_user_id)
     if existing is not None:
-        existing.reason = reason
-        existing.details = details
-        existing.status = "open"
-        existing.resolved_at = None
-        existing.resolved_by = None
-        existing.created_at = datetime.now(timezone.utc)
+        _amend_report(existing, reason, details)
         db.commit()
         return existing
 
@@ -64,7 +89,18 @@ def _upsert_report(
         details=details,
     )
     db.add(report)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = _find_existing_report(db, reporter_id, post_id, reported_user_id)
+        if existing is None:
+            # The unique constraint fired but no row is there to amend -- not the
+            # race we handle. Re-raise rather than silently swallow it.
+            raise
+        _amend_report(existing, reason, details)
+        db.commit()
+        return existing
     return report
 
 

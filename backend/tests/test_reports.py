@@ -71,6 +71,46 @@ def test_report_is_idempotent_and_amends_the_reason() -> None:
     assert reports[0].reason == "abuse", "the latest reason wins"
 
 
+def test_report_upsert_survives_the_check_then_insert_race(monkeypatch) -> None:
+    """
+    Two reports from the same reporter on the same target can both miss the
+    existence check and race to INSERT; the loser hits the unique constraint.
+    That must resolve to an amend, not a 500. The losing racer is simulated by
+    forcing the first existence check to miss a row that already exists, so the
+    code takes the INSERT path and collides.
+    """
+    from app.repositories import report_repository
+
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    tweet_id = _post(bob, "reported once")
+
+    # The winner's row already exists.
+    alice.post(f"/api/v1/reports/posts/{tweet_id}", json={"reason": "spam"})
+
+    real_find = report_repository._find_existing_report
+    calls = {"n": 0}
+
+    def racing_find(*args, **kwargs):
+        calls["n"] += 1
+        # First lookup (the pre-check) pretends the row isn't there, so the code
+        # inserts and collides; the fallback re-fetch (call 2) sees the real row.
+        if calls["n"] == 1:
+            return None
+        return real_find(*args, **kwargs)
+
+    monkeypatch.setattr(report_repository, "_find_existing_report", racing_find)
+
+    response = alice.post(
+        f"/api/v1/reports/posts/{tweet_id}", json={"reason": "abuse"}
+    )
+    assert response.status_code == 201, response.text
+
+    reports = _reports_for(tweet_id)
+    assert len(reports) == 1, "the race must not create a duplicate row"
+    assert reports[0].reason == "abuse", "the later complaint wins via the amend fallback"
+
+
 def test_two_reporters_each_get_a_row() -> None:
     alice, _ = register("alice")
     bob, _ = register("bob")
