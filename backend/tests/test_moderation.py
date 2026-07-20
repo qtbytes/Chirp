@@ -304,6 +304,32 @@ def test_re_reporting_after_a_judgement_reopens_the_queue_item() -> None:
     assert reopened["items"][0]["reports"][0]["reason"] == "abuse"
 
 
+def test_re_reporting_resurfaces_the_target_to_the_top_of_the_queue() -> None:
+    """
+    The queue is newest-report-first. A re-report ("still a problem, look
+    again") must bump the target's timestamp so it rises back to the top --
+    otherwise it re-enters at its stale original position, buried where a
+    moderator working top-down never reaches it.
+    """
+    alice, _ = register("alice")
+    bob, _ = register("bob")
+    mod, _ = register_moderator()
+
+    older = _post(bob, "reported first")
+    newer = _post(bob, "reported second")
+    _report(alice, older)
+    _report(alice, newer)
+
+    # Newest report on top: newer, then older.
+    order = [item["post"]["id"] for item in mod.get("/api/v1/moderation/reports").json()["items"]]
+    assert order == [newer, older]
+
+    # Alice re-reports the older post; it must jump above the newer one.
+    _report(alice, older, "abuse")
+    order = [item["post"]["id"] for item in mod.get("/api/v1/moderation/reports").json()["items"]]
+    assert order == [older, newer], "the re-reported target rises back to the top"
+
+
 def test_unknown_post_is_404_for_actions() -> None:
     mod, _ = register_moderator()
     assert mod.post("/api/v1/moderation/posts/999999/takedown").status_code == 404

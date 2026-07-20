@@ -29,6 +29,13 @@ def _upsert_report(
     problem persists (perhaps after a restore or an unsuspension), and a
     complaint that could never re-enter the queue would be silently
     unanswerable.
+
+    ``created_at`` is bumped to now on every amend. The queue orders targets by
+    their newest report (``max(created_at)``), so without this a re-report --
+    especially one reopening a long-resolved report -- would re-enter the queue
+    at its stale original position, buried where a moderator working newest-first
+    might never reach it. Bumping it resurfaces the target, which is the whole
+    point of re-reporting.
     """
     # ``== None`` renders as IS NULL, so this matches only the caller's target
     # kind: a user's post reports never collide with their report of its author.
@@ -45,6 +52,7 @@ def _upsert_report(
         existing.status = "open"
         existing.resolved_at = None
         existing.resolved_by = None
+        existing.created_at = datetime.now(timezone.utc)
         db.commit()
         return existing
 
