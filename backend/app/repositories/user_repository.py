@@ -10,6 +10,7 @@ from app.models.follow import Follow
 from app.models.like import Like
 from app.models.mute import Mute
 from app.models.notification import Notification
+from app.models.post_view import PostView
 from app.models.report import Report
 from app.models.user import User
 
@@ -172,10 +173,18 @@ def soft_delete_user(
     Authored posts are deliberately kept, so replies and quotes others built on
     them still resolve an author (the whole reason this is a soft delete). What
     goes: every personal edge (follows both ways, likes, blocks and mutes both
-    ways, reports), the user's own home-feed rows, and their entire notification
-    history as recipient and as actor. The PII on the row is nulled, the username
-    is rewritten to ``deleted_<id>`` (freeing the original for reuse), and the
-    password is replaced with an unknown hash so the row can never authenticate.
+    ways, reports), the user's own home-feed rows, their entire notification
+    history as recipient and as actor, and the trail of posts they viewed. The
+    PII on the row is nulled, the username is rewritten to ``deleted_<id>``
+    (freeing the original for reuse), and the password is replaced with an
+    unknown hash so the row can never authenticate.
+
+    What is deliberately NOT touched: the DM messages this account wrote. Direct
+    messages follow a "hidden, not deleted" rule (see ``dm_repository``), so the
+    rows persist rather than being scrubbed. In practice a deleted account's chat
+    becomes unreachable through the API -- ``_load_counterpart`` 404s on a deleted
+    user and the inbox skips them -- so the surviving counterpart no longer reads
+    the thread, but the message rows themselves are retained, not erased.
 
     Feed rows where the user is the *author* (``actor_id``) are left alone: the
     posts survive as tombstones, so they should keep resolving in the feeds they
@@ -207,6 +216,7 @@ def soft_delete_user(
         delete(Mute).where(or_(Mute.muter_id == user_id, Mute.muted_id == user_id))
     )
     db.execute(delete(Report).where(Report.reporter_id == user_id))
+    db.execute(delete(PostView).where(PostView.user_id == user_id))
 
     # deleted_<id> is unique by construction: the id is unique, and registration
     # forbids anyone from claiming that shape. The check is a belt-and-suspenders

@@ -285,10 +285,15 @@ def delete_account(
     Delete the caller's account: a soft delete that tombstones the row.
 
     The account row is kept so posts others replied to or quoted keep an author,
-    but everything personal is destroyed -- the PII, every graph edge, the whole
-    notification history, all sessions and tokens, and the avatar file. The
-    username is released (rewritten to ``deleted_<id>``) and the password is
-    replaced with an unknown value, so the account can never be logged into again.
+    but the personal data is destroyed -- the PII, every graph edge, the whole
+    notification history, the view trail, all sessions and tokens, and the avatar
+    file. The username is released (rewritten to ``deleted_<id>``) and the password
+    is replaced with an unknown value, so the account can never be logged into again.
+
+    DM messages the account wrote are the one exception: they are retained, not
+    scrubbed, matching direct messages' "hidden, not deleted" rule. The deleted
+    account's chat becomes unreachable through the API, so the counterpart stops
+    seeing the thread, but the message rows survive.
 
     Requires the current password: an irreversible action must not ride on a
     stolen cookie alone.

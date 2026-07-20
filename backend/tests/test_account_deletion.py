@@ -3,8 +3,10 @@ Account deletion (soft delete + PII scrub).
 
 The account row is tombstoned rather than removed: authored posts stay so the
 threads others built on them survive, but every personal edge, the notification
-history, the PII, sessions, and the avatar are destroyed. The account can never
-log in again and no longer surfaces in discovery.
+history, the view trail, the PII, sessions, and the avatar are destroyed. The
+account can never log in again and no longer surfaces in discovery. DM messages
+the account wrote are the one deliberate exception -- "hidden, not deleted" --
+so those rows are retained even though the chat becomes unreachable via the API.
 """
 
 from conftest import TestingSessionLocal
@@ -166,6 +168,60 @@ def test_delete_clears_notifications_the_account_generated() -> None:
 
     _delete(alice)
     assert bob.get("/api/v1/notifications").json()["items"] == []
+
+
+def test_delete_removes_the_view_trail() -> None:
+    from app.models.post_view import PostView
+
+    alice, alice_id = register("alice")
+    bob, _ = register("bob")
+    tweet_id = _post(bob, "worth a look")
+    # Alice opens the post, so a post_views row is written for her.
+    alice.post("/api/v1/tweets/views", json={"ids": [tweet_id]})
+
+    def _view_rows() -> int:
+        with TestingSessionLocal() as db:
+            return db.query(PostView).filter(PostView.user_id == alice_id).count()
+
+    assert _view_rows() == 1, "precondition: alice's view was recorded"
+
+    _delete(alice)
+    assert _view_rows() == 0, "the deleted account's view trail is cleared"
+
+
+def test_delete_retains_the_dm_messages_the_account_wrote() -> None:
+    """
+    DMs follow a "hidden, not deleted" rule, so account deletion does NOT scrub
+    the message rows the way it does likes or follows. The deleted account's chat
+    becomes unreachable through the API (the counterpart 404s and the inbox skips
+    it), but the rows themselves survive in the database.
+    """
+    alice, alice_id = register("alice")
+    bob, _ = register("bob")
+
+    sent = alice.post("/api/v1/dm/with/bob/messages", json={"content": "hey bob"})
+    assert sent.status_code == 201, sent.text
+
+    def _messages_from(user_id: int) -> list[str]:
+        from app.models.dm import DmMessage
+
+        with TestingSessionLocal() as db:
+            return [
+                m.content
+                for m in db.query(DmMessage).filter(DmMessage.sender_id == user_id).all()
+            ]
+
+    assert _messages_from(alice_id) == ["hey bob"], "precondition: the message exists"
+
+    _delete(alice)
+
+    # The row survives deletion...
+    assert _messages_from(alice_id) == ["hey bob"], "DM rows are retained, not scrubbed"
+
+    # ...but the surviving counterpart can no longer reach the chat: the deleted
+    # account 404s, and its conversation drops off the inbox.
+    assert bob.get(f"/api/v1/dm/with/deleted_{alice_id}").status_code == 404
+    assert bob.get("/api/v1/dm/conversations").json()["items"] == []
 
 
 def test_deleted_account_disappears_from_discovery() -> None:
