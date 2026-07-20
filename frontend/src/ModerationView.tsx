@@ -256,6 +256,9 @@ export default function ModerationView() {
                     {post.author.is_suspended ? (
                       <span className="mod-flag">author suspended</span>
                     ) : null}
+                    {post.author.is_deleted ? (
+                      <span className="mod-flag">author deleted</span>
+                    ) : null}
                   </div>
                   <p className="mod-content">{post.content || "(no text)"}</p>
                   {post.media_urls.length > 0 ? (
@@ -317,13 +320,18 @@ export default function ModerationView() {
 
               {post ? (
                 <div className="mod-actions">
-                  <button
-                    className="mod-pill-button"
-                    disabled={acting}
-                    onClick={() => void toggleSuspension(item)}
-                  >
-                    {post.author.is_suspended ? "Unsuspend author" : "Suspend author"}
-                  </button>
+                  {/* A deleted author is a tombstone -- there is no live account
+                      to suspend, and the backend 404s such an attempt. The
+                      post's own actions below still apply. */}
+                  {!post.author.is_deleted ? (
+                    <button
+                      className="mod-pill-button"
+                      disabled={acting}
+                      onClick={() => void toggleSuspension(item)}
+                    >
+                      {post.author.is_suspended ? "Unsuspend author" : "Suspend author"}
+                    </button>
+                  ) : null}
                   {tab === "open" ? (
                     <>
                       <button
