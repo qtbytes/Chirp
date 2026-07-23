@@ -199,8 +199,8 @@ function tokenizeContent(text: string): ContentToken[] {
 }
 
 /**
- * The character budget every post-shaped draft shares — tweets, quote comments
- * and their edits. The backend enforces the same number.
+ * The character budget every post-shaped draft shares — tweets, quote comments,
+ * replies and their edits. The backend enforces the same number.
  */
 export const MAX_POST_LENGTH = 280;
 
@@ -1982,7 +1982,7 @@ export function ReplyComposer({
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
 
-  const remaining = 1000 - content.length;
+  const remaining = MAX_POST_LENGTH - content.length;
   const empty = !content.trim() && media.mediaUrls.length === 0;
   const canReply = !posting && !empty && remaining >= 0 && !media.uploading;
 
@@ -2076,7 +2076,7 @@ export function ReplyComposer({
               {currentUser ? <Avatar user={currentUser} /> : null}
               <div className="reply-input-body">
                 <div className="composer-input">
-                  <ComposerHighlight text={content} limit={1000} />
+                  <ComposerHighlight text={content} limit={MAX_POST_LENGTH} />
                   <textarea
                     {...fieldProps}
                     onKeyDown={typeahead.onKeyDown}
@@ -2627,7 +2627,7 @@ export function TweetCard({
             initialContent={tweet.content}
             initialMedia={tweet.media_urls}
             initialAlts={tweet.media_alts}
-            maxLength={280}
+            maxLength={MAX_POST_LENGTH}
             saving={saving}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}
@@ -2956,7 +2956,7 @@ export function CommentCard({
             initialContent={localComment.content}
             initialMedia={localComment.media_urls}
             initialAlts={localComment.media_alts}
-            maxLength={1000}
+            maxLength={MAX_POST_LENGTH}
             saving={saving}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}

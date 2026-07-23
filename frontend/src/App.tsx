@@ -2458,7 +2458,7 @@ function TweetDetail({
             initialContent={tweet.content}
             initialMedia={tweet.media_urls}
             initialAlts={tweet.media_alts}
-            maxLength={280}
+            maxLength={MAX_POST_LENGTH}
             saving={savingEdit}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}

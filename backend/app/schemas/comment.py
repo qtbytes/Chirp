@@ -10,7 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class CommentCreate(BaseModel):
-    content: str = Field(default="", max_length=1000)
+    # Same budget as a tweet: a reply is just a post, and the composer counts
+    # down from the same 280.
+    content: str = Field(default="", max_length=280)
     media_urls: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
     # Per-image alt text, parallel to ``media_urls``; shorter lists pad with "".
     media_alts: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
