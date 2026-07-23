@@ -39,6 +39,10 @@
      looks washed out as a button fill; this stays saturated in both themes. */
   --danger-solid: #f4212e;
   --danger-solid-strong: #d11a26;
+  /* How tall a composer dialog may grow before it starts scrolling: the
+     viewport less .modal-backdrop's 8vh top inset and a little breathing room
+     under the card. */
+  --dialog-max-height: calc(92vh - 24px);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -752,6 +756,17 @@ button.rail-link:disabled:hover {
   border-bottom: 1px solid var(--line);
 }
 
+/* The avatar + draft row, split out from the toolbar rows so the compose modal
+   can scroll it on its own (see .compose-modal). In the feed it is inert: a
+   nested grid repeating the parent's columns, so nothing shifts. */
+.composer-scroll {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 0 12px;
+  align-items: start;
+}
+
 .composer-body {
   min-width: 0;
 }
@@ -773,6 +788,8 @@ button.rail-link:disabled:hover {
   align-items: center;
   justify-content: flex-end;
   gap: 16px;
+  /* Pinned when the composer is a scrolling dialog column. */
+  flex: none;
 }
 
 .composer-tools {
@@ -786,6 +803,7 @@ button.rail-link:disabled:hover {
    the text, above a hairline that separates it from the toolbar below. */
 .composer-visibility {
   display: flex;
+  flex: none;
   padding-bottom: 10px;
   margin-bottom: 8px;
   border-bottom: 1px solid var(--line);
@@ -1462,15 +1480,13 @@ button.rail-link:disabled:hover {
   border-radius: 16px;
   width: min(600px, calc(100vw - 32px));
   box-shadow: var(--shadow);
+  /* Cap the card at the viewport and lay it out as a column, so a long draft
+     scrolls inside .composer-scroll instead of pushing the toolbar off screen. */
+  display: flex;
+  flex-direction: column;
+  max-height: var(--dialog-max-height);
   /* No overflow clipping: the visibility menu and emoji picker pop out past
      the card's bottom edge. */
-}
-
-/* Twitter's compose dialog runs the audience row and toolbar edge to edge,
-   under the avatar column too. */
-.compose-modal .composer-visibility,
-.compose-modal .composer-actions {
-  grid-column: 1 / -1;
 }
 
 .compose-modal-head {
@@ -1478,9 +1494,23 @@ button.rail-link:disabled:hover {
   padding: 8px 10px;
 }
 
+/* Twitter's compose dialog runs the audience row and toolbar edge to edge,
+   under the avatar column too — as a column the composer's own grid columns
+   no longer apply, which is exactly that. */
 .compose-modal .composer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* Overrides the grid's `align-items: start`, which as a flex column would
+     mean "shrink every row to its content width" instead of edge to edge. */
+  align-items: stretch;
   border-bottom: 0;
   padding-top: 4px;
+}
+
+.compose-modal .composer-scroll {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* Quote composer modal */
@@ -1490,6 +1520,9 @@ button.rail-link:disabled:hover {
   width: min(560px, calc(100vw - 32px));
   box-shadow: var(--shadow);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: var(--dialog-max-height);
 }
 
 .quote-composer-head {
@@ -1502,6 +1535,7 @@ button.rail-link:disabled:hover {
   flex-direction: column;
   gap: 10px;
   padding: 0 16px 16px;
+  min-height: 0;
 }
 
 /* Avatar beside the draft, like the compose dialog; the quoted card and any
@@ -1537,6 +1571,11 @@ button.rail-link:disabled:hover {
 
 .quote-composer-form .composer-highlight {
   min-height: 0;
+}
+
+/* Keep the form's own rhythm inside the scrolling region. */
+.quote-composer-form .composer-scroll-region {
+  gap: 10px;
 }
 
 .quote-composer-form .quoted-post {
@@ -3285,6 +3324,9 @@ a.tab {
   width: min(600px, calc(100vw - 32px));
   box-shadow: var(--shadow);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: var(--dialog-max-height);
 }
 
 .reply-composer-head {
@@ -3296,6 +3338,7 @@ a.tab {
   display: flex;
   flex-direction: column;
   padding: 0 16px 12px;
+  min-height: 0;
 }
 
 /* The post being replied to: avatar column on the left, content on the right,
@@ -3394,11 +3437,23 @@ a.tab {
 .reply-composer-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 16px;
   margin-top: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
+  /* Pinned: only .composer-scroll-region above it scrolls. */
+  flex: none;
+}
+
+/* Everything a reply/quote dialog scrolls — the target post, the draft, its
+   media — so the toolbar and post button below stay put however long the
+   draft grows. */
+.composer-scroll-region {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 /* --- Direct messages ------------------------------------------------------ */

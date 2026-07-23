@@ -2192,27 +2192,29 @@ function Composer({
 
   return (
     <form className="composer" onSubmit={handleSubmit}>
-      <Avatar user={currentUser} />
-      <div className="composer-body">
-        <div className="composer-input">
-          <ComposerHighlight text={content} />
-          <textarea
-            {...fieldProps}
-            onKeyDown={typeahead.onKeyDown}
-            value={content}
-            rows={1}
-            maxLength={280}
-            placeholder="What is happening?"
-            aria-label="Tweet content"
-            autoFocus={autoFocus}
-          />
-          {typeahead.menu}
+      <div className="composer-scroll">
+        <Avatar user={currentUser} />
+        <div className="composer-body">
+          <div className="composer-input">
+            <ComposerHighlight text={content} />
+            <textarea
+              {...fieldProps}
+              onKeyDown={typeahead.onKeyDown}
+              value={content}
+              rows={1}
+              maxLength={280}
+              placeholder="What is happening?"
+              aria-label="Tweet content"
+              autoFocus={autoFocus}
+            />
+            {typeahead.menu}
+          </div>
+          <MediaPreview attachment={media} />
+          {error ? <p className="form-error">{error}</p> : null}
         </div>
-        <MediaPreview attachment={media} />
-        {error ? <p className="form-error">{error}</p> : null}
       </div>
-      {/* Direct grid children so the modal can stretch these rows across the
-          avatar column too, the way Twitter's compose dialog does. */}
+      {/* Siblings of the scrolling text row, not children of it, so the modal
+          can pin them under a draft that has grown past the dialog's height. */}
       <div className="composer-visibility">
         <VisibilityPicker value={visibility} onChange={setVisibility} disabled={posting} />
       </div>

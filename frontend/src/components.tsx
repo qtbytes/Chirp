@@ -1680,22 +1680,24 @@ export function PostEditor({
             }
           }}
         >
-          {currentUser ? <Avatar user={currentUser} /> : <span aria-hidden="true" />}
-          <div className="composer-body">
-            <div className="composer-input">
-              <ComposerHighlight text={value} />
-              <textarea
-                {...fieldProps}
-                onKeyDown={typeahead.onKeyDown}
-                value={value}
-                rows={1}
-                maxLength={maxLength}
-                aria-label="Edit content"
-                autoFocus
-              />
-              {typeahead.menu}
+          <div className="composer-scroll">
+            {currentUser ? <Avatar user={currentUser} /> : <span aria-hidden="true" />}
+            <div className="composer-body">
+              <div className="composer-input">
+                <ComposerHighlight text={value} />
+                <textarea
+                  {...fieldProps}
+                  onKeyDown={typeahead.onKeyDown}
+                  value={value}
+                  rows={1}
+                  maxLength={maxLength}
+                  aria-label="Edit content"
+                  autoFocus
+                />
+                {typeahead.menu}
+              </div>
+              <MediaPreview attachment={media} />
             </div>
-            <MediaPreview attachment={media} />
           </div>
           {visibility != null && onVisibilityChange ? (
             <div className="composer-visibility">
@@ -1864,28 +1866,30 @@ export function QuoteComposer({
           {/* Same shape as the compose dialog: the author's avatar on the
               left, and everything they are writing — comment, attached media,
               the quoted card — stacked in the text column beside it. */}
-          <div className="quote-input-row">
-            {currentUser ? <Avatar user={currentUser} /> : null}
-            <div className="quote-input-body">
-              <div className="composer-input">
-                <ComposerHighlight text={content} />
-                <textarea
-                  {...fieldProps}
-                  onKeyDown={typeahead.onKeyDown}
-                  value={content}
-                  rows={1}
-                  maxLength={280}
-                  placeholder="Add a comment"
-                  aria-label="Quote comment"
-                  autoFocus
-                />
-                {typeahead.menu}
+          <div className="composer-scroll-region">
+            <div className="quote-input-row">
+              {currentUser ? <Avatar user={currentUser} /> : null}
+              <div className="quote-input-body">
+                <div className="composer-input">
+                  <ComposerHighlight text={content} />
+                  <textarea
+                    {...fieldProps}
+                    onKeyDown={typeahead.onKeyDown}
+                    value={content}
+                    rows={1}
+                    maxLength={280}
+                    placeholder="Add a comment"
+                    aria-label="Quote comment"
+                    autoFocus
+                  />
+                  {typeahead.menu}
+                </div>
+                <MediaPreview attachment={media} />
+                <QuotedPostCard post={quoted} preview />
               </div>
-              <MediaPreview attachment={media} />
-              <QuotedPostCard post={quoted} preview />
             </div>
+            {error ? <p className="form-error">{error}</p> : null}
           </div>
-          {error ? <p className="form-error">{error}</p> : null}
           <div className="composer-actions">
             <div className="composer-tools">
               <EmojiPicker onSelect={insertEmoji} />
@@ -2006,59 +2010,61 @@ export function ReplyComposer({
         </div>
 
         <form className="reply-composer-form" onSubmit={handleSubmit}>
-          {/* The post being replied to, with a thread line running into the composer. */}
-          <div className="reply-target">
-            <div className="reply-target-rail">
-              <Avatar user={target.author} />
-              <span className="reply-thread-line" aria-hidden="true" />
-            </div>
-            <div className="reply-target-body">
-              <header className="reply-target-head">
-                <strong>{displayName(target.author)}</strong>
-                <span className="reply-target-handle">@{target.author.username}</span>
-                <span className="reply-target-dot" aria-hidden="true">
-                  ·
-                </span>
-                <time dateTime={target.created_at}>
-                  {formatCompactDate(target.created_at)}
-                </time>
-              </header>
-              {target.content ? (
-                <p className="reply-target-content">
-                  <RichContent text={target.content} />
-                </p>
-              ) : null}
-              {target.media_urls.length > 0 ? (
-                <MediaGallery urls={target.media_urls} alts={target.media_alts} />
-              ) : null}
-              <p className="reply-target-replying">
-                Replying to <span className="reply-mention">@{target.author.username}</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="reply-input-row">
-            {currentUser ? <Avatar user={currentUser} /> : null}
-            <div className="reply-input-body">
-              <div className="composer-input">
-                <ComposerHighlight text={content} />
-                <textarea
-                  {...fieldProps}
-                  onKeyDown={typeahead.onKeyDown}
-                  value={content}
-                  rows={1}
-                  maxLength={1000}
-                  placeholder="Post your reply"
-                  aria-label="Post your reply"
-                  autoFocus
-                />
-                {typeahead.menu}
+          <div className="composer-scroll-region">
+            {/* The post being replied to, with a thread line running into the composer. */}
+            <div className="reply-target">
+              <div className="reply-target-rail">
+                <Avatar user={target.author} />
+                <span className="reply-thread-line" aria-hidden="true" />
               </div>
-              <MediaPreview attachment={media} />
+              <div className="reply-target-body">
+                <header className="reply-target-head">
+                  <strong>{displayName(target.author)}</strong>
+                  <span className="reply-target-handle">@{target.author.username}</span>
+                  <span className="reply-target-dot" aria-hidden="true">
+                    ·
+                  </span>
+                  <time dateTime={target.created_at}>
+                    {formatCompactDate(target.created_at)}
+                  </time>
+                </header>
+                {target.content ? (
+                  <p className="reply-target-content">
+                    <RichContent text={target.content} />
+                  </p>
+                ) : null}
+                {target.media_urls.length > 0 ? (
+                  <MediaGallery urls={target.media_urls} alts={target.media_alts} />
+                ) : null}
+                <p className="reply-target-replying">
+                  Replying to <span className="reply-mention">@{target.author.username}</span>
+                </p>
+              </div>
             </div>
-          </div>
 
-          {error ? <p className="form-error">{error}</p> : null}
+            <div className="reply-input-row">
+              {currentUser ? <Avatar user={currentUser} /> : null}
+              <div className="reply-input-body">
+                <div className="composer-input">
+                  <ComposerHighlight text={content} />
+                  <textarea
+                    {...fieldProps}
+                    onKeyDown={typeahead.onKeyDown}
+                    value={content}
+                    rows={1}
+                    maxLength={1000}
+                    placeholder="Post your reply"
+                    aria-label="Post your reply"
+                    autoFocus
+                  />
+                  {typeahead.menu}
+                </div>
+                <MediaPreview attachment={media} />
+              </div>
+            </div>
+
+            {error ? <p className="form-error">{error}</p> : null}
+          </div>
 
           <div className="reply-composer-actions">
             <div className="composer-tools">
