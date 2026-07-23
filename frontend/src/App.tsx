@@ -94,9 +94,11 @@ import {
   CommentCard,
   ConfirmDialog,
   CurrentUserProvider,
+  MAX_POST_LENGTH,
   MediaButton,
   MediaGallery,
   ComposerHighlight,
+  counterClass,
   useComposerTypeahead,
   MediaPreview,
   PostEditor,
@@ -2152,15 +2154,14 @@ function Composer({
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
   const [visibility, setVisibility] = useState<TweetVisibility>("public");
-  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(content, setContent, 280);
+  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(content, setContent);
   const typeahead = useComposerTypeahead({
     text: content,
     onTextChange: setContent,
-    maxLength: 280,
     fieldRef: fieldProps.ref,
   });
   const media = useMediaAttachment();
-  const remaining = 280 - content.length;
+  const remaining = MAX_POST_LENGTH - content.length;
   const canPost = (content.trim().length > 0 || media.mediaUrls.length > 0) && remaining >= 0;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -2196,13 +2197,12 @@ function Composer({
         <Avatar user={currentUser} />
         <div className="composer-body">
           <div className="composer-input">
-            <ComposerHighlight text={content} />
+            <ComposerHighlight text={content} limit={MAX_POST_LENGTH} />
             <textarea
               {...fieldProps}
               onKeyDown={typeahead.onKeyDown}
               value={content}
               rows={1}
-              maxLength={280}
               placeholder="What is happening?"
               aria-label="Tweet content"
               autoFocus={autoFocus}
@@ -2223,7 +2223,7 @@ function Composer({
           <EmojiPicker onSelect={insertEmoji} />
           <MediaButton attachment={media} />
         </div>
-        <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
+        <span className={counterClass(remaining)}>{remaining}</span>
         <button className="primary-button compact" disabled={posting || media.uploading || !canPost}>
           {posting ? "Posting..." : "Post"}
         </button>

@@ -259,6 +259,14 @@ textarea,
   color: var(--accent);
 }
 
+/* Everything past the composer's limit. The draft stays editable — the wash is
+   the only signal, alongside the negative counter — so this is a background,
+   not a text color: a URL inside the overflow keeps reading as a URL. */
+.composer-highlight-over {
+  background: rgba(244, 33, 46, 0.35);
+  border-radius: 2px;
+}
+
 /* The @mention / #hashtag suggestion menu, anchored under the caret's line.
    Rendered in a portal with viewport-fixed coordinates (width/max-height come
    inline from the hook) so a dialog composer's overflow can never clip it;
@@ -1264,7 +1272,8 @@ button.rail-link:disabled:hover {
   padding: 24px 0;
 }
 
-.counter.warn {
+.counter.warn,
+.counter.over {
   color: var(--danger);
   font-weight: 800;
 }

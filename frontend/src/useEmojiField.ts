@@ -4,13 +4,18 @@ type Field = HTMLInputElement | HTMLTextAreaElement;
 
 // Shared behavior for a text field that accepts emoji from the EmojiPicker.
 // Tracks the caret while the field has focus so an emoji can be inserted at the
-// cursor even after focus moves to the picker, respecting maxLength. Spread the
-// returned `fieldProps` onto the <input>/<textarea> and pass `insertEmoji` to
+// cursor even after focus moves to the picker. Spread the returned `fieldProps`
+// onto the <input>/<textarea> and pass `insertEmoji` to
 // <EmojiPicker onSelect={...} />.
+//
+// `maxLength` is for fields with a *hard* cap (the field also carries the
+// attribute), where an emoji that would overflow is simply dropped. Post
+// composers leave it off: they let the draft run past their limit and mark the
+// overflow red instead.
 export function useEmojiField<T extends Field>(
   value: string,
   onValueChange: (next: string) => void,
-  maxLength: number,
+  maxLength?: number,
 ) {
   const ref = useRef<T>(null);
   const caretRef = useRef<{ start: number; end: number } | null>(null);
@@ -53,7 +58,7 @@ export function useEmojiField<T extends Field>(
     // picker, so use the caret captured while the field last had focus.
     const { start, end } = caretRef.current ?? { start: value.length, end: value.length };
     const next = value.slice(0, start) + emoji + value.slice(end);
-    if (next.length > maxLength) {
+    if (maxLength !== undefined && next.length > maxLength) {
       return;
     }
     const caret = start + emoji.length;

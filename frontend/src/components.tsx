@@ -1,6 +1,7 @@
 import {
   FormEvent,
   KeyboardEvent,
+  ReactNode,
   RefObject,
   TouchEvent,
   createContext,
@@ -198,25 +199,75 @@ function tokenizeContent(text: string): ContentToken[] {
 }
 
 /**
+ * The character budget every post-shaped draft shares — tweets, quote comments
+ * and their edits. The backend enforces the same number.
+ */
+export const MAX_POST_LENGTH = 280;
+
+/**
+ * The composer's remaining-characters readout: muted normally, amber as the
+ * limit nears, red once the draft is over it (where the number goes negative
+ * and reads as "this many characters too many").
+ */
+export function counterClass(remaining: number): string {
+  if (remaining < 0) return "counter over";
+  return remaining < 30 ? "counter warn" : "counter";
+}
+
+function highlightPiece(
+  value: string,
+  entity: boolean,
+  over: boolean,
+  key: string,
+): ReactNode {
+  const className = [
+    entity ? "composer-highlight-url" : "",
+    over ? "composer-highlight-over" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return className ? (
+    <span key={key} className={className}>
+      {value}
+    </span>
+  ) : (
+    value
+  );
+}
+
+/**
  * Twitter-style entity coloring for a draft being typed: URLs, #hashtags and
  * @mentions. Rendered as a backdrop layer inside `.composer-input`, behind a
  * transparent-text <textarea>, so entities read highlighted while staying
  * plain editable text — not clickable.
  * Both layers must share identical text metrics (see the CSS) or they drift.
+ *
+ * With `limit`, everything past that many characters also gets a red wash —
+ * the draft stays editable past the limit, it just can't be posted, exactly
+ * like Twitter's over-length composer.
  */
-export function ComposerHighlight({ text }: { text: string }) {
+export function ComposerHighlight({ text, limit }: { text: string; limit?: number }) {
   const tokens = useMemo(() => tokenizeContent(text), [text]);
+  const overFrom = limit ?? Number.POSITIVE_INFINITY;
+  const pieces: ReactNode[] = [];
+  let offset = 0;
+  tokens.forEach((token, index) => {
+    const entity = token.type !== "text";
+    const start = offset;
+    offset += token.value.length;
+    if (start >= overFrom || offset <= overFrom) {
+      // Wholly inside or wholly past the limit — one piece.
+      pieces.push(highlightPiece(token.value, entity, start >= overFrom, `${index}`));
+      return;
+    }
+    // The limit falls inside this token: split it so only the tail reads red.
+    const cut = overFrom - start;
+    pieces.push(highlightPiece(token.value.slice(0, cut), entity, false, `${index}a`));
+    pieces.push(highlightPiece(token.value.slice(cut), entity, true, `${index}b`));
+  });
   return (
     <div className="composer-highlight" aria-hidden="true">
-      {tokens.map((token, index) =>
-        token.type === "text" ? (
-          token.value
-        ) : (
-          <span key={index} className="composer-highlight-url">
-            {token.value}
-          </span>
-        ),
-      )}
+      {pieces}
     </div>
   );
 }
@@ -292,12 +343,10 @@ function rangeAtCharOffset(root: Element, offset: number): Range | null {
 export function useComposerTypeahead({
   text,
   onTextChange,
-  maxLength,
   fieldRef,
 }: {
   text: string;
   onTextChange: (next: string) => void;
-  maxLength: number;
   fieldRef: RefObject<HTMLTextAreaElement | null>;
 }) {
   const [entity, setEntity] = useState<TypeaheadEntity | null>(null);
@@ -471,19 +520,12 @@ export function useComposerTypeahead({
       const insert = (entity.type === "mention" ? "@" : "#") + body;
       const rest = text.slice(entity.end);
       // A trailing space ends the entity and keeps typing flowing, unless one
-      // is already there — or the draft has no room left for it.
+      // is already there.
       const spaceFollows = rest.startsWith(" ");
-      let replacement = spaceFollows ? insert : `${insert} `;
-      let next = text.slice(0, entity.start) + replacement + rest;
-      if (next.length > maxLength && replacement.endsWith(" ")) {
-        replacement = insert;
-        next = text.slice(0, entity.start) + replacement + rest;
-      }
-      if (next.length > maxLength) {
-        return;
-      }
+      const replacement = spaceFollows ? insert : `${insert} `;
+      const next = text.slice(0, entity.start) + replacement + rest;
       // Land after the space that now follows the entity, whichever branch
-      // provided it; in the no-room fallback there is none, so stay put.
+      // provided it.
       const caret =
         entity.start + replacement.length + (spaceFollows ? 1 : 0);
       onTextChange(next);
@@ -497,7 +539,7 @@ export function useComposerTypeahead({
         }
       });
     },
-    [entity, text, maxLength, onTextChange, fieldRef],
+    [entity, text, onTextChange, fieldRef],
   );
 
   const acceptCurrent = useCallback(() => {
@@ -1621,20 +1663,18 @@ export function PostEditor({
   const currentUser = useCurrentUser();
   const [value, setValue] = useState(initialContent);
   const media = useMediaAttachment(initialMedia, initialAlts);
-  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
-    value,
-    setValue,
-    maxLength,
-  );
+  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(value, setValue);
   const typeahead = useComposerTypeahead({
     text: value,
     onTextChange: setValue,
-    maxLength,
     fieldRef: fieldProps.ref,
   });
   const remaining = maxLength - value.length;
   const canSave =
-    (value.trim().length > 0 || media.mediaUrls.length > 0) && !saving && !media.uploading;
+    (value.trim().length > 0 || media.mediaUrls.length > 0) &&
+    remaining >= 0 &&
+    !saving &&
+    !media.uploading;
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
@@ -1684,13 +1724,12 @@ export function PostEditor({
             {currentUser ? <Avatar user={currentUser} /> : <span aria-hidden="true" />}
             <div className="composer-body">
               <div className="composer-input">
-                <ComposerHighlight text={value} />
+                <ComposerHighlight text={value} limit={maxLength} />
                 <textarea
                   {...fieldProps}
                   onKeyDown={typeahead.onKeyDown}
                   value={value}
                   rows={1}
-                  maxLength={maxLength}
                   aria-label="Edit content"
                   autoFocus
                 />
@@ -1713,7 +1752,7 @@ export function PostEditor({
               <EmojiPicker onSelect={insertEmoji} />
               <MediaButton attachment={media} />
             </div>
-            <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
+            <span className={counterClass(remaining)}>{remaining}</span>
             <button className="primary-button compact" disabled={!canSave}>
               {saving ? "Saving…" : "Save"}
             </button>
@@ -1795,21 +1834,16 @@ export function QuoteComposer({
 }) {
   const currentUser = useCurrentUser();
   const [content, setContent] = useState("");
-  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
-    content,
-    setContent,
-    280,
-  );
+  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(content, setContent);
   const typeahead = useComposerTypeahead({
     text: content,
     onTextChange: setContent,
-    maxLength: 280,
     fieldRef: fieldProps.ref,
   });
   const media = useMediaAttachment();
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
-  const remaining = 280 - content.length;
+  const remaining = MAX_POST_LENGTH - content.length;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1871,13 +1905,12 @@ export function QuoteComposer({
               {currentUser ? <Avatar user={currentUser} /> : null}
               <div className="quote-input-body">
                 <div className="composer-input">
-                  <ComposerHighlight text={content} />
+                  <ComposerHighlight text={content} limit={MAX_POST_LENGTH} />
                   <textarea
                     {...fieldProps}
                     onKeyDown={typeahead.onKeyDown}
                     value={content}
                     rows={1}
-                    maxLength={280}
                     placeholder="Add a comment"
                     aria-label="Quote comment"
                     autoFocus
@@ -1895,7 +1928,7 @@ export function QuoteComposer({
               <EmojiPicker onSelect={insertEmoji} />
               <MediaButton attachment={media} />
             </div>
-            <span className={remaining < 30 ? "counter warn" : "counter"}>{remaining}</span>
+            <span className={counterClass(remaining)}>{remaining}</span>
             <button
               className="primary-button compact"
               disabled={posting || remaining < 0 || media.uploading}
@@ -1939,22 +1972,19 @@ export function ReplyComposer({
 }) {
   const currentUser = useCurrentUser();
   const [content, setContent] = useState("");
-  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(
-    content,
-    setContent,
-    1000,
-  );
+  const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(content, setContent);
   const typeahead = useComposerTypeahead({
     text: content,
     onTextChange: setContent,
-    maxLength: 1000,
     fieldRef: fieldProps.ref,
   });
   const media = useMediaAttachment();
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
 
+  const remaining = 1000 - content.length;
   const empty = !content.trim() && media.mediaUrls.length === 0;
+  const canReply = !posting && !empty && remaining >= 0 && !media.uploading;
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
@@ -1966,7 +1996,7 @@ export function ReplyComposer({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (posting || empty || media.uploading) {
+    if (!canReply) {
       return;
     }
     setPosting(true);
@@ -2046,13 +2076,12 @@ export function ReplyComposer({
               {currentUser ? <Avatar user={currentUser} /> : null}
               <div className="reply-input-body">
                 <div className="composer-input">
-                  <ComposerHighlight text={content} />
+                  <ComposerHighlight text={content} limit={1000} />
                   <textarea
                     {...fieldProps}
                     onKeyDown={typeahead.onKeyDown}
                     value={content}
                     rows={1}
-                    maxLength={1000}
                     placeholder="Post your reply"
                     aria-label="Post your reply"
                     autoFocus
@@ -2071,10 +2100,8 @@ export function ReplyComposer({
               <MediaButton attachment={media} />
               <EmojiPicker onSelect={insertEmoji} />
             </div>
-            <button
-              className="primary-button compact"
-              disabled={posting || empty || media.uploading}
-            >
+            <span className={counterClass(remaining)}>{remaining}</span>
+            <button className="primary-button compact" disabled={!canReply}>
               {posting ? "Replying…" : "Reply"}
             </button>
           </div>
