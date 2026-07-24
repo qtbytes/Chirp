@@ -2217,10 +2217,10 @@ function Composer({
       </div>
       {/* Siblings of the scrolling text row, not children of it, so the modal
           can pin them under a draft that has grown past the dialog's height. */}
+      {remaining < 0 ? <ComposerLimitNotice postLength={postLength} /> : null}
       <div className="composer-visibility">
         <VisibilityPicker value={visibility} onChange={setVisibility} disabled={posting} />
       </div>
-      {remaining < 0 ? <ComposerLimitNotice postLength={postLength} /> : null}
       <div className="composer-actions">
         <div className="composer-tools">
           <EmojiPicker onSelect={insertEmoji} />

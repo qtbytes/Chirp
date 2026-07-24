@@ -1811,6 +1811,7 @@ export function PostEditor({
               <MediaPreview attachment={media} />
             </div>
           </div>
+          {remaining < 0 ? <ComposerLimitNotice postLength={postLength} /> : null}
           {visibility != null && onVisibilityChange ? (
             <div className="composer-visibility">
               <VisibilityPicker
@@ -1820,7 +1821,6 @@ export function PostEditor({
               />
             </div>
           ) : null}
-          {remaining < 0 ? <ComposerLimitNotice postLength={postLength} /> : null}
           <div className="composer-actions">
             <div className="composer-tools">
               <EmojiPicker onSelect={insertEmoji} />
