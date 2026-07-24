@@ -94,12 +94,13 @@ import {
   CommentCard,
   ConfirmDialog,
   CurrentUserProvider,
-  MAX_POST_LENGTH,
   MediaButton,
   MediaGallery,
   ComposerHighlight,
+  ComposerLimitNotice,
   counterClass,
   useComposerTypeahead,
+  usePostLength,
   MediaPreview,
   PostEditor,
   PostMenu,
@@ -2161,7 +2162,8 @@ function Composer({
     fieldRef: fieldProps.ref,
   });
   const media = useMediaAttachment();
-  const remaining = MAX_POST_LENGTH - content.length;
+  const postLength = usePostLength();
+  const remaining = postLength.limit - content.length;
   const canPost = (content.trim().length > 0 || media.mediaUrls.length > 0) && remaining >= 0;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -2197,7 +2199,7 @@ function Composer({
         <Avatar user={currentUser} />
         <div className="composer-body">
           <div className="composer-input">
-            <ComposerHighlight text={content} limit={MAX_POST_LENGTH} />
+            <ComposerHighlight text={content} limit={postLength.limit} />
             <textarea
               {...fieldProps}
               onKeyDown={typeahead.onKeyDown}
@@ -2218,6 +2220,7 @@ function Composer({
       <div className="composer-visibility">
         <VisibilityPicker value={visibility} onChange={setVisibility} disabled={posting} />
       </div>
+      {remaining < 0 ? <ComposerLimitNotice postLength={postLength} /> : null}
       <div className="composer-actions">
         <div className="composer-tools">
           <EmojiPicker onSelect={insertEmoji} />
@@ -2458,7 +2461,6 @@ function TweetDetail({
             initialContent={tweet.content}
             initialMedia={tweet.media_urls}
             initialAlts={tweet.media_alts}
-            maxLength={MAX_POST_LENGTH}
             saving={savingEdit}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}

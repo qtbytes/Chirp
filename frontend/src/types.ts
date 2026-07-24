@@ -1,3 +1,32 @@
+/**
+ * How long the signed-in user's posts may be, and where that number came from.
+ *
+ * The composer counts down from `limit`; the breakdown is what lets it explain
+ * how to raise it instead of just refusing. Mirrors PostLengthOut on the
+ * backend (see backend/app/services/post_limits.py for the rule).
+ */
+export type PostLength = {
+  /** Characters this user may post right now: base + the two bonuses. */
+  limit: number;
+  /** What every account starts with, confirmed email or not. */
+  base: number;
+  /** Earned by confirming an email address. */
+  verified_bonus: number;
+  /** Earned at 100/month over the first year. */
+  tenure_bonus: number;
+  /** Whole months since registration, capped at the 12 the promo counts. */
+  tenure_months: number;
+  /**
+   * What `limit` would become if this user confirmed an email today (equal to
+   * `limit` when they already have). The size of the prize is the server's
+   * fact to state, not one the composer reconstructs.
+   */
+  limit_if_email_verified: number;
+  /** The ceiling no account can pass, however the bonuses stack. */
+  global_max: number;
+  email_verified: boolean;
+};
+
 export type UserSummary = {
   id: number;
   username: string;
@@ -13,6 +42,11 @@ export type UserSummary = {
   is_moderator?: boolean;
   /** True while a moderator suspension stands. Public, like Twitter's. */
   is_suspended?: boolean;
+  /**
+   * Owner-only too, and for the same reason: how long someone else may write is
+   * nobody's business. Absent on tweet authors.
+   */
+  post_length?: PostLength;
 };
 
 export type UserDiscovery = UserSummary & {

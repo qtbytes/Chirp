@@ -69,6 +69,7 @@ import type {
   Comment,
   CommentStats,
   LinkPreview,
+  PostLength,
   QuotedPost,
   ReportReason,
   TrendingHashtag,
@@ -199,10 +200,34 @@ function tokenizeContent(text: string): ContentToken[] {
 }
 
 /**
- * The character budget every post-shaped draft shares — tweets, quote comments,
- * replies and their edits. The backend enforces the same number.
+ * What an account can post before it has earned anything. The real limit is
+ * per-user and comes from the server (see `usePostLength`); this is the floor
+ * it starts from, and the fallback while `/auth/me` is still in flight.
  */
-export const MAX_POST_LENGTH = 280;
+export const BASE_POST_LENGTH = 280;
+
+const DEFAULT_POST_LENGTH: PostLength = {
+  limit: BASE_POST_LENGTH,
+  base: BASE_POST_LENGTH,
+  verified_bonus: 0,
+  tenure_bonus: 0,
+  tenure_months: 0,
+  limit_if_email_verified: BASE_POST_LENGTH,
+  global_max: 1480,
+  email_verified: false,
+};
+
+/**
+ * The signed-in user's post-length allowance, for the composer to count down
+ * from and to explain when a draft runs over it.
+ *
+ * Falls back to the base limit for a signed-out or not-yet-loaded user — the
+ * server enforces the real number either way, so guessing low is safe.
+ */
+export function usePostLength(): PostLength {
+  const currentUser = useCurrentUser();
+  return currentUser?.post_length ?? DEFAULT_POST_LENGTH;
+}
 
 /**
  * The composer's remaining-characters readout: muted normally, amber as the
@@ -212,6 +237,52 @@ export const MAX_POST_LENGTH = 280;
 export function counterClass(remaining: number): string {
   if (remaining < 0) return "counter over";
   return remaining < 30 ? "counter warn" : "counter";
+}
+
+/**
+ * Shown under an over-length draft: what the user can do about it.
+ *
+ * Three states, in the order a user meets them — confirm your email for the
+ * flat bonus; wait for the monthly one; or you're at the ceiling and the only
+ * way through is to split the post up. Rendered only while the draft is
+ * actually over, so it reads as an answer to the red text rather than nagging.
+ */
+export function ComposerLimitNotice({ postLength }: { postLength: PostLength }) {
+  // The ceiling is checked before anything else: an unverified user who reached
+  // it on tenure alone would gain nothing by confirming, and offering it anyway
+  // would be a lie.
+  if (postLength.limit >= postLength.global_max) {
+    return (
+      <div className="composer-limit-notice">
+        <p>
+          {postLength.global_max} characters is as long as a post gets. Try splitting
+          this into a thread — post the first part, then reply to it with the rest.
+        </p>
+      </div>
+    );
+  }
+  if (!postLength.email_verified) {
+    // The one bonus a user can grant themselves right now, so it gets the CTA.
+    return (
+      <div className="composer-limit-notice">
+        <p>
+          Confirm your email address to write posts up to{" "}
+          {postLength.limit_if_email_verified} characters.
+        </p>
+        <Link to="/settings" className="composer-limit-action">
+          Confirm your email
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <div className="composer-limit-notice">
+      <p>
+        You can write {postLength.limit} characters, and that grows by 100 every
+        month. For now, try splitting this into a thread.
+      </p>
+    </div>
+  );
 }
 
 function highlightPiece(
@@ -1641,7 +1712,6 @@ export function PostEditor({
   initialContent,
   initialMedia = [],
   initialAlts = [],
-  maxLength,
   saving,
   onSave,
   onCancel,
@@ -1651,7 +1721,6 @@ export function PostEditor({
   initialContent: string;
   initialMedia?: string[];
   initialAlts?: string[];
-  maxLength: number;
   saving: boolean;
   onSave: (content: string, mediaUrls: string[], mediaAlts: string[]) => void;
   onCancel: () => void;
@@ -1661,6 +1730,10 @@ export function PostEditor({
   onVisibilityChange?: (value: TweetVisibility) => void;
 }) {
   const currentUser = useCurrentUser();
+  // Editing spends the same allowance as posting, so a limit that has since
+  // gone *down* can never be dodged by editing an old post into a longer one.
+  const postLength = usePostLength();
+  const maxLength = postLength.limit;
   const [value, setValue] = useState(initialContent);
   const media = useMediaAttachment(initialMedia, initialAlts);
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(value, setValue);
@@ -1747,6 +1820,7 @@ export function PostEditor({
               />
             </div>
           ) : null}
+          {remaining < 0 ? <ComposerLimitNotice postLength={postLength} /> : null}
           <div className="composer-actions">
             <div className="composer-tools">
               <EmojiPicker onSelect={insertEmoji} />
@@ -1843,7 +1917,8 @@ export function QuoteComposer({
   const media = useMediaAttachment();
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
-  const remaining = MAX_POST_LENGTH - content.length;
+  const postLength = usePostLength();
+  const remaining = postLength.limit - content.length;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1905,7 +1980,7 @@ export function QuoteComposer({
               {currentUser ? <Avatar user={currentUser} /> : null}
               <div className="quote-input-body">
                 <div className="composer-input">
-                  <ComposerHighlight text={content} limit={MAX_POST_LENGTH} />
+                  <ComposerHighlight text={content} limit={postLength.limit} />
                   <textarea
                     {...fieldProps}
                     onKeyDown={typeahead.onKeyDown}
@@ -1923,6 +1998,7 @@ export function QuoteComposer({
             </div>
             {error ? <p className="form-error">{error}</p> : null}
           </div>
+          {remaining < 0 ? <ComposerLimitNotice postLength={postLength} /> : null}
           <div className="composer-actions">
             <div className="composer-tools">
               <EmojiPicker onSelect={insertEmoji} />
@@ -1982,7 +2058,8 @@ export function ReplyComposer({
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
 
-  const remaining = MAX_POST_LENGTH - content.length;
+  const postLength = usePostLength();
+  const remaining = postLength.limit - content.length;
   const empty = !content.trim() && media.mediaUrls.length === 0;
   const canReply = !posting && !empty && remaining >= 0 && !media.uploading;
 
@@ -2076,7 +2153,7 @@ export function ReplyComposer({
               {currentUser ? <Avatar user={currentUser} /> : null}
               <div className="reply-input-body">
                 <div className="composer-input">
-                  <ComposerHighlight text={content} limit={MAX_POST_LENGTH} />
+                  <ComposerHighlight text={content} limit={postLength.limit} />
                   <textarea
                     {...fieldProps}
                     onKeyDown={typeahead.onKeyDown}
@@ -2094,6 +2171,8 @@ export function ReplyComposer({
 
             {error ? <p className="form-error">{error}</p> : null}
           </div>
+
+          {remaining < 0 ? <ComposerLimitNotice postLength={postLength} /> : null}
 
           <div className="reply-composer-actions">
             <div className="composer-tools">
@@ -2627,7 +2706,6 @@ export function TweetCard({
             initialContent={tweet.content}
             initialMedia={tweet.media_urls}
             initialAlts={tweet.media_alts}
-            maxLength={MAX_POST_LENGTH}
             saving={saving}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}
@@ -2956,7 +3034,6 @@ export function CommentCard({
             initialContent={localComment.content}
             initialMedia={localComment.media_urls}
             initialAlts={localComment.media_alts}
-            maxLength={MAX_POST_LENGTH}
             saving={saving}
             onSave={saveEdit}
             onCancel={() => setEditing(false)}

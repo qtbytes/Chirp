@@ -267,6 +267,35 @@ textarea,
   border-radius: 2px;
 }
 
+/* Shown under an over-length draft: how to earn a longer limit, or -- once
+   there is no more to earn -- what to do instead. Tinted with the accent rather
+   than the danger red: the red text above already says something is wrong, and
+   this is the way out of it. */
+.composer-limit-notice {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: none;
+  margin: 4px 0 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.composer-limit-notice p {
+  margin: 0;
+}
+
+.composer-limit-notice .composer-limit-action {
+  align-self: flex-start;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
 /* The @mention / #hashtag suggestion menu, anchored under the caret's line.
    Rendered in a portal with viewport-fixed coordinates (width/max-height come
    inline from the hook) so a dialog composer's overflow can never clip it;
