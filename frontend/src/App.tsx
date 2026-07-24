@@ -2172,6 +2172,7 @@ function CommentDetailRoute() {
         currentUserId={currentUser.id}
         onChanged={() => void reload()}
         onReplyCreated={() => void reload()}
+        focused
       />
       <section className="comment-list" aria-label="Replies">
         {loadingReplies ? (

@@ -2937,6 +2937,7 @@ export function CommentCard({
   currentUserId,
   depth = 0,
   onOpen,
+  focused = false,
 }: {
   comment: Comment;
   onChanged: () => void;
@@ -2944,6 +2945,13 @@ export function CommentCard({
   currentUserId: number;
   depth?: number;
   onOpen?: () => void;
+  /**
+   * True for the one comment a detail page is *about*, as opposed to the
+   * replies listed under it. Such a comment is shown whole: the reader
+   * navigated here to read it, which is the same reason TweetDetail does not
+   * clamp its tweet.
+   */
+  focused?: boolean;
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [localComment, setLocalComment] = useState(comment);
@@ -3152,7 +3160,7 @@ export function CommentCard({
         <PostBody
           text={localComment.content}
           enablePreview={localComment.media_urls.length === 0}
-          clamp
+          clamp={!focused}
         />
         {editing ? (
           <PostEditor
