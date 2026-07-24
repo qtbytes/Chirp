@@ -98,6 +98,25 @@ class UserSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PostLengthOut(BaseModel):
+    """
+    How long the caller's posts may be, and where that number came from.
+
+    The breakdown is what lets the composer explain a rejection ("confirm your
+    email for another 1000") instead of just refusing, so every part of the sum
+    is sent, not only the total. See services/post_limits.py.
+    """
+
+    limit: int
+    base: int
+    verified_bonus: int
+    tenure_bonus: int
+    tenure_months: int
+    limit_if_email_verified: int
+    global_max: int
+    email_verified: bool
+
+
 class CurrentUserOut(UserSummary):
     """
     The caller's own record, as register/login/me return it.
@@ -105,10 +124,34 @@ class CurrentUserOut(UserSummary):
     Extends ``UserSummary`` with ``is_moderator`` so the client can gate the
     moderation UI. Only these self-describing endpoints use it -- the flag must
     not ride along on tweet authors, where it would make the moderator roster
-    browsable.
+    browsable. ``post_length`` is owner-only for the same reason: how long
+    someone else may write is nobody's business.
     """
 
     is_moderator: bool = False
+    post_length: PostLengthOut | None = None
+
+    @classmethod
+    def from_user(cls, user: object) -> "CurrentUserOut":
+        """Build the caller's record, including their current post-length allowance."""
+        # Imported here: post_limits reads the ORM model, which imports nothing
+        # from the schema layer, and keeping the import local documents that this
+        # is the only place the two meet.
+        from app.services.post_limits import post_length_allowance
+
+        record = cls.model_validate(user)
+        allowance = post_length_allowance(user)
+        record.post_length = PostLengthOut(
+            limit=allowance.limit,
+            base=allowance.base,
+            verified_bonus=allowance.verified_bonus,
+            tenure_bonus=allowance.tenure_bonus,
+            tenure_months=allowance.tenure_months,
+            limit_if_email_verified=allowance.limit_if_email_verified,
+            global_max=allowance.global_max,
+            email_verified=allowance.email_verified,
+        )
+        return record
 
 
 class UserLogin(BaseModel):

@@ -8,11 +8,15 @@ from app.schemas.media import (
     validate_media_urls,
 )
 from app.schemas.user import UserSummary
+from app.services.post_limits import GLOBAL_MAX_POST_LENGTH
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TweetCreate(BaseModel):
-    content: str = Field(default="", max_length=280)
+    # The ceiling no account can exceed. The caller's own -- lower -- limit
+    # depends on their email and tenure, which a schema constant cannot express,
+    # so the route checks it (see services/post_limits.py).
+    content: str = Field(default="", max_length=GLOBAL_MAX_POST_LENGTH)
     media_urls: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
     # Per-image alt text, parallel to ``media_urls``; shorter lists pad with "".
     media_alts: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)

@@ -6,13 +6,14 @@ from app.schemas.media import (
     validate_media_urls,
 )
 from app.schemas.user import UserSummary
+from app.services.post_limits import GLOBAL_MAX_POST_LENGTH
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class CommentCreate(BaseModel):
-    # Same budget as a tweet: a reply is just a post, and the composer counts
-    # down from the same 280.
-    content: str = Field(default="", max_length=280)
+    # Same budget as a tweet -- a reply is just a post -- including the per-user
+    # allowance the route enforces on top of this ceiling.
+    content: str = Field(default="", max_length=GLOBAL_MAX_POST_LENGTH)
     media_urls: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)
     # Per-image alt text, parallel to ``media_urls``; shorter lists pad with "".
     media_alts: list[str] = Field(default_factory=list, max_length=MAX_MEDIA_ITEMS)

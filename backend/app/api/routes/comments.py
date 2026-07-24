@@ -11,6 +11,7 @@ from app.repositories import (
 from app.repositories.visibility import can_view_thread
 from app.schemas.comment import CommentCreate, CommentOut, CommentStatsOut
 from app.services import media_service
+from app.services.post_limits import enforce_post_length
 from app.schemas.user import UserSummary
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -221,6 +222,7 @@ def reply_to_comment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="comment not found",
         )
+    enforce_post_length(db, current_user_id, payload.content)
 
     try:
         comment, author = engagement_repository.create_comment(
@@ -270,6 +272,7 @@ def edit_comment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="comment not found"
         )
+    enforce_post_length(db, current_user_id, payload.content)
     try:
         comment = post_repository.update_post(
             db,

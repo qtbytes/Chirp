@@ -4,6 +4,7 @@ from app.db.database import get_db
 from app.repositories import block_repository, engagement_repository
 from app.schemas.comment import CommentCreate, CommentOut
 from app.schemas.user import UserSummary
+from app.services.post_limits import enforce_post_length
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -136,6 +137,7 @@ def create_comment(
     - Validate the tweet and user exist.
     - Return comment + author together to avoid extra lookups later.
     """
+    enforce_post_length(db, current_user_id, payload.content)
     try:
         comment, author = engagement_repository.create_comment(
             db,

@@ -113,7 +113,7 @@ def register(
         logger.exception("could not send a verification email to user %s", user.id)
 
     _set_session_cookie(response, user.id, request)
-    return CurrentUserOut.model_validate(user)
+    return CurrentUserOut.from_user(user)
 
 
 @router.post(
@@ -163,7 +163,7 @@ def login(
         )
 
     _set_session_cookie(response, user.id, request)
-    return CurrentUserOut.model_validate(user)
+    return CurrentUserOut.from_user(user)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -689,7 +689,7 @@ def me(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="session user not found",
         )
-    return CurrentUserOut.model_validate(user)
+    return CurrentUserOut.from_user(user)
 
 
 # A user agent is a client-supplied string; cap it so a hostile client cannot

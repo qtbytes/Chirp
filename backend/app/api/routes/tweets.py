@@ -20,6 +20,7 @@ from app.repositories.visibility import can_view_post, can_view_thread
 from app.schemas.tweet import TweetCreate, TweetOut, TweetStatsOut
 from app.schemas.user import UserSummary
 from app.services import media_service
+from app.services.post_limits import enforce_post_length
 from app.services.serializers import serialize_quoted_post
 from app.services.timeline_service import TimelineService, enqueue_feed_fanout_job
 
@@ -161,6 +162,7 @@ def create_tweet(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="user not found",
         )
+    enforce_post_length(db, current_user_id, payload.content)
 
     try:
         tweet = tweet_repository.create_tweet(
@@ -280,6 +282,7 @@ def edit_tweet(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="tweet not found"
         )
+    enforce_post_length(db, current_user_id, payload.content)
     try:
         tweet = post_repository.update_post(
             db,
