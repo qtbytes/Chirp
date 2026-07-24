@@ -185,6 +185,14 @@ button {
   gap: 18px;
 }
 
+/* A field plus the hint that explains it. The form's own 18px rhythm would
+   leave that hint equidistant between two inputs, reading as a note on
+   whichever one the eye landed on; grouping them holds it against its own. */
+.auth-field {
+  display: grid;
+  gap: 8px;
+}
+
 .auth-form span {
   color: var(--muted);
   font-size: 14px;

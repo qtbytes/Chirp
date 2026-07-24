@@ -503,18 +503,29 @@ function AuthScreen({
             />
           </label>
           {mode === "register" ? (
-            <label>
-              <span>
-                Email <span className="label-optional">(optional)</span>
-              </span>
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                maxLength={254}
-                autoComplete="email"
-              />
-            </label>
+            <div className="auth-field">
+              <label>
+                <span>
+                  Email <span className="label-optional">(optional)</span>
+                </span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  maxLength={254}
+                  autoComplete="email"
+                  aria-describedby="email-hint"
+                />
+              </label>
+              {/* Sits with the field it is about, and names its own subject: as
+                  a note at the foot of the form it read as if "it" were the
+                  password directly above it. */}
+              <p className="form-hint" id="email-hint">
+                Confirming an address raises your posts from {BASE_POST_LENGTH} to{" "}
+                {VERIFIED_EMAIL_POST_LENGTH} characters, and it is the only way to
+                reset a forgotten password. We'll send a link.
+              </p>
+            </div>
           ) : null}
           <label>
             <span>Password</span>
@@ -528,14 +539,6 @@ function AuthScreen({
               required
             />
           </label>
-          {mode === "register" ? (
-            <p className="form-hint">
-              Add one and we'll send a link to confirm it. A confirmed address
-              raises your posts from {BASE_POST_LENGTH} to{" "}
-              {VERIFIED_EMAIL_POST_LENGTH} characters, and it is the only way to
-              reset a forgotten password.
-            </p>
-          ) : null}
           {error ? <p className="form-error">{error}</p> : null}
           <button className="primary-button" disabled={submitting}>
             {submitting ? "Working..." : mode === "login" ? "Log in" : "Create account"}
