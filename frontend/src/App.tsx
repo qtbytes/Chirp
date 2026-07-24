@@ -25,6 +25,8 @@ import {
   AtSign,
   BarChart2,
   Bell,
+  Eye,
+  EyeOff,
   Feather,
   Home,
   Heart,
@@ -460,12 +462,34 @@ function AuthScreen({
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  // Only after the field has been left alone: complaining "doesn't match" at the
+  // first keystroke of a password still being typed is noise, not help.
+  const [confirmBlurred, setConfirmBlurred] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
 
+  const confirming = mode === "register";
+  const passwordsMatch = password === confirmPassword;
+  // Shown under the field once it has been blurred, and withdrawn the moment
+  // the two agree -- so a correction is confirmed as it is typed.
+  const showMismatch = confirming && confirmBlurred && !passwordsMatch;
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    // A typo here is not recoverable for an account with no email address:
+    // change-password and change-email both require the current password, and
+    // forgot-password only mails a confirmed one. Caught before the request,
+    // so the account is never created with a password the user cannot repeat.
+    if (confirming && !passwordsMatch) {
+      setConfirmBlurred(true);
+      setError("");
+      return;
+    }
+
     setSubmitting(true);
     setError("");
 
@@ -527,18 +551,60 @@ function AuthScreen({
               </p>
             </div>
           ) : null}
-          <label>
-            <span>Password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              minLength={8}
-              maxLength={128}
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              required
-            />
-          </label>
+          {/* The reveal button is a sibling of the label, not a child of it:
+              inside, its own name joins the label's, and the input announces
+              itself as "Password Show password". It is positioned from the
+              bottom so it centres on the input whatever the label above does. */}
+          <div className="password-field">
+            <label>
+              <span>Password</span>
+              <input
+                type={revealed ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                minLength={8}
+                maxLength={128}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                required
+              />
+            </label>
+            {/* One control for both password fields: revealing to check a typo
+                is pointless if the copy you are checking against stays hidden.
+                It catches the mistakes a confirm field cannot -- the same typo
+                made twice, or the same clipboard pasted into both. */}
+            <button
+              type="button"
+              className="password-reveal"
+              onClick={() => setRevealed((value) => !value)}
+              aria-label={revealed ? "Hide password" : "Show password"}
+              aria-pressed={revealed}
+            >
+              {revealed ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+          {confirming ? (
+            <div className="auth-field">
+              <label>
+                <span>Confirm password</span>
+                <input
+                  type={revealed ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  onBlur={() => setConfirmBlurred(true)}
+                  maxLength={128}
+                  autoComplete="new-password"
+                  aria-invalid={showMismatch}
+                  aria-describedby={showMismatch ? "confirm-error" : undefined}
+                  required
+                />
+              </label>
+              {showMismatch ? (
+                <p className="form-error" id="confirm-error">
+                  Those passwords don't match.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {error ? <p className="form-error">{error}</p> : null}
           <button className="primary-button" disabled={submitting}>
             {submitting ? "Working..." : mode === "login" ? "Log in" : "Create account"}
@@ -553,6 +619,10 @@ function AuthScreen({
           className="text-button"
           onClick={() => {
             setError("");
+            // The confirm field is unmounting; leaving its state behind would
+            // arm a stale mismatch against the next draft that mounts it.
+            setConfirmPassword("");
+            setConfirmBlurred(false);
             setMode(mode === "login" ? "register" : "login");
           }}
         >

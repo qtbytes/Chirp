@@ -213,6 +213,40 @@ input {
   padding: 0 14px;
 }
 
+/* Holds the reveal button over the input's right edge. The button is a sibling
+   of the <label>, not a child, so it cannot contribute to the input's
+   accessible name. */
+.password-field {
+  position: relative;
+}
+
+/* Room for the button, so a long password never runs under it. */
+.password-field input {
+  padding-right: 46px;
+}
+
+/* Anchored to the bottom rather than centred on the wrapper: the label sits
+   above the input, so the wrapper's middle is not the input's. */
+.password-reveal {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+}
+
+.password-reveal:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
 /* .composer-highlight is the URL-coloring backdrop layer rendered behind a
    composer textarea: it must share every text metric with the textarea. */
 textarea,
