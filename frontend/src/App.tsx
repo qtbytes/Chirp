@@ -49,7 +49,9 @@ import {
   deleteTweet,
   displayName,
   editTweet,
+  blockUser,
   followUser,
+  muteUser,
   getComment,
   getCommentStats,
   getCurrentUser,
@@ -110,6 +112,7 @@ import {
   PostMenu,
   PostBody,
   QuoteComposer,
+  ReportModal,
   QuotedPostCard,
   ReplyComposer,
   TweetCard,
@@ -2427,7 +2430,36 @@ function TweetDetail({
   const [editVisibility, setEditVisibility] = useState<TweetVisibility>(tweet.visibility);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
+  const [moderating, setModerating] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const isOwn = tweet.author.id === currentUserId;
+
+  async function muteAuthor() {
+    setError("");
+    try {
+      await muteUser(tweet.author.id);
+      // Muting hides an author's posts from timelines; it does not revoke
+      // access to this one, which the reader deliberately opened. So the page
+      // stays put -- unlike a feed card, which removes itself.
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  async function confirmBlock() {
+    setModerating(true);
+    setError("");
+    try {
+      await blockUser(tweet.author.id);
+      // A blocked author's posts are not visible, so staying here would leave
+      // the reader on a page that 404s the moment it reloads.
+      onDeleted();
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setModerating(false);
+    }
+  }
 
   function startEditing() {
     setEditVisibility(tweet.visibility);
@@ -2596,12 +2628,6 @@ function TweetDetail({
       </div>
 
       <article id={`post-${tweet.id}`} className="detail-tweet">
-        {isOwn && !tweet.taken_down ? (
-          <PostMenu
-            onEdit={startEditing}
-            onDelete={() => setConfirmingDelete(true)}
-          />
-        ) : null}
         <div className="detail-author">
           <Link
             to={`/${encodeURIComponent(tweet.author.username)}`}
@@ -2619,11 +2645,31 @@ function TweetDetail({
             </Link>
             <span>@{tweet.author.username}</span>
           </div>
-          <AuthorFollowButton
-            username={tweet.author.username}
-            refreshToken={refreshToken}
-            onChanged={onDiscoveryChanged}
-          />
+          {/* Follow and the menu travel together at the end of the author row.
+              A taken-down post offers neither: there is nothing left to edit,
+              and nothing left to judge. */}
+          {tweet.taken_down ? null : (
+            <div className="detail-author-actions">
+              <AuthorFollowButton
+                username={tweet.author.username}
+                refreshToken={refreshToken}
+                onChanged={onDiscoveryChanged}
+              />
+              {isOwn ? (
+                <PostMenu
+                  onEdit={startEditing}
+                  onDelete={() => setConfirmingDelete(true)}
+                />
+              ) : (
+                <PostMenu
+                  authorUsername={tweet.author.username}
+                  onMute={() => void muteAuthor()}
+                  onBlock={() => setConfirmingBlock(true)}
+                  onReport={() => setReporting(true)}
+                />
+              )}
+            </div>
+          )}
         </div>
         {tweet.taken_down ? (
           <div className="takedown-notice">
@@ -2738,6 +2784,24 @@ function TweetDetail({
           busy={deleting}
           onConfirm={() => void confirmDelete()}
           onCancel={() => setConfirmingDelete(false)}
+        />
+      ) : null}
+      {confirmingBlock ? (
+        <ConfirmDialog
+          title={`Block @${tweet.author.username}?`}
+          message="They won't be able to follow you or see your Tweets, and you won't see theirs. Any follow between you is removed."
+          confirmLabel="Block"
+          busyLabel="Blocking…"
+          busy={moderating}
+          onConfirm={() => void confirmBlock()}
+          onCancel={() => setConfirmingBlock(false)}
+        />
+      ) : null}
+      {reporting ? (
+        <ReportModal
+          postId={tweet.id}
+          username={tweet.author.username}
+          onClose={() => setReporting(false)}
         />
       ) : null}
       {quoting ? (

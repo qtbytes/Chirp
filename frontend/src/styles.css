@@ -2097,14 +2097,29 @@ button.media-grid__cell {
   overflow-wrap: anywhere;
 }
 
-/* Opposite the author, on the row naming them. Never shares the corner with
-   PostMenu: that only renders on your own posts, and this only on other
-   people's. `flex: none` so a long display name shrinks the name block rather
-   than the button. */
-.detail-follow {
+/* Follow and the overflow menu, opposite the author on the row naming them.
+   The pair is pushed over as one group rather than each taking its own auto
+   margin -- two of those would split the free space and strand the follow
+   button mid-row. It also means the group holds the edge on its own, which
+   matters because the follow button renders nothing until it knows whether
+   you already follow this author. */
+.detail-author-actions {
   margin-left: auto;
-  flex: none;
   align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* A long display name wraps rather than squeezing these. */
+  flex: none;
+}
+
+/* Everywhere else the menu is a corner overlay on the card; here it is just
+   the last item of that group. `relative`, not `static`: the dropdown anchors
+   to it. */
+.detail-author-actions .post-menu {
+  position: relative;
+  top: auto;
+  right: auto;
 }
 
 .detail-author span,
