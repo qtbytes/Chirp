@@ -1634,6 +1634,30 @@ button.rail-link:disabled:hover {
   white-space: pre-wrap;
 }
 
+/* A feed card's body, cut off after CLAMP_LINES lines. The height itself is set
+   inline from the measured line-height (see ClampedPostText) -- this rule only
+   hides what falls past it. No ellipsis: "Show more" below is the cue. */
+.post-text-clamped {
+  overflow: hidden;
+}
+
+/* Reads as the link Twitter uses, not as a button: it continues the sentence
+   above rather than acting on it. */
+.show-more {
+  display: block;
+  padding: 0;
+  margin: 2px 0 4px;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.show-more:hover {
+  text-decoration: underline;
+}
+
 .tweet-link {
   color: var(--accent);
   text-decoration: none;

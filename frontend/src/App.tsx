@@ -1031,7 +1031,7 @@ function SearchReplyCard({
           · reply · {formatCompactDate(post.created_at)}
         </span>
       </div>
-      <PostBody text={post.content} enablePreview={false} />
+      <PostBody text={post.content} enablePreview={false} clamp />
     </article>
   );
 }

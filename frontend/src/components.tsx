@@ -2236,18 +2236,120 @@ function textWithoutTrailingUrl(text: string, url: string): string {
     : text;
 }
 
+// How many lines of a post a feed card shows before collapsing the rest behind
+// "Show more". Long posts are the point of the raised character limits, but a
+// 1480-character post left unclamped would push everything after it off the
+// screen -- so the feed shows an opening and the reader chooses to go on.
+const CLAMP_LINES = 10;
+
+/**
+ * A post body clamped to CLAMP_LINES with a "Show more" underneath, Twitter's
+ * feed treatment. Expanding is one-way: there is no "Show less", because
+ * collapsing text the reader is part-way through would move it under them.
+ *
+ * The clamp height is measured from the element's own computed line-height
+ * rather than assumed, so this works wherever the card is used (the feed and
+ * comment cards set different type scales).
+ */
+function ClampedPostText({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const measuredWidth = useRef(0);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    if (expanded) {
+      el.style.maxHeight = "";
+      return;
+    }
+
+    function measure() {
+      const el = ref.current;
+      if (!el) {
+        return;
+      }
+      const lineHeight = Number.parseFloat(getComputedStyle(el).lineHeight);
+      if (!Number.isFinite(lineHeight)) {
+        return;
+      }
+      const limit = lineHeight * CLAMP_LINES;
+      // Measure unclamped, then re-apply: scrollHeight of an already-clamped
+      // element is the full height anyway, but this stays right if the browser
+      // ever disagrees.
+      el.style.maxHeight = "";
+      const full = el.scrollHeight;
+      const tooTall = full > limit + 1;
+      el.style.maxHeight = tooTall ? `${limit}px` : "";
+      setOverflowing(tooTall);
+    }
+
+    measure();
+    // Re-measure when the column resizes, since rewrapping changes the line
+    // count. Guarded on *width*: the callback's own maxHeight write changes the
+    // height, and reacting to that would loop.
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      if (Math.abs(width - measuredWidth.current) < 1) {
+        return;
+      }
+      measuredWidth.current = width;
+      measure();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+    // Deliberately not keyed on `children`: it is a fresh element on every
+    // render, which would re-run this -- tearing down the observer and forcing
+    // a synchronous reflow -- every time the feed patches a view count. New
+    // text arrives as a remount instead, via the key PostBody sets.
+  }, [expanded]);
+
+  return (
+    <>
+      {/* The class only hides the overflow; the height itself is the inline one
+          measure() computed. Both land in the same pre-paint pass, so a clamped
+          post never flashes at full height. */}
+      <p ref={ref} className={overflowing && !expanded ? "post-text-clamped" : undefined}>
+        {children}
+      </p>
+      {overflowing && !expanded ? (
+        <button
+          type="button"
+          className="show-more"
+          onClick={(event) => {
+            // The whole card is a link to the post; expanding in place is not
+            // navigating to it.
+            event.stopPropagation();
+            setExpanded(true);
+          }}
+        >
+          Show more
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * Renders a post's text plus, when the first link has a preview, its unfurl
  * card. The fetch is owned here so the text and card stay in sync: once a
  * preview exists, the bare URL is dropped from the text (Twitter behaviour); if
  * there is no preview, the URL just stays as an inline link.
+ *
+ * `clamp` collapses a long body behind "Show more" -- on for feed and thread
+ * cards, off on a post's own page, where the reader asked for the whole thing.
  */
 export function PostBody({
   text,
   enablePreview = true,
+  clamp = false,
 }: {
   text: string;
   enablePreview?: boolean;
+  clamp?: boolean;
 }) {
   const url = useMemo(
     () => (enablePreview ? firstPreviewableUrl(text) : null),
@@ -2274,13 +2376,20 @@ export function PostBody({
 
   const displayText = preview && url ? textWithoutTrailingUrl(text, url) : text;
 
+  if (!displayText.trim()) {
+    return preview ? <LinkPreviewCard preview={preview} /> : null;
+  }
+
+  const body = <RichContent text={displayText} />;
   return (
     <>
-      {displayText.trim() ? (
-        <p>
-          <RichContent text={displayText} />
-        </p>
-      ) : null}
+      {clamp ? (
+        // Keyed on the text so a card recycled onto a different post starts
+        // collapsed again instead of inheriting the previous one's expansion.
+        <ClampedPostText key={displayText}>{body}</ClampedPostText>
+      ) : (
+        <p>{body}</p>
+      )}
       {preview ? <LinkPreviewCard preview={preview} /> : null}
     </>
   );
@@ -2700,7 +2809,11 @@ export function TweetCard({
           {tweet.edited_at ? <span className="edited-tag">· edited</span> : null}
           <VisibilityBadge visibility={tweet.visibility} />
         </header>
-        <PostBody text={tweet.content} enablePreview={tweet.media_urls.length === 0} />
+        <PostBody
+          text={tweet.content}
+          enablePreview={tweet.media_urls.length === 0}
+          clamp
+        />
         {editing ? (
           <PostEditor
             initialContent={tweet.content}
@@ -3028,6 +3141,7 @@ export function CommentCard({
         <PostBody
           text={localComment.content}
           enablePreview={localComment.media_urls.length === 0}
+          clamp
         />
         {editing ? (
           <PostEditor
