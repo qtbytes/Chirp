@@ -452,6 +452,14 @@ textarea:focus {
   font-size: 13px;
 }
 
+/* "optional" beside a field label: muted and lighter than the label it
+   qualifies, so the field still reads as one word at a glance. */
+.label-optional {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;

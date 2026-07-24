@@ -85,11 +85,16 @@ def register(
     db: Session = Depends(get_db),
 ) -> CurrentUserOut:
     """
-    Create an account and mail a confirmation link.
+    Create an account and, if an address was given, mail a confirmation link.
 
     The address lands in ``pending_email``; nothing but a redeemed token
     promotes it. Until then the account works normally and simply cannot reset
     its password.
+
+    The address is optional. Registering without one is a real account -- it
+    just starts at the base post length and has no way back in if the password
+    is lost, both of which it can fix later by adding an address in settings.
+    ``_send_verification`` is a no-op when there is nothing to confirm.
     """
     try:
         user = user_repository.create_user(

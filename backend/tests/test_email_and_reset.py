@@ -100,6 +100,76 @@ def test_register_claims_an_address_without_confirming_it(client, outbox) -> Non
     assert outbox.last["to"] == "alice@example.com"
 
 
+# --------------------------------------------------- registering without one
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({}, id="field omitted"),
+        pytest.param({"email": None}, id="explicit null"),
+        # What a cleared text input actually posts.
+        pytest.param({"email": ""}, id="empty string"),
+        pytest.param({"email": "   "}, id="whitespace only"),
+    ],
+)
+def test_an_account_can_be_opened_without_an_address(client, outbox, payload) -> None:
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "password": PASSWORD, **payload},
+    )
+    assert response.status_code == 201, response.text
+
+    profile = client.get("/api/v1/users/alice/profile").json()
+    assert profile["email"] is None
+    assert profile["pending_email"] is None
+    assert not outbox, "there was no address to confirm, so nothing should be mailed"
+
+
+def test_an_addressless_account_is_a_working_account(client, outbox) -> None:
+    """It just starts at the base post length, and cannot recover a password."""
+    client.post(
+        "/api/v1/auth/register", json={"username": "alice", "password": PASSWORD}
+    )
+
+    limit = client.get("/api/v1/auth/me").json()["post_length"]
+    assert limit["email_verified"] is False
+    assert limit["limit"] == 280
+    # The prize is still on offer -- that is what the register hint promises.
+    assert limit["limit_if_email_verified"] == 1280
+
+    assert client.post("/api/v1/tweets", json={"content": "x" * 280}).status_code == 201
+    assert client.post("/api/v1/tweets", json={"content": "x" * 281}).status_code == 422
+
+
+def test_adding_an_address_later_raises_the_limit(client, outbox) -> None:
+    """The way out of the base limit stays open to an account that skipped it."""
+    client.post(
+        "/api/v1/auth/register", json={"username": "alice", "password": PASSWORD}
+    )
+
+    changed = client.post(
+        "/api/v1/auth/change-email",
+        json={"email": "alice@example.com", "current_password": PASSWORD},
+    )
+    assert changed.status_code == 202, changed.text
+    assert _verify(client, outbox.token()).status_code == 204
+
+    limit = client.get("/api/v1/auth/me").json()["post_length"]
+    assert limit["email_verified"] is True
+    assert limit["limit"] == 1280
+    assert client.post("/api/v1/tweets", json={"content": "x" * 1280}).status_code == 201
+
+
+def test_a_still_invalid_address_is_still_refused(client) -> None:
+    """Optional means skippable, not unvalidated."""
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"username": "alice", "email": "not-an-address", "password": PASSWORD},
+    )
+    assert response.status_code == 422
+
+
 def test_confirming_promotes_the_address(client, outbox) -> None:
     _register(client)
     assert _verify(client, outbox.token()).status_code == 204

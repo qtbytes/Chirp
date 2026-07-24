@@ -206,6 +206,17 @@ function tokenizeContent(text: string): ContentToken[] {
  */
 export const BASE_POST_LENGTH = 280;
 
+/**
+ * What confirming an email address is worth on the day you do it, for the
+ * register form to quote — the one place that has to name the prize before
+ * there is a session to ask `/auth/me` about.
+ *
+ * Mirrors BASE_POST_LENGTH + VERIFIED_EMAIL_BONUS in
+ * backend/app/services/post_limits.py, which its tests pin; every other
+ * surface reads the real number off the server instead.
+ */
+export const VERIFIED_EMAIL_POST_LENGTH = 1280;
+
 const DEFAULT_POST_LENGTH: PostLength = {
   limit: BASE_POST_LENGTH,
   base: BASE_POST_LENGTH,

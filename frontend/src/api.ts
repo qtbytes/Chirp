@@ -116,6 +116,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** `email` is optional; pass a blank one and the account is created without it. */
 export function register(
   username: string,
   email: string,
@@ -123,7 +124,13 @@ export function register(
 ): Promise<UserSummary> {
   return request<UserSummary>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({
+      username,
+      password,
+      // Omitted rather than sent empty, so the account is created without an
+      // address instead of with one that fails validation.
+      ...(email.trim() ? { email: email.trim() } : {}),
+    }),
   });
 }
 

@@ -96,8 +96,10 @@ import {
   CurrentUserProvider,
   MediaButton,
   MediaGallery,
+  BASE_POST_LENGTH,
   ComposerHighlight,
   ComposerLimitNotice,
+  VERIFIED_EMAIL_POST_LENGTH,
   counterClass,
   useComposerTypeahead,
   usePostLength,
@@ -502,14 +504,15 @@ function AuthScreen({
           </label>
           {mode === "register" ? (
             <label>
-              <span>Email</span>
+              <span>
+                Email <span className="label-optional">(optional)</span>
+              </span>
               <input
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 maxLength={254}
                 autoComplete="email"
-                required
               />
             </label>
           ) : null}
@@ -527,8 +530,10 @@ function AuthScreen({
           </label>
           {mode === "register" ? (
             <p className="form-hint">
-              We'll send a link to confirm it. Without a confirmed address you
-              cannot reset a forgotten password.
+              Add one and we'll send a link to confirm it. A confirmed address
+              raises your posts from {BASE_POST_LENGTH} to{" "}
+              {VERIFIED_EMAIL_POST_LENGTH} characters, and it is the only way to
+              reset a forgotten password.
             </p>
           ) : null}
           {error ? <p className="form-error">{error}</p> : null}

@@ -2,7 +2,15 @@ import re
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+)
 
 # One definition, so registration, login, password change, and
 # deploy/set_password.py cannot drift apart on what counts as a valid password.
@@ -29,6 +37,22 @@ Email = Annotated[
     Field(max_length=EMAIL_MAX_LENGTH),
     AfterValidator(_normalize_email),
 ]
+
+
+def _blank_to_none(value: object) -> object:
+    """
+    Read an omitted optional address the way a form sends one.
+
+    A cleared text input posts ``""``, not ``null``. Without this that empty
+    string reaches EmailStr and comes back as "not a valid email address" --
+    a validation error for a field the user was told they could skip.
+    """
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
+OptionalEmail = Annotated[Email | None, BeforeValidator(_blank_to_none)]
 
 # Usernames double as top-level profile URLs (e.g. /alice), so they must not
 # collide with existing or likely-future app routes.
@@ -61,9 +85,10 @@ RESERVED_USERNAMES = frozenset(
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=50)
-    # Required for new accounts. The column stays nullable because the accounts
-    # that predate it have none and must keep working.
-    email: Email
+    # Optional: an address is what earns the verified post-length bonus and what
+    # makes a forgotten password recoverable, but neither is worth blocking
+    # someone from opening an account. One can be added later from settings.
+    email: OptionalEmail = None
     password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
 
     @field_validator("username")
