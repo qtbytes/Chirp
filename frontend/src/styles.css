@@ -2097,6 +2097,16 @@ button.media-grid__cell {
   overflow-wrap: anywhere;
 }
 
+/* Opposite the author, on the row naming them. Never shares the corner with
+   PostMenu: that only renders on your own posts, and this only on other
+   people's. `flex: none` so a long display name shrinks the name block rather
+   than the button. */
+.detail-follow {
+  margin-left: auto;
+  flex: none;
+  align-self: flex-start;
+}
+
 .detail-author span,
 .comment-card header span {
   color: var(--muted);

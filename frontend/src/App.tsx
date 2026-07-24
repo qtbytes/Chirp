@@ -811,7 +811,11 @@ function AppLayout({
         <aside className="discovery-column">
           <SidebarSearchBar />
           {relevantPeople.length > 0 ? (
-            <RelevantPeoplePanel users={relevantPeople} onChanged={onDiscoveryChanged} />
+            <RelevantPeoplePanel
+              users={relevantPeople}
+              onChanged={onDiscoveryChanged}
+              refreshToken={refreshToken}
+            />
           ) : null}
           <TrendingPanel />
           {relevantPeople.length > 0 ? null : (
@@ -1877,7 +1881,8 @@ function TweetDetailRoute() {
   const { tweetId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, setRelevantPeople } = useOutletContext<LayoutContext>();
+  const { currentUser, setRelevantPeople, refreshToken, onDiscoveryChanged } =
+    useOutletContext<LayoutContext>();
   const scrollToPostId = (location.state as { scrollToPostId?: number } | null)
     ?.scrollToPostId;
   const numericTweetId = Number(tweetId);
@@ -1978,6 +1983,8 @@ function TweetDetailRoute() {
       scrollToPostId={scrollToPostId}
       currentUserId={currentUser.id}
       onDeleted={() => navigate("/")}
+      refreshToken={refreshToken}
+      onDiscoveryChanged={onDiscoveryChanged}
     />
   );
 }
@@ -2318,6 +2325,83 @@ function Composer({
   );
 }
 
+/**
+ * Follow the author from the post itself, the way Bluesky does.
+ *
+ * The Relevant people panel already offers this, but it lives in the discovery
+ * column, which is gone below 1040px and on mobile -- so on the widths where a
+ * post is most likely to be read, there was no way to follow whoever wrote it
+ * without first opening their profile.
+ *
+ * Follow state is not on a tweet's author (UserSummary carries no
+ * `is_following`), so it comes from the author's profile. `refreshToken` is
+ * what keeps this and the panel agreeing: either one bumps it after a change,
+ * and both re-read.
+ */
+function AuthorFollowButton({
+  username,
+  refreshToken,
+  onChanged,
+}: {
+  username: string;
+  refreshToken: number;
+  onChanged: () => void;
+}) {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getUserProfile(username)
+      .then((loaded) => {
+        if (!cancelled) setProfile(loaded);
+      })
+      // A profile that will not load simply leaves the button out, rather than
+      // putting an error above a post the reader came here to read.
+      .catch(() => {
+        if (!cancelled) setProfile(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [username, refreshToken]);
+
+  if (!profile || profile.is_current_user) {
+    return null;
+  }
+
+  async function toggleFollow(target: UserProfile) {
+    setBusy(true);
+    // Optimistic: the button is the only feedback there is, so it has to move
+    // when pressed. Rolled back below if the call fails.
+    setProfile({ ...target, is_following: !target.is_following });
+    try {
+      if (target.is_following) {
+        await unfollowUser(target.id);
+      } else {
+        await followUser(target.id);
+      }
+      onChanged();
+    } catch {
+      setProfile(target);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      className="follow-button detail-follow"
+      onClick={() => void toggleFollow(profile)}
+      disabled={busy}
+      aria-pressed={profile.is_following}
+    >
+      <UserPlus size={15} aria-hidden="true" />
+      {profile.is_following ? "Following" : "Follow"}
+    </button>
+  );
+}
+
 function TweetDetail({
   tweet,
   onBack,
@@ -2325,6 +2409,8 @@ function TweetDetail({
   scrollToPostId,
   currentUserId,
   onDeleted,
+  refreshToken,
+  onDiscoveryChanged,
 }: {
   tweet: Tweet;
   onBack: () => void;
@@ -2332,6 +2418,8 @@ function TweetDetail({
   scrollToPostId?: number;
   currentUserId: number;
   onDeleted: () => void;
+  refreshToken: number;
+  onDiscoveryChanged: () => void;
 }) {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
@@ -2531,6 +2619,11 @@ function TweetDetail({
             </Link>
             <span>@{tweet.author.username}</span>
           </div>
+          <AuthorFollowButton
+            username={tweet.author.username}
+            refreshToken={refreshToken}
+            onChanged={onDiscoveryChanged}
+          />
         </div>
         {tweet.taken_down ? (
           <div className="takedown-notice">
@@ -2774,9 +2867,16 @@ function TrendingPanel() {
 function RelevantPeoplePanel({
   users,
   onChanged,
+  refreshToken,
 }: {
   users: UserSummary[];
   onChanged: () => void;
+  /**
+   * Bumped whenever a follow changes anywhere. The post's own follow button
+   * shows the same people this panel does, so without re-reading here the two
+   * would sit side by side disagreeing.
+   */
+  refreshToken: number;
 }) {
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2805,7 +2905,7 @@ function RelevantPeoplePanel({
     };
     // users is rebuilt each render by callers; the usernames are the identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usernamesKey]);
+  }, [usernamesKey, refreshToken]);
 
   async function toggleFollow(profile: UserProfile) {
     try {
