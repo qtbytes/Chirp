@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import (
     AfterValidator,
+    AliasChoices,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -180,8 +181,20 @@ class CurrentUserOut(UserSummary):
 
 
 class UserLogin(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
+    # A username or a confirmed email address, so the field is named for what it
+    # accepts rather than for one of the two. The old ``username`` key still
+    # validates, so a client that has not been updated keeps working.
+    #
+    # Bounded by the email maximum, not the username one: the longer of the two
+    # is what the field now has to hold.
+    identifier: str = Field(
+        min_length=3,
+        max_length=EMAIL_MAX_LENGTH,
+        validation_alias=AliasChoices("identifier", "username"),
+    )
     password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class PasswordChange(BaseModel):

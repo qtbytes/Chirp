@@ -516,12 +516,16 @@ function AuthScreen({
         <h1 id="auth-title">Chirp</h1>
         <form onSubmit={handleSubmit} className="auth-form">
           <label>
-            <span>Username</span>
+            {/* One field, two jobs: registering names the account, logging in
+                identifies it -- and either the name or a confirmed address
+                will do. Hence the wider cap when logging in: an address can
+                run to 254 characters where a username stops at 50. */}
+            <span>{mode === "login" ? "Username or email" : "Username"}</span>
             <input
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               minLength={3}
-              maxLength={50}
+              maxLength={mode === "login" ? 254 : 50}
               autoComplete="username"
               required
             />

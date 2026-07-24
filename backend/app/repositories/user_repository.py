@@ -46,6 +46,30 @@ def get_user_by_email(db: Session, email: str) -> User | None:
     return db.scalar(select(User).where(User.email == email))
 
 
+def get_user_by_username_or_email(db: Session, identifier: str) -> User | None:
+    """
+    Resolve what someone typed into the login field: a username, or a confirmed
+    email address.
+
+    Username first, so every login that worked before resolves exactly as it did.
+    Nothing forbids an "@" in a username, so an account could be named after
+    somebody else's address; trying usernames first means the worst that squatter
+    achieves is denying *email* login to the address's owner, who still has their
+    own username. It is no way in: the password check below is unchanged.
+
+    Only confirmed addresses match, the same rule password reset uses and for the
+    same reason -- ``pending_email`` carries no unique index, so two accounts may
+    claim one address and matching a claim would resolve to whichever got there
+    first. An unconfirmed account logs in by username.
+    """
+    user = get_user_by_username(db, identifier)
+    if user is not None:
+        return user
+    # Addresses are stored normalised (see _normalize_email); normalise the
+    # attempt the same way, or a capitalised one silently finds nothing.
+    return get_user_by_email(db, identifier.strip().lower())
+
+
 def set_pending_email(db: Session, user_id: int, email: str) -> User:
     user = db.get(User, user_id)
     if user is None:

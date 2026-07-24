@@ -134,10 +134,11 @@ export function register(
   });
 }
 
-export function login(username: string, password: string): Promise<UserSummary> {
+/** `identifier` is a username or a confirmed email address. */
+export function login(identifier: string, password: string): Promise<UserSummary> {
   return request<UserSummary>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ identifier, password }),
   });
 }
 

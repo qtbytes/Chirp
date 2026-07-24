@@ -135,6 +135,10 @@ def login(
     """
     Exchange credentials for a session cookie.
 
+    The identifier is a username or a confirmed email address; see
+    ``get_user_by_username_or_email`` for why it resolves in that order and why a
+    merely claimed address does not count.
+
     Rate limited by peer address, not by session: an attacker guessing passwords
     may well be holding a valid cookie of their own, and bucketing on it would
     hand them a fresh allowance per guess.
@@ -145,7 +149,7 @@ def login(
     out on demand, which trades an attack we cannot fully block for one that is
     trivial. Password strength and (eventually) MFA are the answer there.
     """
-    user = user_repository.get_user_by_username(db, payload.username)
+    user = user_repository.get_user_by_username_or_email(db, payload.identifier)
     # A deleted account's password was scrubbed to an unknown value, so the
     # verify below already fails -- but check deleted_at explicitly so the intent
     # is on the page and a future code path can't accidentally revive a tombstone.
@@ -156,7 +160,10 @@ def login(
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="invalid username or password",
+            # One message for every way this can fail, so it never reports
+            # whether the account exists -- which now would also answer whether
+            # an address is registered and confirmed here.
+            detail="invalid credentials",
         )
 
     # Only after the password verified: a suspension is told to its owner, not

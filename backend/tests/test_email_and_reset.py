@@ -100,6 +100,134 @@ def test_register_claims_an_address_without_confirming_it(client, outbox) -> Non
     assert outbox.last["to"] == "alice@example.com"
 
 
+# --------------------------------------------------------- logging in with one
+
+
+def test_login_accepts_a_confirmed_address(client, outbox) -> None:
+    _confirmed_user(client, outbox)
+    client.post("/api/v1/auth/logout")
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "alice@example.com", "password": PASSWORD},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["username"] == "alice"
+
+
+def test_login_by_address_ignores_case(client, outbox) -> None:
+    """Addresses are stored normalised, so the attempt has to be too."""
+    _confirmed_user(client, outbox)
+    client.post("/api/v1/auth/logout")
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "  Alice@Example.COM  ", "password": PASSWORD},
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_the_username_still_works(client, outbox) -> None:
+    _confirmed_user(client, outbox)
+    client.post("/api/v1/auth/logout")
+
+    assert _login(client, PASSWORD).status_code == 200
+
+
+def test_the_old_username_key_is_still_accepted(client, outbox) -> None:
+    """A client that has not been updated must keep working."""
+    _confirmed_user(client, outbox)
+    client.post("/api/v1/auth/logout")
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "alice@example.com", "password": PASSWORD},
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_an_unconfirmed_address_is_not_a_login(client, outbox) -> None:
+    """
+    Only ``email`` is unique -- two accounts may claim one address, so a claim
+    cannot identify an account. The username is how such an account gets in.
+    """
+    _register(client)  # claims the address, confirms nothing
+    client.post("/api/v1/auth/logout")
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "alice@example.com", "password": PASSWORD},
+    )
+    assert response.status_code == 401
+    assert _login(client, PASSWORD).status_code == 200
+
+
+def test_a_wrong_password_still_fails_by_address(client, outbox) -> None:
+    _confirmed_user(client, outbox)
+    client.post("/api/v1/auth/logout")
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "alice@example.com", "password": "not-the-password"},
+    )
+    assert response.status_code == 401
+
+
+def test_login_does_not_report_whether_an_address_is_registered(client, outbox) -> None:
+    """The same message either way, or the form becomes an address oracle."""
+    _confirmed_user(client, outbox)
+    client.post("/api/v1/auth/logout")
+
+    known = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "alice@example.com", "password": "wrong-password"},
+    )
+    unknown = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "nobody@example.com", "password": "wrong-password"},
+    )
+    assert known.status_code == unknown.status_code == 401
+    assert known.json()["detail"] == unknown.json()["detail"]
+
+
+def test_a_username_shaped_like_an_address_cannot_shadow_its_owner(client, outbox) -> None:
+    """
+    Usernames have no charset rule, so one can look like somebody's address.
+    Resolving usernames first means the squatter gets their own account, and the
+    address's owner keeps theirs -- reachable by the username they always had.
+    """
+    _confirmed_user(client, outbox)  # alice, alice@example.com confirmed
+    client.post("/api/v1/auth/logout")
+
+    squatter = client.post(
+        "/api/v1/auth/register",
+        json={"username": "alice@example.com", "password": "squatter-password-3"},
+    )
+    assert squatter.status_code == 201, squatter.text
+    client.post("/api/v1/auth/logout")
+
+    # The username match wins, so the squatter's own password reaches their own
+    # account -- and never alice's.
+    taken = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "alice@example.com", "password": "squatter-password-3"},
+    )
+    assert taken.status_code == 200
+    assert taken.json()["username"] == "alice@example.com"
+
+    # Alice's password does not open the squatted name, and her username still
+    # gets her in.
+    client.post("/api/v1/auth/logout")
+    assert (
+        client.post(
+            "/api/v1/auth/login",
+            json={"identifier": "alice@example.com", "password": PASSWORD},
+        ).status_code
+        == 401
+    )
+    assert _login(client, PASSWORD).status_code == 200
+
+
 # --------------------------------------------------- registering without one
 
 
