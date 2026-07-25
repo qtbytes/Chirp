@@ -3315,6 +3315,14 @@ a.tab {
   z-index: 3;
 }
 
+/* While open, the menu outranks the plain z-index: 3 of every other card's
+   trigger, so a card lower in the list no longer paints its "..." over this
+   open dropdown. Still below the sticky feed header (15), which should cover it
+   on scroll. */
+.post-menu--open {
+  z-index: 6;
+}
+
 .post-menu-trigger {
   color: var(--muted);
 }

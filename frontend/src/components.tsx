@@ -1537,7 +1537,7 @@ export function PostMenu({
   }
 
   return (
-    <div className="post-menu" ref={ref}>
+    <div className={open ? "post-menu post-menu--open" : "post-menu"} ref={ref}>
       <button
         type="button"
         className="icon-button post-menu-trigger"
