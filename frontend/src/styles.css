@@ -3369,15 +3369,10 @@ a.tab {
   background: var(--hover);
 }
 
-.post-menu-dropdown button.danger {
-  color: var(--danger);
-}
-
-/* The label follows its button's colour (white, or danger red for Delete)
-   wherever the menu is mounted. Needed because the detail view's menu sits
-   inside .detail-author, whose `span` rule would otherwise repaint these labels
-   muted grey -- the feed's menu, outside it, stays white. Winning here keeps the
-   two identical. */
+/* The label follows its button's colour wherever the menu is mounted. Needed
+   because the detail view's menu sits inside .detail-author, whose `span` rule
+   would otherwise repaint these labels muted grey -- the feed's menu, outside
+   it, stays white. Winning here keeps the two identical. */
 .post-menu-dropdown button span {
   color: inherit;
   font-size: inherit;

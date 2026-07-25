@@ -1570,7 +1570,7 @@ export function PostMenu({
           {onEdit ? (
             <button type="button" role="menuitem" onClick={() => choose(onEdit)}>
               <Pencil size={18} aria-hidden="true" />
-              <span>Edit</span>
+              <span>Edit post</span>
             </button>
           ) : null}
           {onPin ? (
@@ -1586,14 +1586,9 @@ export function PostMenu({
             </button>
           ) : null}
           {onDelete ? (
-            <button
-              type="button"
-              role="menuitem"
-              className="danger"
-              onClick={() => choose(onDelete)}
-            >
+            <button type="button" role="menuitem" onClick={() => choose(onDelete)}>
               <Trash2 size={18} aria-hidden="true" />
-              <span>Delete</span>
+              <span>Delete post</span>
             </button>
           ) : null}
           {onMute ? (
