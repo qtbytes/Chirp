@@ -1603,23 +1603,13 @@ export function PostMenu({
             </button>
           ) : null}
           {onBlock ? (
-            <button
-              type="button"
-              role="menuitem"
-              className="danger"
-              onClick={() => choose(onBlock)}
-            >
+            <button type="button" role="menuitem" onClick={() => choose(onBlock)}>
               <Ban size={18} aria-hidden="true" />
               <span>Block{authorUsername ? ` @${authorUsername}` : ""}</span>
             </button>
           ) : null}
           {onReport ? (
-            <button
-              type="button"
-              role="menuitem"
-              className="danger"
-              onClick={() => choose(onReport)}
-            >
+            <button type="button" role="menuitem" onClick={() => choose(onReport)}>
               <Flag size={18} aria-hidden="true" />
               <span>Report post</span>
             </button>
