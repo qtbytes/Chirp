@@ -2329,27 +2329,25 @@ function Composer({
 }
 
 /**
- * Follow the author from the post itself, the way Bluesky does.
+ * Follow state for a post's author, the way Bluesky lets you follow from the
+ * post itself. Shared by the inline follow button and the overflow menu's
+ * Follow/Unfollow item so the two can never sit side by side disagreeing.
  *
- * The Relevant people panel already offers this, but it lives in the discovery
+ * The Relevant people panel offers this too, but it lives in the discovery
  * column, which is gone below 1040px and on mobile -- so on the widths where a
- * post is most likely to be read, there was no way to follow whoever wrote it
- * without first opening their profile.
+ * post is most likely to be read, this is the way to follow its author without
+ * first opening their profile.
  *
  * Follow state is not on a tweet's author (UserSummary carries no
  * `is_following`), so it comes from the author's profile. `refreshToken` is
  * what keeps this and the panel agreeing: either one bumps it after a change,
  * and both re-read.
  */
-function AuthorFollowButton({
-  username,
-  refreshToken,
-  onChanged,
-}: {
-  username: string;
-  refreshToken: number;
-  onChanged: () => void;
-}) {
+function useAuthorFollow(
+  username: string,
+  refreshToken: number,
+  onChanged: () => void,
+) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -2359,8 +2357,8 @@ function AuthorFollowButton({
       .then((loaded) => {
         if (!cancelled) setProfile(loaded);
       })
-      // A profile that will not load simply leaves the button out, rather than
-      // putting an error above a post the reader came here to read.
+      // A profile that will not load simply leaves the controls out, rather
+      // than putting an error above a post the reader came here to read.
       .catch(() => {
         if (!cancelled) setProfile(null);
       });
@@ -2369,13 +2367,14 @@ function AuthorFollowButton({
     };
   }, [username, refreshToken]);
 
-  if (!profile || profile.is_current_user) {
-    return null;
-  }
+  // Your own posts, and any profile that would not load, offer nothing to follow.
+  const canFollow = profile != null && !profile.is_current_user;
 
-  async function toggleFollow(target: UserProfile) {
+  async function toggle() {
+    if (!profile) return;
+    const target = profile;
     setBusy(true);
-    // Optimistic: the button is the only feedback there is, so it has to move
+    // Optimistic: the control is the only feedback there is, so it has to move
     // when pressed. Rolled back below if the call fails.
     setProfile({ ...target, is_following: !target.is_following });
     try {
@@ -2392,17 +2391,7 @@ function AuthorFollowButton({
     }
   }
 
-  return (
-    <button
-      className="follow-button detail-follow"
-      onClick={() => void toggleFollow(profile)}
-      disabled={busy}
-      aria-pressed={profile.is_following}
-    >
-      <UserPlus size={15} aria-hidden="true" />
-      {profile.is_following ? "Following" : "Follow"}
-    </button>
-  );
+  return { canFollow, isFollowing: profile?.is_following ?? false, busy, toggle };
 }
 
 function TweetDetail({
@@ -2434,6 +2423,11 @@ function TweetDetail({
   const [moderating, setModerating] = useState(false);
   const [reporting, setReporting] = useState(false);
   const isOwn = tweet.author.id === currentUserId;
+  const authorFollow = useAuthorFollow(
+    tweet.author.username,
+    refreshToken,
+    onDiscoveryChanged,
+  );
 
   async function muteAuthor() {
     setError("");
@@ -2650,11 +2644,22 @@ function TweetDetail({
               and nothing left to judge. */}
           {tweet.taken_down ? null : (
             <div className="detail-author-actions">
-              <AuthorFollowButton
-                username={tweet.author.username}
-                refreshToken={refreshToken}
-                onChanged={onDiscoveryChanged}
-              />
+              {/* The inline button hides itself once the Relevant people panel
+                  is on screen (see .detail-follow) -- that panel carries the
+                  same follow, so two would just be copies. Follow also lives in
+                  the menu below, which is the only path left on narrow widths
+                  where neither the button nor the panel would otherwise show. */}
+              {authorFollow.canFollow ? (
+                <button
+                  className="follow-button detail-follow"
+                  onClick={() => void authorFollow.toggle()}
+                  disabled={authorFollow.busy}
+                  aria-pressed={authorFollow.isFollowing}
+                >
+                  <UserPlus size={15} aria-hidden="true" />
+                  {authorFollow.isFollowing ? "Following" : "Follow"}
+                </button>
+              ) : null}
               {isOwn ? (
                 <PostMenu
                   onEdit={startEditing}
@@ -2663,6 +2668,10 @@ function TweetDetail({
               ) : (
                 <PostMenu
                   authorUsername={tweet.author.username}
+                  onToggleFollow={
+                    authorFollow.canFollow ? () => void authorFollow.toggle() : undefined
+                  }
+                  isFollowing={authorFollow.isFollowing}
                   onMute={() => void muteAuthor()}
                   onBlock={() => setConfirmingBlock(true)}
                   onReport={() => setReporting(true)}

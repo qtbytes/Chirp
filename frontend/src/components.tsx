@@ -38,6 +38,8 @@ import {
   Repeat2,
   Share2,
   Trash2,
+  UserMinus,
+  UserPlus,
   Users,
   VolumeX,
   X,
@@ -1415,6 +1417,8 @@ export function PostMenu({
   onPin,
   onUnpin,
   authorUsername,
+  onToggleFollow,
+  isFollowing,
   onMute,
   onBlock,
   onReport,
@@ -1424,6 +1428,10 @@ export function PostMenu({
   onPin?: () => void;
   onUnpin?: () => void;
   authorUsername?: string;
+  /** Present only where follow state is known (the tweet detail's root post).
+      Twitter leads its post menu with this, so it sits first below. */
+  onToggleFollow?: () => void;
+  isFollowing?: boolean;
   onMute?: () => void;
   onBlock?: () => void;
   onReport?: () => void;
@@ -1466,21 +1474,34 @@ export function PostMenu({
       </button>
       {open ? (
         <div className="post-menu-dropdown" role="menu" onClick={(event) => event.stopPropagation()}>
+          {onToggleFollow ? (
+            <button type="button" role="menuitem" onClick={() => choose(onToggleFollow)}>
+              {isFollowing ? (
+                <UserMinus size={18} aria-hidden="true" />
+              ) : (
+                <UserPlus size={18} aria-hidden="true" />
+              )}
+              <span>
+                {isFollowing ? "Unfollow" : "Follow"}
+                {authorUsername ? ` @${authorUsername}` : ""}
+              </span>
+            </button>
+          ) : null}
           {onEdit ? (
             <button type="button" role="menuitem" onClick={() => choose(onEdit)}>
-              <Pencil size={16} aria-hidden="true" />
+              <Pencil size={18} aria-hidden="true" />
               <span>Edit</span>
             </button>
           ) : null}
           {onPin ? (
             <button type="button" role="menuitem" onClick={() => choose(onPin)}>
-              <Pin size={16} aria-hidden="true" />
+              <Pin size={18} aria-hidden="true" />
               <span>Pin to your profile</span>
             </button>
           ) : null}
           {onUnpin ? (
             <button type="button" role="menuitem" onClick={() => choose(onUnpin)}>
-              <PinOff size={16} aria-hidden="true" />
+              <PinOff size={18} aria-hidden="true" />
               <span>Unpin from profile</span>
             </button>
           ) : null}
@@ -1491,13 +1512,13 @@ export function PostMenu({
               className="danger"
               onClick={() => choose(onDelete)}
             >
-              <Trash2 size={16} aria-hidden="true" />
+              <Trash2 size={18} aria-hidden="true" />
               <span>Delete</span>
             </button>
           ) : null}
           {onMute ? (
             <button type="button" role="menuitem" onClick={() => choose(onMute)}>
-              <VolumeX size={16} aria-hidden="true" />
+              <VolumeX size={18} aria-hidden="true" />
               <span>Mute{authorUsername ? ` @${authorUsername}` : ""}</span>
             </button>
           ) : null}
@@ -1508,7 +1529,7 @@ export function PostMenu({
               className="danger"
               onClick={() => choose(onBlock)}
             >
-              <Ban size={16} aria-hidden="true" />
+              <Ban size={18} aria-hidden="true" />
               <span>Block{authorUsername ? ` @${authorUsername}` : ""}</span>
             </button>
           ) : null}
@@ -1519,7 +1540,7 @@ export function PostMenu({
               className="danger"
               onClick={() => choose(onReport)}
             >
-              <Flag size={16} aria-hidden="true" />
+              <Flag size={18} aria-hidden="true" />
               <span>Report post</span>
             </button>
           ) : null}
