@@ -2122,6 +2122,19 @@ button.media-grid__cell {
   right: auto;
 }
 
+/* Above 1040px the discovery column shows, and its Relevant people panel
+   carries the same follow button -- so the inline one beside the author would
+   just be a duplicate and is hidden. Below that width the panel is gone, so the
+   inline button stays as the visible way to follow; the ... menu offers it at
+   every width regardless. Mirrors the .discovery-column hide at max-width 1040. */
+@media (min-width: 1041px) {
+  /* Scoped past the plain .follow-button rule that follows in source order and
+     would otherwise re-show it at equal specificity. */
+  .detail-author-actions .detail-follow {
+    display: none;
+  }
+}
+
 .detail-author span,
 .comment-card header span {
   color: var(--muted);
