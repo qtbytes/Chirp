@@ -52,6 +52,8 @@ import {
   deleteComment,
   deleteTweet,
   displayName,
+  followUser,
+  getUserProfile,
   muteUser,
   editComment,
   editTweet,
@@ -65,6 +67,7 @@ import {
   suggestHashtags,
   toggleCommentLike,
   toggleTweetLike,
+  unfollowUser,
   unfurlUrl,
 } from "./api";
 import type {
@@ -79,6 +82,7 @@ import type {
   TweetStats,
   TweetVisibility,
   UserDiscovery,
+  UserProfile,
   UserSummary,
 } from "./types";
 import { EmojiPicker } from "./EmojiPicker";
@@ -1411,6 +1415,76 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
 // The "···" menu on a post. For your own posts it offers Edit/Delete; for
 // anyone else's it offers moderation of the author (Mute/Block). A post is
 // never both, so the two sets are mutually exclusive in practice.
+/**
+ * Follow state for a post's author, so it can be followed straight from the
+ * post -- its inline button on the detail view, and the overflow menu's
+ * Follow/Unfollow item on both the detail view and every feed card. Sharing one
+ * hook keeps those from ever disagreeing.
+ *
+ * Follow state is not on a tweet's author (UserSummary carries no
+ * `is_following`), so it comes from the author's full profile. `refreshToken`
+ * re-reads it whenever a follow changes elsewhere (the detail view bumps it to
+ * stay level with its Relevant people panel).
+ *
+ * `enabled` gates the fetch: the detail view wants it eagerly (one post, one
+ * request), but a feed card passes false until its menu is first opened, so a
+ * timeline of twenty cards does not fire twenty profile requests on load.
+ */
+export function useAuthorFollow(
+  username: string,
+  refreshToken: number,
+  onChanged: () => void,
+  enabled = true,
+) {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    let cancelled = false;
+    getUserProfile(username)
+      .then((loaded) => {
+        if (!cancelled) setProfile(loaded);
+      })
+      // A profile that will not load simply leaves the controls out, rather
+      // than putting an error above a post the reader came here to read.
+      .catch(() => {
+        if (!cancelled) setProfile(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [username, refreshToken, enabled]);
+
+  // Your own posts, and any profile that would not load, offer nothing to follow.
+  const canFollow = profile != null && !profile.is_current_user;
+
+  async function toggle() {
+    if (!profile) return;
+    const target = profile;
+    setBusy(true);
+    // Optimistic: the control is the only feedback there is, so it has to move
+    // when pressed. Rolled back below if the call fails.
+    setProfile({ ...target, is_following: !target.is_following });
+    try {
+      if (target.is_following) {
+        await unfollowUser(target.id);
+      } else {
+        await followUser(target.id);
+      }
+      onChanged();
+    } catch {
+      setProfile(target);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return { canFollow, isFollowing: profile?.is_following ?? false, busy, toggle };
+}
+
 export function PostMenu({
   onEdit,
   onDelete,
@@ -1419,6 +1493,7 @@ export function PostMenu({
   authorUsername,
   onToggleFollow,
   isFollowing,
+  onOpen,
   onMute,
   onBlock,
   onReport,
@@ -1428,10 +1503,14 @@ export function PostMenu({
   onPin?: () => void;
   onUnpin?: () => void;
   authorUsername?: string;
-  /** Present only where follow state is known (the tweet detail's root post).
-      Twitter leads its post menu with this, so it sits first below. */
+  /** Follow / Unfollow @author, which Twitter leads its post menu with, so it
+      sits first below. Present wherever follow state is known -- the detail
+      view always, a feed card once its menu has been opened. */
   onToggleFollow?: () => void;
   isFollowing?: boolean;
+  /** Fires the first time the menu opens. A feed card uses it to defer fetching
+      the author's follow state until someone actually asks for the menu. */
+  onOpen?: () => void;
   onMute?: () => void;
   onBlock?: () => void;
   onReport?: () => void;
@@ -1464,6 +1543,7 @@ export function PostMenu({
         className="icon-button post-menu-trigger"
         onClick={(event) => {
           event.stopPropagation();
+          if (!open) onOpen?.();
           setOpen((value) => !value);
         }}
         aria-label="More options"
@@ -2629,6 +2709,18 @@ export function TweetCard({
   const [moderating, setModerating] = useState(false);
   const [reporting, setReporting] = useState(false);
   const isOwn = tweet.author.id === currentUserId;
+  // Follow from the card's menu, like the detail view offers. The fetch is
+  // deferred until the menu is first opened (menuOpened) so a full timeline
+  // does not fire a profile request per card just to sit idle. Follow changes
+  // here are local to the card -- no discovery panel rides alongside a feed to
+  // keep in step, so there is nothing to notify.
+  const [menuOpened, setMenuOpened] = useState(false);
+  const authorFollow = useAuthorFollow(
+    tweet.author.username,
+    0,
+    () => {},
+    menuOpened && !isOwn,
+  );
 
   async function muteAuthor() {
     setError("");
@@ -2816,6 +2908,11 @@ export function TweetCard({
       ) : (
         <PostMenu
           authorUsername={tweet.author.username}
+          onOpen={() => setMenuOpened(true)}
+          onToggleFollow={
+            authorFollow.canFollow ? () => void authorFollow.toggle() : undefined
+          }
+          isFollowing={authorFollow.isFollowing}
           onMute={() => void muteAuthor()}
           onBlock={() => setConfirmingBlock(true)}
           onReport={() => setReporting(true)}

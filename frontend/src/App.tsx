@@ -123,6 +123,7 @@ import {
   mergeCommentStats,
   mergeTweetStats,
   parseBackendDate,
+  useAuthorFollow,
 } from "./components";
 import ModerationView from "./ModerationView";
 import { ProfileView } from "./ProfileView";
@@ -2326,72 +2327,6 @@ function Composer({
       </div>
     </form>
   );
-}
-
-/**
- * Follow state for a post's author, the way Bluesky lets you follow from the
- * post itself. Shared by the inline follow button and the overflow menu's
- * Follow/Unfollow item so the two can never sit side by side disagreeing.
- *
- * The Relevant people panel offers this too, but it lives in the discovery
- * column, which is gone below 1040px and on mobile -- so on the widths where a
- * post is most likely to be read, this is the way to follow its author without
- * first opening their profile.
- *
- * Follow state is not on a tweet's author (UserSummary carries no
- * `is_following`), so it comes from the author's profile. `refreshToken` is
- * what keeps this and the panel agreeing: either one bumps it after a change,
- * and both re-read.
- */
-function useAuthorFollow(
-  username: string,
-  refreshToken: number,
-  onChanged: () => void,
-) {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    getUserProfile(username)
-      .then((loaded) => {
-        if (!cancelled) setProfile(loaded);
-      })
-      // A profile that will not load simply leaves the controls out, rather
-      // than putting an error above a post the reader came here to read.
-      .catch(() => {
-        if (!cancelled) setProfile(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [username, refreshToken]);
-
-  // Your own posts, and any profile that would not load, offer nothing to follow.
-  const canFollow = profile != null && !profile.is_current_user;
-
-  async function toggle() {
-    if (!profile) return;
-    const target = profile;
-    setBusy(true);
-    // Optimistic: the control is the only feedback there is, so it has to move
-    // when pressed. Rolled back below if the call fails.
-    setProfile({ ...target, is_following: !target.is_following });
-    try {
-      if (target.is_following) {
-        await unfollowUser(target.id);
-      } else {
-        await followUser(target.id);
-      }
-      onChanged();
-    } catch {
-      setProfile(target);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return { canFollow, isFollowing: profile?.is_following ?? false, busy, toggle };
 }
 
 function TweetDetail({
