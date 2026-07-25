@@ -3323,7 +3323,9 @@ a.tab {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  min-width: 240px;
+  /* Just enough of a floor to line the rows up; short labels no longer strand a
+     band of empty space to their right, and a long @handle still grows past it. */
+  min-width: 180px;
   /* Twitter's menu rows run edge to edge and light up full-width on hover, so
      the padding is vertical only and the container clips the rows' corners. */
   padding: 6px 0;
@@ -3339,9 +3341,9 @@ a.tab {
 .post-menu-dropdown button {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   width: 100%;
-  padding: 12px 16px;
+  padding: 11px 16px;
   border: 0;
   background: transparent;
   color: var(--ink);
