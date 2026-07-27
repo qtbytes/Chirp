@@ -1055,13 +1055,24 @@ button.rail-link:disabled:hover {
   color: var(--accent);
 }
 
-/* On-card marker that a tweet isn't public. */
+/* On-card marker that a tweet isn't public. It sits in a baseline-aligned row
+   beside the date, so it stays an inline box: as an inline-flex its baseline
+   came from the icon (an svg has none of its own, so the box's bottom edge
+   stands in), which set the label a pixel above the date beside it. Inline, the
+   badge's baseline is its own text and the row lines up. No font-size here --
+   the header's `span` rule outranks this selector anyway, and matching the
+   date is what we want. */
 .visibility-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
   color: var(--muted);
-  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Rides with the label instead of setting the badge's baseline; the offset
+   centres the 13px icon on the lowercase text rather than sitting it on the
+   baseline. Replaces the flex `gap` that went with the old inline-flex. */
+.visibility-badge svg {
+  vertical-align: -2px;
+  margin-right: 3px;
 }
 
 .emoji-picker {
@@ -2828,21 +2839,28 @@ button.media-grid__cell {
 
   /* One-line card header, Twitter-style: on a narrow screen the @handle
      truncates (then the display name), instead of pushing the date onto a
-     second row — that wrap alone cost ~26px per card. */
-  .tweet-body header {
+     second row — that wrap alone cost ~26px per card. A comment's header is
+     built from the same parts, so it gets the same treatment; left to wrap it
+     dropped its date onto its own line while the post above it stayed on one,
+     which read as the two headers being laid out to different rules. */
+  .tweet-body header,
+  .comment-card header {
     flex-wrap: nowrap;
   }
 
-  .tweet-body header > * {
+  .tweet-body header > *,
+  .comment-card header > * {
     flex: 0 0 auto;
   }
 
-  .tweet-body header .author-link {
+  .tweet-body header .author-link,
+  .comment-card header .author-link {
     flex: 0 1 auto;
     min-width: 0;
   }
 
-  .tweet-body header .author-link strong {
+  .tweet-body header .author-link strong,
+  .comment-card header .author-link strong {
     display: block;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2850,7 +2868,8 @@ button.media-grid__cell {
   }
 
   /* The handle is the first span; give it the highest shrink priority. */
-  .tweet-body header > span:first-of-type {
+  .tweet-body header > span:first-of-type,
+  .comment-card header > span:first-of-type {
     flex: 0 4 auto;
     min-width: 4ch;
     overflow: hidden;
@@ -3308,11 +3327,23 @@ a.tab {
   position: relative;
 }
 
+/* Centred on the header row it belongs to, not on the card: the trigger is a
+   36px tap target wrapped around a 13px icon, so hanging it off the card's top
+   edge dropped the icon ~6px below the names and date it sits beside. The card
+   pads 12px, the header line is 20px, and the trigger centres on that line. */
 .post-menu {
   position: absolute;
-  top: 10px;
+  top: calc(12px + (20px - 36px) / 2);
   right: 10px;
   z-index: 3;
+}
+
+/* A pinned post opens with the "Pinned" label above the header, which carries
+   the author row down with it; the menu follows so it stays on the names rather
+   than floating up beside the label. The label costs 19px -- a 17px line plus
+   its 2px margin. */
+.tweet-card:has(.pinned-tag) .post-menu {
+  top: calc(12px + 19px + (20px - 36px) / 2);
 }
 
 /* The menu floats over the corner instead of sitting in the header row, so the
