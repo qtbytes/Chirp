@@ -3315,6 +3315,18 @@ a.tab {
   z-index: 3;
 }
 
+/* The menu floats over the corner instead of sitting in the header row, so the
+   header keeps a gutter its width -- otherwise the trailing items (the "Only
+   you" badge, the date, a long name) run under the button. The trigger reaches
+   36 + 10 = 46px in from the card's edge, and the card's own padding covers 18
+   of that (14 on mobile), so 36px clears it at either width with room to spare.
+   On mobile the one-line header pays for the gutter out of the @handle, which
+   already shrinks first. */
+.tweet-body header,
+.comment-card header {
+  padding-right: 36px;
+}
+
 /* While open, the menu outranks the plain z-index: 3 of every other card's
    trigger, so a card lower in the list no longer paints its "..." over this
    open dropdown. Still below the sticky feed header (15), which should cover it
