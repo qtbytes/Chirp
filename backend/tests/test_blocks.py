@@ -248,3 +248,40 @@ def test_blocked_list_is_paginated_newest_first() -> None:
     usernames = [item["username"] for item in page["items"]]
     assert usernames == ["carol", "bob"], "most recently blocked first"
     assert all("blocked_at" in item for item in page["items"])
+
+
+def test_blocked_list_reports_the_targets_standing() -> None:
+    """
+    The list is built from a validated ``UserSummary``; spelling its fields out
+    dropped ``is_suspended`` to its default, so a frozen account read as a live
+    one on the block screen.
+    """
+    from datetime import datetime, timezone
+
+    from app.models.user import User
+    from conftest import TestingSessionLocal
+
+    alice, _ = register("alice")
+    _, bob_id = register("bob")
+    alice.post(f"/api/v1/blocks/{bob_id}")
+
+    with TestingSessionLocal() as db:
+        db.get(User, bob_id).suspended_at = datetime.now(timezone.utc)
+        db.commit()
+
+    item = alice.get("/api/v1/blocks").json()["items"][0]
+    assert item["is_suspended"] is True
+    assert item["is_deleted"] is False
+
+
+def test_a_deleted_account_cannot_be_blocked() -> None:
+    """A tombstone can never act again, so a block on it is a dead row."""
+    alice, _ = register("alice")
+    bob, bob_id = register("bob")
+
+    assert bob.request(
+        "DELETE", "/api/v1/auth/account", json={"password": "password123"}
+    ).status_code == 204
+
+    assert alice.post(f"/api/v1/blocks/{bob_id}").status_code == 404
+    assert alice.get("/api/v1/blocks").json()["items"] == []

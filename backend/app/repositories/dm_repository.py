@@ -175,20 +175,40 @@ def _unread_count(db: Session, conversation: Conversation, viewer_id: int) -> in
     return int(db.scalar(stmt) or 0)
 
 
+def _reachable_counterpart(
+    db: Session, conversation: Conversation, user_id: int
+) -> User | None:
+    """
+    The other participant, or ``None`` when this conversation should not surface
+    for ``user_id`` at all.
+
+    A deleted or suspended counterpart takes the whole chat out of circulation:
+    ``_load_counterpart`` 404s on them, so the viewer can neither open the thread
+    nor mark it read. The inbox and the rail badge must agree on that, which is
+    why they share one predicate -- they did not, and the badge went on counting
+    unread messages from a conversation the inbox had already hidden, leaving a
+    permanent badge with nothing behind it.
+    """
+    other = db.get(User, conversation.other_user_id(user_id))
+    if other is None or other.is_deleted or other.is_suspended:
+        return None
+    return other
+
+
 def list_conversations(
     db: Session,
     user_id: int,
     limit: int,
     cursor_last_message_at: datetime | None = None,
     cursor_id: int | None = None,
-    exclude_user_ids: set[int] | None = None,
 ) -> list[dict]:
     """
     The user's inbox, newest activity first: each conversation with the other
     participant, its latest message, and the viewer's unread count. Empty
     conversations (no message yet) never exist -- rows are only created on the
-    first send. Conversations with blocked/blocking or deleted users are
-    hidden, not deleted: unblocking brings the history back.
+    first send. Conversations with a blocked/blocking user stay listed and
+    readable -- hidden, not deleted, so unblocking brings the history back --
+    while a deleted or suspended counterpart drops out entirely.
     """
     stmt = (
         select(Conversation)
@@ -213,11 +233,8 @@ def list_conversations(
 
     rows: list[dict] = []
     for conversation in db.scalars(stmt).all():
-        other_id = conversation.other_user_id(user_id)
-        if exclude_user_ids and other_id in exclude_user_ids:
-            continue
-        other = db.get(User, other_id)
-        if other is None or other.is_deleted or other.is_suspended:
+        other = _reachable_counterpart(db, conversation, user_id)
+        if other is None:
             continue
         last_stmt = (
             select(DmMessage)
@@ -282,10 +299,14 @@ def mark_read(db: Session, conversation: Conversation, viewer_id: int) -> None:
         db.commit()
 
 
-def count_unread_total(
-    db: Session, user_id: int, exclude_user_ids: set[int] | None = None
-) -> int:
-    """Total unread messages across conversations, for the rail badge."""
+def count_unread_total(db: Session, user_id: int) -> int:
+    """
+    Total unread messages across conversations, for the rail badge.
+
+    Counts exactly the conversations the inbox lists, via the shared
+    ``_reachable_counterpart`` predicate: a badge the user cannot chase to a
+    readable thread is one they can never clear.
+    """
     conversations = db.scalars(
         select(Conversation).where(
             or_(
@@ -297,8 +318,7 @@ def count_unread_total(
     ).all()
     total = 0
     for conversation in conversations:
-        other_id = conversation.other_user_id(user_id)
-        if exclude_user_ids and other_id in exclude_user_ids:
+        if _reachable_counterpart(db, conversation, user_id) is None:
             continue
         # A muted chat still shows its own unread state when opened, but does
         # not nag from the rail badge.

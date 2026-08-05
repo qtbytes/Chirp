@@ -78,13 +78,11 @@ def list_users(
             )
             in (None, "await_reply")
         ]
+    # Built from the validated summary so ``is_deleted`` / ``is_suspended`` carry
+    # the row's real state rather than the schema defaults (see blocks.py).
     return [
         UserDiscoveryOut(
-            id=user.id,
-            username=user.username,
-            display_name=user.display_name,
-            avatar_url=user.avatar_url,
-            created_at=user.created_at,
+            **UserSummary.model_validate(user).model_dump(),
             is_following=is_following,
             is_current_user=user.id == current_user_id,
         )
@@ -534,13 +532,12 @@ def _follow_list_page(
     has_next = len(rows) > limit
     page_rows = rows[:limit]
 
+    # A suspended account keeps its follow edges, so this list is where a
+    # tombstone-blind summary showed most plainly. Validate the row (see
+    # blocks.py) rather than naming fields.
     items = [
         UserDiscoveryOut(
-            id=row["user"].id,
-            username=row["user"].username,
-            display_name=row["user"].display_name,
-            avatar_url=row["user"].avatar_url,
-            created_at=row["user"].created_at,
+            **UserSummary.model_validate(row["user"]).model_dump(),
             is_following=row["is_following"],
             is_current_user=row["user"].id == current_user_id,
         )

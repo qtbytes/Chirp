@@ -226,9 +226,10 @@ def test_delete_retains_the_dm_messages_the_account_wrote() -> None:
 
 def test_delete_discards_reports_filed_against_the_account() -> None:
     """
-    Deleting an account discards the open reports *targeting* it, not only the
-    ones it filed: the account is gone, so a report against it could never be
-    actioned -- it would only haunt the moderation queue as a tombstone card.
+    Deleting an account discards the open reports *targeting* it: the account is
+    gone, so a report against it could never be actioned -- it would only haunt
+    the moderation queue as a tombstone card. Reports it *filed* are a different
+    matter; see the test below.
     """
     from app.models.report import Report
     from sqlalchemy import select
@@ -250,6 +251,42 @@ def test_delete_discards_reports_filed_against_the_account() -> None:
 
     _delete(alice)
     assert _reports_against(alice_id) == 0, "the target's reports go with the account"
+
+
+def test_delete_keeps_the_reports_the_account_filed() -> None:
+    """
+    A report is evidence about somebody else, who is still here and still
+    answerable. Dropping it when its author leaves would retract every complaint
+    made by anyone who quit -- worst of all in the case where the reported
+    behaviour is what drove them off. The queue keeps the report and renders the
+    reporter as a deleted account.
+    """
+    from app.models.user import User
+    from conftest import TestingSessionLocal
+
+    alice, alice_id = register("alice")
+    bob, _ = register("bob")
+    mod, mod_id = register("mod")
+    with TestingSessionLocal() as db:
+        db.get(User, mod_id).is_moderator = True
+        db.commit()
+
+    bad_post = _post(bob, "reported content")
+    assert (
+        alice.post(
+            f"/api/v1/reports/posts/{bad_post}", json={"reason": "abuse"}
+        ).status_code
+        == 201
+    )
+    assert len(mod.get("/api/v1/moderation/reports").json()["items"]) == 1
+
+    _delete(alice)
+
+    items = mod.get("/api/v1/moderation/reports").json()["items"]
+    assert len(items) == 1, "the complaint outlives the reporter's account"
+    reporter = items[0]["reports"][0]["reporter"]
+    assert reporter["username"] == f"deleted_{alice_id}"
+    assert reporter["is_deleted"] is True
 
 
 def test_deleted_account_disappears_from_discovery() -> None:

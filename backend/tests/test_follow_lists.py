@@ -97,3 +97,27 @@ def test_follow_lists_are_empty_for_a_lonely_account() -> None:
     following = client.get("/api/v1/users/alice/following").json()
     assert followers == {"items": [], "next_cursor": None}
     assert following == {"items": [], "next_cursor": None}
+
+
+def test_following_list_reports_a_suspended_account() -> None:
+    """
+    A suspension keeps every follow edge, so this list is where a summary blind
+    to ``is_suspended`` showed most plainly -- a frozen account listed as live.
+    """
+    from datetime import datetime, timezone
+
+    from app.models.user import User
+    from conftest import TestingSessionLocal
+
+    alice, bob = TestClient(app), TestClient(app)
+    register(alice, "alice")
+    bob_id = register(bob, "bob")["id"]
+    alice.post(f"/api/v1/follows/{bob_id}")
+
+    with TestingSessionLocal() as db:
+        db.get(User, bob_id).suspended_at = datetime.now(timezone.utc)
+        db.commit()
+
+    item = alice.get("/api/v1/users/alice/following").json()["items"][0]
+    assert item["username"] == "bob"
+    assert item["is_suspended"] is True

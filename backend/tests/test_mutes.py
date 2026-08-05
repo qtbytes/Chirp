@@ -179,3 +179,23 @@ def test_muted_list_is_paginated_newest_first() -> None:
     usernames = [item["username"] for item in page["items"]]
     assert usernames == ["carol", "bob"], "most recently muted first"
     assert all("muted_at" in item for item in page["items"])
+
+
+def test_muted_list_reports_the_targets_standing() -> None:
+    """Same schema trap as the block list: the flags must come from the row."""
+    from datetime import datetime, timezone
+
+    from app.models.user import User
+    from conftest import TestingSessionLocal
+
+    alice, _ = register("alice")
+    _, bob_id = register("bob")
+    alice.post(f"/api/v1/mutes/{bob_id}")
+
+    with TestingSessionLocal() as db:
+        db.get(User, bob_id).suspended_at = datetime.now(timezone.utc)
+        db.commit()
+
+    item = alice.get("/api/v1/mutes").json()["items"][0]
+    assert item["is_suspended"] is True
+    assert item["is_deleted"] is False

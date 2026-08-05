@@ -219,13 +219,19 @@ def soft_delete_user(
     them still resolve an author (the whole reason this is a soft delete). What
     goes: every personal edge (follows both ways, likes, blocks and mutes both
     ways), the user's own home-feed rows, their entire notification history as
-    recipient and as actor, and the trail of posts they viewed. Reports go both
-    ways too -- those the account filed *and* those filed against it: a
-    self-deleted account is gone, so an open report targeting it could never be
-    actioned, the same reasoning that discards a deleted post's reports. The PII
-    on the row is nulled, the username is rewritten to ``deleted_<id>`` (freeing
-    the original for reuse), and the password is replaced with an unknown hash so
-    the row can never authenticate.
+    recipient and as actor, and the trail of posts they viewed. Reports filed
+    *against* the account go too: it is gone, so an open report targeting it
+    could never be actioned -- the same reasoning that discards a deleted post's
+    reports. The PII on the row is nulled, the username is rewritten to
+    ``deleted_<id>`` (freeing the original for reuse), and the password is
+    replaced with an unknown hash so the row can never authenticate.
+
+    Reports the account *filed* are deliberately kept. Those are evidence about
+    somebody else, who is still here and still answerable, so a complaint must
+    not evaporate the moment its author leaves -- the worst case being the one
+    where leaving is exactly what the reported behaviour caused. The tombstone
+    row survives, so the moderation queue still resolves a reporter and renders
+    them as a deleted account.
 
     What is deliberately NOT touched: the DM messages this account wrote. Direct
     messages follow a "hidden, not deleted" rule (see ``dm_repository``), so the
@@ -263,11 +269,7 @@ def soft_delete_user(
     db.execute(
         delete(Mute).where(or_(Mute.muter_id == user_id, Mute.muted_id == user_id))
     )
-    db.execute(
-        delete(Report).where(
-            or_(Report.reporter_id == user_id, Report.reported_user_id == user_id)
-        )
-    )
+    db.execute(delete(Report).where(Report.reported_user_id == user_id))
     db.execute(delete(PostView).where(PostView.user_id == user_id))
 
     # deleted_<id> is unique by construction: the id is unique, and registration

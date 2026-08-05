@@ -317,3 +317,71 @@ def test_user_search_messageable_filter() -> None:
         for u in dave.get("/api/v1/users", params={"messageable": True}).json()
     }
     assert "bob" in dave_names
+
+
+# ------------------------------------------- badge and inbox stay in agreement
+
+
+def _suspend(user_id: int) -> None:
+    """A moderator suspension, without the moderation endpoint's ceremony."""
+    from datetime import datetime, timezone
+
+    from app.models.user import User
+    from conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as db:
+        db.get(User, user_id).suspended_at = datetime.now(timezone.utc)
+        db.commit()
+
+
+def test_unread_badge_drops_a_deleted_counterpart() -> None:
+    """
+    The inbox hides a chat whose counterpart is gone and ``/dm/with`` 404s on
+    them, so counting their unread messages left a badge the user could never
+    open, let alone clear.
+    """
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    register(bob, "bob")
+
+    assert send(bob, "alice", "unread from bob").status_code == 201
+    assert alice.get("/api/v1/dm/unread-count").json()["count"] == 1
+
+    assert bob.request(
+        "DELETE", "/api/v1/auth/account", json={"password": "password123"}
+    ).status_code == 204
+
+    assert alice.get("/api/v1/dm/conversations").json()["items"] == []
+    assert alice.get("/api/v1/dm/unread-count").json()["count"] == 0, (
+        "badge counts exactly what the inbox lists"
+    )
+
+
+def test_unread_badge_drops_a_suspended_counterpart() -> None:
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    bob_id = register(bob, "bob")["id"]
+
+    assert send(bob, "alice", "unread from bob").status_code == 201
+    assert alice.get("/api/v1/dm/unread-count").json()["count"] == 1
+
+    _suspend(bob_id)
+
+    assert alice.get("/api/v1/dm/conversations").json()["items"] == []
+    assert alice.get("/api/v1/dm/unread-count").json()["count"] == 0
+
+
+def test_unread_badge_keeps_a_blocked_counterpart() -> None:
+    """A block only locks sending; the chat stays listed, so it stays counted."""
+    alice = TestClient(app)
+    register(alice, "alice")
+    bob = TestClient(app)
+    bob_id = register(bob, "bob")["id"]
+
+    assert send(bob, "alice", "unread from bob").status_code == 201
+    assert alice.post(f"/api/v1/blocks/{bob_id}").status_code in (200, 201)
+
+    assert len(alice.get("/api/v1/dm/conversations").json()["items"]) == 1
+    assert alice.get("/api/v1/dm/unread-count").json()["count"] == 1

@@ -2,6 +2,7 @@ from app.api.deps import get_current_user_id
 from app.db.database import get_db
 from app.repositories import block_repository, user_repository
 from app.schemas.block import BlockActionOut, BlockedUserOut, BlockListPage
+from app.schemas.user import UserSummary
 from app.services.timeline_service import (
     decode_cursor,
     encode_cursor,
@@ -38,13 +39,13 @@ def list_blocks(
 
     has_next = len(rows) > limit
     page_rows = rows[:limit]
+    # Built from a validated ``UserSummary`` rather than field by field: spelling
+    # the fields out here silently dropped ``is_deleted`` / ``is_suspended`` to
+    # their schema defaults, so a suspended account read as an active one. This
+    # form cannot miss a field the summary gains later.
     items = [
         BlockedUserOut(
-            id=row["user"].id,
-            username=row["user"].username,
-            display_name=row["user"].display_name,
-            created_at=row["user"].created_at,
-            avatar_url=row["user"].avatar_url,
+            **UserSummary.model_validate(row["user"]).model_dump(),
             blocked_at=row["blocked_at"],
         )
         for row in page_rows
@@ -71,7 +72,13 @@ def block_user(
     than after the cache TTL: the blocker must stop seeing the blocked user's
     posts, and the blocked user must stop seeing the blocker's.
     """
-    if user_repository.get_user(db, user_id) is None:
+    # A tombstone is not a blockable account: it can never post, follow or
+    # message again, so a block against it would only be a dead row that the
+    # block list then renders as a real person. ``get_user`` is a plain lookup
+    # and does return tombstones, hence the explicit check -- the same one
+    # ``_load_counterpart`` makes before opening a DM.
+    target = user_repository.get_user(db, user_id)
+    if target is None or target.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="user not found",

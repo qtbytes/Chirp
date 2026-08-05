@@ -2,6 +2,7 @@ from app.api.deps import get_current_user_id
 from app.db.database import get_db
 from app.repositories import mute_repository, user_repository
 from app.schemas.mute import MuteActionOut, MutedUserOut, MuteListPage
+from app.schemas.user import UserSummary
 from app.services.timeline_service import (
     decode_cursor,
     encode_cursor,
@@ -38,13 +39,11 @@ def list_mutes(
 
     has_next = len(rows) > limit
     page_rows = rows[:limit]
+    # Via the validated summary, so ``is_deleted`` / ``is_suspended`` come from
+    # the row instead of falling back to the schema defaults (see blocks.py).
     items = [
         MutedUserOut(
-            id=row["user"].id,
-            username=row["user"].username,
-            display_name=row["user"].display_name,
-            created_at=row["user"].created_at,
-            avatar_url=row["user"].avatar_url,
+            **UserSummary.model_validate(row["user"]).model_dump(),
             muted_at=row["muted_at"],
         )
         for row in page_rows
