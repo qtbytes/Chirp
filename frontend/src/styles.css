@@ -2402,6 +2402,18 @@ button.media-grid__cell {
   border: 1px solid var(--line);
 }
 
+/* Search's "People" tab: the same panel, but as the feed column's body rather
+   than a sidebar card. The card chrome has to go — its top border landed one
+   pixel under the sticky header's bottom border and read as a doubled rule, and
+   its rounded, inset frame did not match what Top / Latest render. Flush and
+   full-bleed, so the tabs above stay the only rule. */
+.discovery-panel--feed {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
 .discovery-panel h2 {
   margin: 0;
   font-size: 1.25rem;
@@ -2625,6 +2637,34 @@ button.media-grid__cell {
 
 .user-row:last-child {
   border-bottom: 0;
+}
+
+/* In the feed column a people row is a feed row: same padding and same
+   separator as .tweet-card, last one included, so the People tab scrolls like
+   Top and Latest do. Placed after the :last-child reset above, which it undoes
+   at equal specificity. */
+.discovery-panel--feed .user-row,
+.discovery-panel--feed .user-row:last-child {
+  padding: 12px 18px;
+  min-height: 68px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* A refetch (every keystroke re-queries) keeps the rows it already has instead
+   of swapping them for a spinner — dimming says "working" without changing the
+   height of anything. */
+.user-list.is-refreshing {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+/* The spinner and the "No people found." placeholder carry a feed separator by
+   default, which is right in the column but reads as a stray line inside the
+   sidebar's rounded card. Shorter there too — the card is a glance, not a page. */
+.discovery-panel:not(.discovery-panel--feed) .loading-row,
+.discovery-panel:not(.discovery-panel--feed) .status-panel {
+  border-bottom: 0;
+  min-height: 44px;
 }
 
 .user-copy {

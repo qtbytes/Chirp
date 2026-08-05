@@ -1085,7 +1085,13 @@ function SearchView() {
       </header>
       {activeQuery ? (
         tab === "people" ? (
-          <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideHeading hideSearch initialQuery={activeQuery} />
+          <UserDiscoveryPanel
+            onChanged={onDiscoveryChanged}
+            hideHeading
+            hideSearch
+            initialQuery={activeQuery}
+            variant="feed"
+          />
         ) : (
           <SearchPostsPanel
             currentUser={currentUser}
@@ -2975,11 +2981,15 @@ function UserDiscoveryPanel({
   hideHeading = false,
   hideSearch = false,
   initialQuery = "",
+  variant = "panel",
 }: {
   onChanged: () => void;
   hideHeading?: boolean;
   hideSearch?: boolean;
   initialQuery?: string;
+  /** "panel" is the sidebar card; "feed" is the flush, full-width column body
+      the search People tab needs (see .discovery-panel--feed). */
+  variant?: "panel" | "feed";
 }) {
   const [query, setQuery] = useState(initialQuery);
 
@@ -2989,6 +2999,9 @@ function UserDiscoveryPanel({
   const [users, setUsers] = useState<UserDiscovery[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // Distinguishes "nothing loaded yet" from "loaded, and there is nothing" --
+  // only the second earns the empty placeholder.
+  const [searched, setSearched] = useState(false);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -2999,6 +3012,7 @@ function UserDiscoveryPanel({
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
+      setSearched(true);
     }
   }, [query]);
 
@@ -3023,9 +3037,18 @@ function UserDiscoveryPanel({
     }
   }
 
+  // The spinner only stands in for an *empty* list. Appending it under rows
+  // that are already on screen was what made the list jump: it grew a row tall
+  // on every keystroke's refetch and collapsed again on the response. A refetch
+  // that has something to show keeps showing it, dimmed.
+  const showSpinner = loading && users.length === 0;
+  const showEmpty = searched && !loading && !error && users.length === 0;
+
   return (
     <section
-      className="discovery-panel"
+      className={
+        variant === "feed" ? "discovery-panel discovery-panel--feed" : "discovery-panel"
+      }
       aria-labelledby={hideHeading ? undefined : "discover-title"}
       aria-label={hideHeading ? "People" : undefined}
     >
@@ -3042,7 +3065,10 @@ function UserDiscoveryPanel({
         </label>
       )}
       {error ? <p className="form-error">{error}</p> : null}
-      <div className="user-list">
+      <div
+        className={loading && users.length > 0 ? "user-list is-refreshing" : "user-list"}
+        aria-busy={loading}
+      >
         {users.map((user) => (
           <div className="user-row" key={user.id}>
             <Link
@@ -3065,9 +3091,14 @@ function UserDiscoveryPanel({
           </div>
         ))}
       </div>
-      {loading ? (
-        <div className="loading-row small">
+      {showSpinner ? (
+        <div className="loading-row">
           <Loader2 className="spin" size={16} aria-hidden="true" />
+        </div>
+      ) : null}
+      {showEmpty ? (
+        <div className="status-panel" aria-live="polite">
+          No people found.
         </div>
       ) : null}
     </section>
