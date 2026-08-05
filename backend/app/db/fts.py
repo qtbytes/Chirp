@@ -15,6 +15,13 @@ only the inverted index, not a second copy of the text, and its ``rowid`` is the
 ``posts.id`` it indexes. The triggers keep it in sync on every write to
 ``posts``; the ``'delete'`` command form is FTS5's way of retracting a row from
 an external-content index.
+
+The indexed column is ``posts.search_text``, not ``posts.content``: it holds the
+same text with CJK characters split into per-character tokens, which is what
+makes Chinese and Japanese searchable from anywhere in a word rather than only
+from its first character (see app/services/text_search.py). External-content
+FTS5 reads the source column by name, so the virtual table's column, the
+triggers and the backfill all have to name ``search_text``.
 """
 
 from sqlalchemy import event, text
@@ -26,20 +33,20 @@ from app.db.database import Base
 # migration).
 SQLITE_FTS_CREATE: tuple[str, ...] = (
     "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts "
-    "USING fts5(content, content='posts', content_rowid='id')",
+    "USING fts5(search_text, content='posts', content_rowid='id')",
     "CREATE TRIGGER IF NOT EXISTS posts_ai AFTER INSERT ON posts BEGIN "
-    "INSERT INTO posts_fts(rowid, content) VALUES (new.id, new.content); "
+    "INSERT INTO posts_fts(rowid, search_text) VALUES (new.id, new.search_text); "
     "END",
     "CREATE TRIGGER IF NOT EXISTS posts_ad AFTER DELETE ON posts BEGIN "
-    "INSERT INTO posts_fts(posts_fts, rowid, content) "
-    "VALUES ('delete', old.id, old.content); "
+    "INSERT INTO posts_fts(posts_fts, rowid, search_text) "
+    "VALUES ('delete', old.id, old.search_text); "
     "END",
     "CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts BEGIN "
-    "INSERT INTO posts_fts(posts_fts, rowid, content) "
-    "VALUES ('delete', old.id, old.content); "
-    "INSERT INTO posts_fts(rowid, content) VALUES (new.id, new.content); "
+    "INSERT INTO posts_fts(posts_fts, rowid, search_text) "
+    "VALUES ('delete', old.id, old.search_text); "
+    "INSERT INTO posts_fts(rowid, search_text) VALUES (new.id, new.search_text); "
     "END",
-    "INSERT INTO posts_fts(rowid, content) SELECT id, content FROM posts",
+    "INSERT INTO posts_fts(rowid, search_text) SELECT id, search_text FROM posts",
 )
 
 # Drop triggers before the table they reference.

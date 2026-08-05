@@ -5,13 +5,18 @@ write-time extraction populates:
 
 - ``posts_fts``: a SQLite FTS5 external-content virtual table over
   ``posts.content``, kept in sync by AFTER INSERT/UPDATE/DELETE triggers and
-  backfilled from the existing rows. The DDL lives in ``app.db.fts`` so the same
-  statements build the index here and under ``create_all()`` in the tests.
+  backfilled from the existing rows.
 - ``post_hashtags`` / ``post_mentions``: one row per ``#tag`` / resolved
   ``@mention`` on a post.
 
 The FTS block is SQLite-only; on any other backend the virtual table is skipped
 (the app targets SQLite -- see the WAL pragmas in app/db/database.py).
+
+The DDL is spelled out here rather than imported from ``app.db.fts``: revision
+0020 re-points the index at ``posts.search_text``, a column that does not exist
+yet at this point in the history, so this revision has to keep indexing
+``content`` for a replay from scratch to work. ``app.db.fts`` holds the current
+schema, which ``create_all()`` and revision 0020 share.
 
 Revision ID: 0008
 Revises: 0007
@@ -23,14 +28,37 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-from app.db.fts import SQLITE_FTS_CREATE, SQLITE_FTS_DROP
-
 
 # revision identifiers, used by Alembic.
 revision: str = '0008'
 down_revision: Union[str, Sequence[str], None] = '0007'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+SQLITE_FTS_CREATE: tuple[str, ...] = (
+    "CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts "
+    "USING fts5(content, content='posts', content_rowid='id')",
+    "CREATE TRIGGER IF NOT EXISTS posts_ai AFTER INSERT ON posts BEGIN "
+    "INSERT INTO posts_fts(rowid, content) VALUES (new.id, new.content); "
+    "END",
+    "CREATE TRIGGER IF NOT EXISTS posts_ad AFTER DELETE ON posts BEGIN "
+    "INSERT INTO posts_fts(posts_fts, rowid, content) "
+    "VALUES ('delete', old.id, old.content); "
+    "END",
+    "CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts BEGIN "
+    "INSERT INTO posts_fts(posts_fts, rowid, content) "
+    "VALUES ('delete', old.id, old.content); "
+    "INSERT INTO posts_fts(rowid, content) VALUES (new.id, new.content); "
+    "END",
+    "INSERT INTO posts_fts(rowid, content) SELECT id, content FROM posts",
+)
+
+SQLITE_FTS_DROP: tuple[str, ...] = (
+    "DROP TRIGGER IF EXISTS posts_ai",
+    "DROP TRIGGER IF EXISTS posts_ad",
+    "DROP TRIGGER IF EXISTS posts_au",
+    "DROP TABLE IF EXISTS posts_fts",
+)
 
 
 def upgrade() -> None:

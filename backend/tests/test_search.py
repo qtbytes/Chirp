@@ -175,6 +175,81 @@ def test_a_cursor_from_one_sort_is_rejected_by_the_other() -> None:
     assert mismatched.status_code == 400
 
 
+# --- CJK ---------------------------------------------------------------------
+
+
+def test_search_finds_chinese_from_anywhere_in_the_phrase() -> None:
+    """
+    The bug this fixes: FTS5 reads 中文测试 as one token, so only a prefix of the
+    whole run matched. Every substring must find it now.
+    """
+    alice, _ = _register("alice")
+    post_id = _post(alice, "中文测试")
+
+    for query in ("中文测试", "中文", "测试", "文测", "测"):
+        ids = [item["id"] for item in _search(alice, query)["items"]]
+        assert ids == [post_id], f"{query!r} should find the post"
+
+
+def test_chinese_search_respects_character_order_and_adjacency() -> None:
+    alice, _ = _register("alice")
+    _post(alice, "中文测试")
+
+    # Same characters, wrong order -- a phrase query must not match.
+    assert _search(alice, "试测")["items"] == []
+    # Present but not adjacent: 文 and 试 are separated in the post.
+    assert _search(alice, "文试")["items"] == []
+
+
+def test_chinese_query_ands_across_words() -> None:
+    alice, _ = _register("alice")
+    both = _post(alice, "今天 天气 很好")
+    _post(alice, "今天 下雨了")
+
+    ids = [item["id"] for item in _search(alice, "今天 天气")["items"]]
+    assert ids == [both], "space-separated Chinese words are ANDed, like Latin ones"
+
+
+def test_search_mixes_chinese_and_latin_in_one_query() -> None:
+    alice, _ = _register("alice")
+    post_id = _post(alice, "用 FastAPI 写的中文后端")
+    _post(alice, "just an english post about fastapi")
+
+    ids = [item["id"] for item in _search(alice, "fastapi 中文")["items"]]
+    assert ids == [post_id], "the Chinese term narrows the Latin one"
+
+
+def test_chinese_search_reflects_edits() -> None:
+    """The AFTER UPDATE trigger has to re-index the segmented text, not the raw."""
+    alice, _ = _register("alice")
+    post_id = _post(alice, "中文测试")
+
+    edit = alice.patch(f"/api/v1/tweets/{post_id}", json={"content": "日语测验"})
+    assert edit.status_code == 200
+
+    assert _search(alice, "测试")["items"] == [], "the old text is out of the index"
+    ids = [item["id"] for item in _search(alice, "测验")["items"]]
+    assert ids == [post_id], "the new text is in it"
+
+
+def test_search_finds_japanese_from_anywhere_in_the_phrase() -> None:
+    alice, _ = _register("alice")
+    post_id = _post(alice, "日本語のテスト")
+
+    for query in ("日本語", "本語", "テスト"):
+        ids = [item["id"] for item in _search(alice, query)["items"]]
+        assert ids == [post_id], f"{query!r} should find the post"
+
+
+def test_latin_search_still_matches_by_prefix() -> None:
+    """Segmentation must not cost Latin text its type-ahead prefix matching."""
+    alice, _ = _register("alice")
+    post_id = _post(alice, "learning kubernetes today")
+
+    ids = [item["id"] for item in _search(alice, "kuber")["items"]]
+    assert ids == [post_id]
+
+
 # --- extraction on write ---------------------------------------------------
 
 

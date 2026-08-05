@@ -2,6 +2,10 @@
 Full-text search over post content, backed by the SQLite FTS5 ``posts_fts``
 index (see ``app/db/fts.py``).
 
+The MATCH string itself is built by ``app/services/text_search.py``, which lives
+next to the segmentation that produces the indexed text -- the two have to agree
+on how a word is cut into tokens.
+
 Two orderings are supported:
 
 - ``relevance`` (default): BM25 relevance, paginated by a ``(score, id)`` keyset
@@ -15,7 +19,6 @@ Two orderings are supported:
   correctly.
 """
 
-import re
 from datetime import datetime
 from typing import Literal
 
@@ -28,27 +31,6 @@ from app.repositories import engagement_repository, tweet_repository
 from app.repositories.visibility import visible_root_predicate
 
 SearchSort = Literal["relevance", "recent"]
-
-# Split the query into word tokens, dropping every FTS5 operator character in the
-# process (quotes, parentheses, ``*``, ``:``, ``-`` ...). This is what keeps a raw
-# user string from being interpreted -- or misparsed -- as an FTS match
-# expression, and it is bound as a parameter besides.
-_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
-
-
-def build_match(query: str) -> str | None:
-    """
-    Turn a user query into a safe FTS5 MATCH string, or ``None`` if it has no
-    usable token (in which case the caller returns an empty page).
-
-    Each token becomes a prefix term (``token*``) and terms are ANDed (space),
-    so "fast api" matches posts containing a word starting with each -- a
-    type-ahead-friendly behaviour.
-    """
-    tokens = _TOKEN_RE.findall(query or "")
-    if not tokens:
-        return None
-    return " ".join(f"{token}*" for token in tokens)
 
 
 def encode_search_cursor(score: float, post_id: int) -> str:

@@ -9,6 +9,7 @@ from app.repositories.visibility import can_view_post
 from app.schemas.search import SearchPage, SearchPostOut
 from app.schemas.user import UserSummary
 from app.services.serializers import serialize_quoted_post
+from app.services.text_search import build_match
 from app.services.timeline_service import decode_cursor, encode_cursor
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -51,7 +52,7 @@ def search_posts(
             detail="invalid cursor",
         )
 
-    match = search_repository.build_match(q)
+    match = build_match(q)
     if match is None:
         # Nothing searchable in the query (e.g. only punctuation).
         return SearchPage(items=[], next_cursor=None)

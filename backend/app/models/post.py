@@ -2,9 +2,10 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.db.database import Base
+from app.services.text_search import segment_for_index
 
 # Per-tweet audience. A top-level tweet is visible to ``public`` (everyone),
 # ``followers`` (the author and whoever follows them), or ``private`` (the author
@@ -43,6 +44,13 @@ class Post(Base):
         ForeignKey("users.id"), index=True, nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # ``content`` rewritten for the full-text index: the same text with every CJK
+    # character spaced into its own token. This, not ``content``, is the column
+    # ``posts_fts`` indexes -- see app/services/text_search.py for why, and the
+    # validator below for how it is kept in sync. Never render it.
+    search_text: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
     media_urls: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     # Per-image alt text, parallel to ``media_urls`` (same length, "" = none).
     # NULL for posts without media or written before alt support existed.
@@ -92,6 +100,20 @@ class Post(Base):
         foreign_keys=[quoted_post_id],
         viewonly=True,
     )
+
+    @validates("content")
+    def _index_content(self, key: str, value: str) -> str:
+        """
+        Derive ``search_text`` from every assignment to ``content``.
+
+        Hanging this off the attribute rather than the write paths is what makes
+        the index text impossible to forget: a new post, an edit, a scrub -- all
+        of them assign ``content``, including the ``Post(content=...)``
+        constructor, so all of them re-derive the tokens in the same UPDATE the
+        FTS triggers fire on.
+        """
+        self.search_text = segment_for_index(value)
+        return value
 
     @property
     def is_reply(self) -> bool:
