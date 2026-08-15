@@ -1,7 +1,7 @@
 import { ChangeEvent, useRef, useState } from "react";
 import { ApiError, uploadMedia } from "./api";
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 export const MAX_MEDIA_ITEMS = 4;
 export const MAX_ALT_LENGTH = 2000;
@@ -54,7 +54,7 @@ export function useMediaAttachment(initial: string[] = [], initialAlts: string[]
         setError(
           isVideo
             ? "Each video must be 50 MB or smaller."
-            : "Each image must be 5 MB or smaller.",
+            : "Each image must be 20 MB or smaller.",
         );
         continue;
       }

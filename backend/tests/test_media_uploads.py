@@ -106,6 +106,33 @@ def test_media_upload_rejects_non_image() -> None:
     assert response.status_code == 415
 
 
+def test_image_upload_allows_more_than_old_five_mb_limit(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+    client = TestClient(app)
+    _register(client, "alice")
+
+    response = client.post(
+        "/api/v1/media",
+        files={"file": ("large.png", io.BytesIO(b"x" * (5 * 1024 * 1024 + 1)), "image/png")},
+    )
+
+    assert response.status_code == 201
+
+
+def test_image_upload_rejects_over_twenty_mb(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
+    client = TestClient(app)
+    _register(client, "alice")
+
+    response = client.post(
+        "/api/v1/media",
+        files={"file": ("huge.png", io.BytesIO(b"x" * (20 * 1024 * 1024 + 1)), "image/png")},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "image must be 20 MB or smaller"
+
+
 def test_upload_video_and_attach_to_tweet(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
     client = TestClient(app)
