@@ -97,6 +97,25 @@ export function useMediaAttachment(initial: string[] = [], initialAlts: string[]
     );
   }
 
+  function moveItem(url: string, targetIndex: number) {
+    setItems((prev) => {
+      const sourceIndex = prev.findIndex((item) => item.url === url);
+      if (
+        sourceIndex < 0 ||
+        targetIndex < 0 ||
+        targetIndex >= prev.length ||
+        sourceIndex === targetIndex
+      ) {
+        return prev;
+      }
+
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  }
+
   function clear() {
     setItems([]);
     setError("");
@@ -117,6 +136,7 @@ export function useMediaAttachment(initial: string[] = [], initialAlts: string[]
     openPicker,
     remove,
     setAlt,
+    moveItem,
     clear,
   };
 }

@@ -1,6 +1,7 @@
 import {
   FormEvent,
   KeyboardEvent,
+  PointerEvent as ReactPointerEvent,
   ReactNode,
   RefObject,
   TouchEvent,
@@ -1307,6 +1308,17 @@ function AltTextModal({
 
 export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
   const [altEditing, setAltEditing] = useState<MediaItem | null>(null);
+  const [draggingUrl, setDraggingUrl] = useState<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{
+    url: string;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    active: boolean;
+    targetIndex: number | null;
+  } | null>(null);
 
   if (attachment.items.length === 0 && !attachment.uploading && !attachment.error) {
     return null;
@@ -1351,6 +1363,112 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
       </button>
     );
 
+  function clearDrag(event: ReactPointerEvent<HTMLDivElement>, commit: boolean) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if (commit && drag.active && drag.targetIndex != null) {
+      attachment.moveItem(drag.url, drag.targetIndex);
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragRef.current = null;
+    setDraggingUrl(null);
+    setDropIndex(null);
+  }
+
+  function handlePointerDown(
+    event: ReactPointerEvent<HTMLDivElement>,
+    item: MediaItem,
+  ) {
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+    const target = event.target;
+    if (target instanceof Element && target.closest("button, video")) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      url: item.url,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+      targetIndex: null,
+    };
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+    if (!drag.active) {
+      if (distance < 8) {
+        return;
+      }
+      drag.active = true;
+      setDraggingUrl(drag.url);
+    }
+
+    event.preventDefault();
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+    const cell =
+      element instanceof Element
+        ? element.closest<HTMLElement>("[data-media-index]")
+        : null;
+    const isInsideGrid = Boolean(cell && gridRef.current?.contains(cell));
+    const nextIndex = isInsideGrid && cell ? Number(cell.dataset.mediaIndex) : null;
+    const sourceIndex = attachment.items.findIndex((item) => item.url === drag.url);
+    drag.targetIndex =
+      nextIndex != null && Number.isFinite(nextIndex) && nextIndex !== sourceIndex
+        ? nextIndex
+        : null;
+    setDropIndex(drag.targetIndex);
+  }
+
+  function moveEarlierOrLater(item: MediaItem, index: number, direction: -1 | 1) {
+    attachment.moveItem(item.url, index + direction);
+  }
+
+  const moveButtons = (item: MediaItem, index: number) => (
+    <div className="composer-media-move" aria-label={`Reorder media ${index + 1}`}>
+      <button
+        type="button"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          moveEarlierOrLater(item, index, -1);
+        }}
+        disabled={index === 0}
+        aria-label={`Move media ${index + 1} earlier`}
+        title="Move earlier"
+      >
+        <ChevronLeft size={16} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          moveEarlierOrLater(item, index, 1);
+        }}
+        disabled={index === count - 1}
+        aria-label={`Move media ${index + 1} later`}
+        title="Move later"
+      >
+        <ChevronRight size={16} aria-hidden="true" />
+      </button>
+    </div>
+  );
+
   return (
     <div className="composer-media">
       {count === 1 ? (
@@ -1373,18 +1491,33 @@ export function MediaPreview({ attachment }: { attachment: MediaAttachment }) {
           {removeButton(attachment.items[0])}
         </div>
       ) : count > 1 ? (
-        <div className="media-grid" data-count={count}>
-          {attachment.items.map((item) => {
+        <div ref={gridRef} className="media-grid" data-count={count}>
+          {attachment.items.map((item, index) => {
             const src = resolveMediaUrl(item.url);
             return (
-              <div className="media-grid__cell" key={item.url}>
+              <div
+                className="media-grid__cell"
+                data-media-index={index}
+                data-dragging={draggingUrl === item.url ? "true" : undefined}
+                data-drop-target={dropIndex === index ? "true" : undefined}
+                key={item.url}
+                onPointerDown={(event) => handlePointerDown(event, item)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={(event) => clearDrag(event, true)}
+                onPointerCancel={(event) => clearDrag(event, false)}
+              >
                 {src ? (
                   isVideoUrl(item.url) ? (
                     <VideoPlayer src={src} className="media-grid__video" />
                   ) : (
-                    <img src={src} alt={item.alt || "Attached preview"} />
+                    <img
+                      src={src}
+                      alt={item.alt || "Attached preview"}
+                      draggable={false}
+                    />
                   )
                 ) : null}
+                {moveButtons(item, index)}
                 {altButton(item)}
                 {removeButton(item)}
               </div>

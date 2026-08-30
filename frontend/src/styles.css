@@ -1168,6 +1168,81 @@ button.rail-link:disabled:hover {
   background: rgba(15, 20, 25, 0.9);
 }
 
+/* Media tiles can be reordered directly. Controls remain separate interactive
+   islands, so tapping ALT/remove or a keyboard move button never starts drag. */
+.composer-media .media-grid__cell {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.composer-media .media-grid__cell[data-dragging="true"] {
+  cursor: grabbing;
+  opacity: 0.68;
+  transform: scale(0.985);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.composer-media .media-grid__cell[data-drop-target="true"] {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+  z-index: 2;
+}
+
+.composer-media .media-grid__cell img {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.composer-media-move {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(15, 20, 25, 0.72);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.composer-media .media-grid__cell:hover .composer-media-move,
+.composer-media .media-grid__cell:focus-within .composer-media-move,
+.composer-media .media-grid__cell[data-dragging="true"] .composer-media-move {
+  opacity: 1;
+}
+
+.composer-media-move button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: #fff;
+  background: rgba(15, 20, 25, 0.62);
+  cursor: pointer;
+}
+
+.composer-media-move button:hover:not(:disabled) {
+  background: rgba(15, 20, 25, 0.92);
+}
+
+.composer-media-move button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+@media (hover: none) {
+  .composer-media-move {
+    opacity: 1;
+  }
+}
+
 /* The "Add alt text" dialog opened by the badge. Sized like the compose
    dialog (600px), with the picture letterboxed and centered, Twitter-style. */
 .modal.alt-modal {
