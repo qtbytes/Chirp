@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useRef } from "react";
+import { ChangeEvent, useLayoutEffect, useRef } from "react";
 
 type Field = HTMLInputElement | HTMLTextAreaElement;
 
@@ -19,13 +19,13 @@ export function useEmojiField<T extends Field>(
 ) {
   const ref = useRef<T>(null);
   const caretRef = useRef<{ start: number; end: number } | null>(null);
+  const composingRef = useRef(false);
 
-  // Auto-grow a <textarea> to fit its content: reset to the CSS min-height, then
-  // lock the height to the content's scroll height. Runs on every render (no
-  // dep array) because the floor isn't constant — attaching media relaxes the
-  // CSS min-height, and the stale inline height must be re-measured then too,
-  // not just on typing. Inputs are left untouched.
-  useEffect(() => {
+  // A fractional line-height can leave scrollHeight one pixel short at a wrap
+  // boundary. The extra pixels keep the final glyph inside the mirrored layer.
+  const TEXTAREA_HEIGHT_BUFFER = 2;
+
+  function resizeTextarea() {
     const el = ref.current;
     if (!(el instanceof HTMLTextAreaElement)) {
       return;
@@ -34,8 +34,27 @@ export function useEmojiField<T extends Field>(
     el.style.resize = "none";
     el.style.overflowY = "hidden";
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    el.style.height = `${Math.ceil(el.scrollHeight) + TEXTAREA_HEIGHT_BUFFER}px`;
+  }
+
+  // Run before paint so inserting media cannot briefly display the stale
+  // textarea height and clip the last line in .composer-highlight. This runs
+  // on every render because attaching media changes the CSS sizing floor.
+  useLayoutEffect(() => {
+    if (!composingRef.current) {
+      resizeTextarea();
+    }
   });
+
+  function handleCompositionStart() {
+    composingRef.current = true;
+  }
+
+  function handleCompositionEnd() {
+    composingRef.current = false;
+    // Let the browser commit the composed text before measuring its final wrap.
+    requestAnimationFrame(resizeTextarea);
+  }
 
   function rememberCaret() {
     const el = ref.current;
@@ -78,6 +97,8 @@ export function useEmojiField<T extends Field>(
     onSelect: rememberCaret,
     onClick: rememberCaret,
     onKeyUp: rememberCaret,
+    onCompositionStart: handleCompositionStart,
+    onCompositionEnd: handleCompositionEnd,
   };
 
   return { insertEmoji, fieldProps };
