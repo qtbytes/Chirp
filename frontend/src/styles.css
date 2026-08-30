@@ -1718,6 +1718,10 @@ button.rail-link:disabled:hover {
 .compose-modal .composer-scroll {
   min-height: 0;
   overflow-y: auto;
+  /* Keep the text column width stable when long drafts make this scrollbar
+     appear; otherwise the narrower width rewraps the text after auto-grow has
+     already measured it. */
+  scrollbar-gutter: stable;
 }
 
 /* Quote composer modal */
@@ -3863,6 +3867,7 @@ a.tab {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  scrollbar-gutter: stable;
 }
 
 /* --- Direct messages ------------------------------------------------------ */

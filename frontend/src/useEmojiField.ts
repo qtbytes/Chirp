@@ -20,6 +20,7 @@ export function useEmojiField<T extends Field>(
   const ref = useRef<T>(null);
   const caretRef = useRef<{ start: number; end: number } | null>(null);
   const composingRef = useRef(false);
+  const resizeFrameRef = useRef<number | null>(null);
 
   // A fractional line-height can leave scrollHeight one pixel short at a wrap
   // boundary. The extra pixels keep the final glyph inside the mirrored layer.
@@ -37,6 +38,16 @@ export function useEmojiField<T extends Field>(
     el.style.height = `${Math.ceil(el.scrollHeight) + TEXTAREA_HEIGHT_BUFFER}px`;
   }
 
+  function scheduleResizeTextarea() {
+    if (composingRef.current || resizeFrameRef.current !== null) {
+      return;
+    }
+    resizeFrameRef.current = requestAnimationFrame(() => {
+      resizeFrameRef.current = null;
+      resizeTextarea();
+    });
+  }
+
   // Run before paint so inserting media cannot briefly display the stale
   // textarea height and clip the last line in .composer-highlight. This runs
   // on every render because attaching media changes the CSS sizing floor.
@@ -46,6 +57,45 @@ export function useEmojiField<T extends Field>(
     }
   });
 
+  // A modal scrollbar can appear after the first measurement and make the
+  // textarea narrower. That rewraps the draft without a React render, leaving
+  // scrollHeight larger than the inline height. Observe width changes so the
+  // new line count is measured immediately. Font loading can cause the same
+  // post-mount reflow, so measure once after the document fonts settle too.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!(el instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    let disposed = false;
+    let lastWidth = el.getBoundingClientRect().width;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      if (Math.abs(width - lastWidth) < 0.5) {
+        return;
+      }
+      lastWidth = width;
+      scheduleResizeTextarea();
+    });
+    observer.observe(el);
+
+    void document.fonts?.ready.then(() => {
+      if (!disposed) {
+        scheduleResizeTextarea();
+      }
+    });
+
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+    };
+  }, []);
+
   function handleCompositionStart() {
     composingRef.current = true;
   }
@@ -53,7 +103,7 @@ export function useEmojiField<T extends Field>(
   function handleCompositionEnd() {
     composingRef.current = false;
     // Let the browser commit the composed text before measuring its final wrap.
-    requestAnimationFrame(resizeTextarea);
+    scheduleResizeTextarea();
   }
 
   function rememberCaret() {
