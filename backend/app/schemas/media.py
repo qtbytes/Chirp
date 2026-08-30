@@ -9,8 +9,8 @@ MEDIA_URL_PATTERN = re.compile(
     r"/uploads/media/[0-9a-f]{32}\.(jpg|png|webp|gif|mp4|webm|mov)"
 )
 
-# Maximum images allowed on a single tweet/comment.
-MAX_MEDIA_ITEMS = 4
+# Maximum media items allowed on a single tweet/comment.
+MAX_MEDIA_ITEMS = 9
 
 # Maximum length of one image's alt text (matches Bluesky's limit).
 MAX_ALT_LENGTH = 2000

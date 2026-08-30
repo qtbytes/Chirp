@@ -1796,8 +1796,9 @@ button.rail-link:disabled:hover {
 }
 
 /* Fixed-aspect multi-image grid, shared by the posted gallery and the composer
-   preview (Twitter-style: 2 = two full-height columns, 3 = one large left cell
-   with two stacked on the right, 4 = a 2x2 grid). */
+   preview. Counts 3 and above use featured editorial mosaics: the first image
+   (or first pair/trio) gets more visual weight while every tile still fills the
+   frame. */
 .media-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1818,6 +1819,54 @@ button.rail-link:disabled:hover {
 /* First of three images fills the whole left column. */
 .media-grid[data-count="3"] .media-grid__cell:first-child {
   grid-row: 1 / 3;
+}
+
+/* Five: one featured image beside a 2x2 supporting block. */
+.media-grid[data-count="5"] {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: 1fr 1fr;
+}
+
+.media-grid[data-count="5"] .media-grid__cell:first-child {
+  grid-column: 1 / 3;
+  grid-row: 1 / 3;
+}
+
+/* Six: two featured images across the top, then four compact tiles. */
+.media-grid[data-count="6"] {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: 1fr 1fr;
+}
+
+.media-grid[data-count="6"] .media-grid__cell:nth-child(-n + 2) {
+  grid-column: span 2;
+}
+
+/* Seven: one featured image beside a 3x2 supporting block. */
+.media-grid[data-count="7"] {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: 1fr 1fr;
+}
+
+.media-grid[data-count="7"] .media-grid__cell:first-child {
+  grid-row: 1 / 3;
+}
+
+/* Eight: two featured images, four middle tiles, and two wider closing tiles. */
+.media-grid[data-count="8"] {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: 1fr 1fr 1fr;
+}
+
+.media-grid[data-count="8"] .media-grid__cell:nth-child(-n + 2),
+.media-grid[data-count="8"] .media-grid__cell:nth-last-child(-n + 2) {
+  grid-column: span 2;
+}
+
+/* Nine: a uniform 3x3 grid. */
+.media-grid[data-count="9"] {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
 }
 
 .media-grid__cell {

@@ -3,7 +3,7 @@ import { ApiError, uploadMedia } from "./api";
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
-export const MAX_MEDIA_ITEMS = 4;
+export const MAX_MEDIA_ITEMS = 9;
 export const MAX_ALT_LENGTH = 2000;
 export const ACCEPTED_MEDIA =
   "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime";

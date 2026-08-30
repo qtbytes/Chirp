@@ -58,13 +58,27 @@ def test_tweet_with_multiple_media(tmp_path, monkeypatch) -> None:
     assert created.json()["media_urls"] == urls
 
 
-def test_tweet_rejects_more_than_four_media(tmp_path, monkeypatch) -> None:
+def test_tweet_accepts_nine_media_and_rejects_more(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(settings, "uploads_dir", str(tmp_path))
     client = TestClient(app)
     _register(client, "alice")
 
-    urls = [_upload_png(client) for _ in range(5)]
-    response = client.post("/api/v1/tweets", json={"content": "hi", "media_urls": urls})
+    urls = [_upload_png(client) for _ in range(9)]
+    created = client.post(
+        "/api/v1/tweets",
+        json={
+            "content": "hi",
+            "media_urls": urls,
+            "media_alts": [f"image {index}" for index in range(9)],
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["media_urls"] == urls
+    assert created.json()["media_alts"] == [f"image {index}" for index in range(9)]
+
+    response = client.post(
+        "/api/v1/tweets", json={"content": "too many", "media_urls": urls + [urls[0]]}
+    )
     assert response.status_code == 422
 
 
