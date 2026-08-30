@@ -1090,10 +1090,15 @@ button.rail-link:disabled:hover {
 
 /* With media attached the text area gives up its tall empty-state floor and
    hugs its content, Twitter-style, so the preview sits right under the text.
+   The highlight is the visible text layer, so it must receive the same padding
+   change or its last line is clipped by the textarea-sized parent.
    (The auto-grow effect in useEmojiField re-measures against this floor.) */
 .composer-body:has(.composer-media) textarea,
+.composer-body:has(.composer-media) .composer-highlight,
 .reply-composer-form:has(.composer-media) textarea,
-.quote-composer-form:has(.composer-media) textarea {
+.reply-composer-form:has(.composer-media) .composer-highlight,
+.quote-composer-form:has(.composer-media) textarea,
+.quote-composer-form:has(.composer-media) .composer-highlight {
   min-height: 0;
   padding-bottom: 4px;
 }
