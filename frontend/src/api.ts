@@ -370,17 +370,27 @@ export function replyToComment(
   });
 }
 
-export function getTimeline(kind: TimelineKind, cursor?: string | null): Promise<TimelinePage> {
+export function getTimeline(
+  kind: TimelineKind,
+  cursor?: string | null,
+  options: { signal?: AbortSignal; refresh?: boolean } = {},
+): Promise<TimelinePage> {
   const params = new URLSearchParams({ limit: "20" });
   if (cursor) {
     params.set("cursor", cursor);
+  }
+  if (options.refresh && kind === "following" && !cursor) {
+    params.set("refresh", "true");
   }
   const path =
     kind === "for-you"
       ? `/timeline/for-you?${params.toString()}`
       : `/timeline/home?${params.toString()}`;
 
-  return request<TimelinePage>(path);
+  return request<TimelinePage>(path, {
+    signal: options.signal,
+    cache: options.refresh ? "no-store" : undefined,
+  });
 }
 
 export function listUsers(

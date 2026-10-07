@@ -21,6 +21,7 @@ def get_home_timeline(
     limit: int = Query(default=settings.timeline_page_size, ge=1, le=50),
     cursor: str | None = None,
     strategy: Literal["read", "write"] = settings.default_timeline_strategy,
+    refresh: bool = False,
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> TimelinePage:
@@ -40,6 +41,7 @@ def get_home_timeline(
             limit=limit,
             cursor=cursor,
             strategy=strategy,
+            refresh=refresh,
         )
     except ValueError as exc:
         raise HTTPException(

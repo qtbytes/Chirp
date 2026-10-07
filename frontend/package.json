@@ -9,6 +9,7 @@
     "typecheck": "tsc -b",
     "test:composer": "playwright test tests/composer.spec.ts",
     "test:navigation": "playwright test tests/navigation.spec.ts",
+    "test:timeline": "playwright test tests/timeline.spec.ts",
     "generate:emoji": "node scripts/generate-emoji-data.mjs"
   },
   "dependencies": {

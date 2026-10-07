@@ -1015,6 +1015,72 @@ button.rail-link:disabled:hover {
   background: var(--accent);
 }
 
+.home-feed-header {
+  padding-right: 52px;
+}
+
+.timeline-refresh-button {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 44px;
+  height: 44px;
+  color: var(--muted);
+}
+
+.timeline-refresh-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.pull-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--accent-strong);
+  font-size: 13px;
+  transition: height 180ms ease;
+}
+
+.pull-refresh.pulling {
+  transition: none;
+}
+
+.pull-refresh svg {
+  flex-shrink: 0;
+}
+
+.feed-error {
+  padding: 10px 18px;
+  flex-wrap: wrap;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  /* Let the timeline own this gesture, without reloading the whole page. */
+  html:has(.home-feed),
+  body:has(.home-feed) {
+    overscroll-behavior-y: contain;
+  }
+
+  .timeline-refresh-button {
+    top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pull-refresh {
+    transition: none;
+  }
+
+  .pull-refresh .spin,
+  .timeline-refresh-button .spin {
+    animation: none;
+  }
+}
+
 .composer {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);

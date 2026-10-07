@@ -118,6 +118,7 @@ class TimelineService:
         limit: int,
         cursor: str | None,
         strategy: Literal["read", "write"],
+        refresh: bool = False,
     ) -> TimelinePage:
         """
         Return the user's home timeline.
@@ -131,7 +132,9 @@ class TimelineService:
         if cursor and (cursor_created_at is None or cursor_id is None):
             raise ValueError("invalid cursor")
 
-        if cursor is None:
+        # An explicit refresh reads the current feed and replaces the cached
+        # first page. Ordinary navigation can still use the short-lived cache.
+        if cursor is None and not refresh:
             cached = self._get_cached_page(
                 user_id=user_id,
                 limit=limit,

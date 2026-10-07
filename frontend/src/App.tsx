@@ -22,6 +22,7 @@ import {
 } from "react-router-dom";
 import {
   ArrowLeft,
+  ArrowDown,
   AtSign,
   BarChart2,
   Bell,
@@ -35,6 +36,7 @@ import {
   Moon,
   MessageCircle,
   Repeat2,
+  RotateCw,
   Search,
   Settings,
   Shield,
@@ -138,6 +140,7 @@ import { useFeedMemory } from "./useFeedMemory";
 import { useMediaAttachment } from "./useMediaAttachment";
 import { InfiniteScroll } from "./InfiniteScroll";
 import { FeedHeader, MobileAccountProvider } from "./MobileAccountMenu";
+import { usePullToRefresh } from "./usePullToRefresh";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
@@ -1692,6 +1695,14 @@ function HomeView() {
   const [tweetIds, setTweetIds] = useState<number[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
   const [feedError, setFeedError] = useState("");
+  const [refreshingFeed, setRefreshingFeed] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState("");
+  const requestRef = useRef<{
+    controller: AbortController;
+    mode: "load" | "append" | "refresh";
+  } | null>(null);
+  const lastTab = useRef(activeTab);
+  const retryRef = useRef<() => void>(() => {});
 
   const takeFeedMemory = useFeedMemory(
     `home:${activeTab}`,
@@ -1750,15 +1761,29 @@ function HomeView() {
   );
 
   const loadFeed = useCallback(
-    async (cursor?: string | null, append = false) => {
+    async (cursor?: string | null, append = false, refresh = false) => {
+      if (append && requestRef.current) return;
+      if (refresh && requestRef.current?.mode === "refresh") return;
+      requestRef.current?.controller.abort();
+      const request = {
+        controller: new AbortController(),
+        mode: refresh ? "refresh" as const : append ? "append" as const : "load" as const,
+      };
+      requestRef.current = request;
       setLoadingFeed(true);
+      setRefreshingFeed(refresh);
+      setRefreshMessage("");
       setFeedError("");
 
       try {
-        const nextPage = await getTimeline(activeTab, cursor);
+        const nextPage = await getTimeline(activeTab, cursor, {
+          signal: request.controller.signal,
+          refresh,
+        });
+        if (requestRef.current !== request) return;
         setPage(nextPage);
         setTweetById((current) => {
-          const next = { ...current };
+          const next: Record<number, Tweet> = append ? { ...current } : {};
           for (const tweet of nextPage.items) {
             next[tweet.id] = tweet;
           }
@@ -1772,10 +1797,20 @@ function HomeView() {
           const existing = new Set(current);
           return [...current, ...nextIds.filter((tweetId) => !existing.has(tweetId))];
         });
+        if (refresh) {
+          setRefreshMessage("Timeline refreshed");
+          window.scrollTo({ top: 0, behavior: "instant" });
+        }
       } catch (err) {
+        if (requestRef.current !== request || request.controller.signal.aborted) return;
         setFeedError(getErrorMessage(err));
+        retryRef.current = () => void loadFeed(cursor, append, refresh);
       } finally {
-        setLoadingFeed(false);
+        if (requestRef.current === request) {
+          requestRef.current = null;
+          setLoadingFeed(false);
+          setRefreshingFeed(false);
+        }
       }
     },
     [activeTab],
@@ -1786,15 +1821,36 @@ function HomeView() {
     // scroll position (which may sit pages deep) still exists to return to.
     // Any other arrival — nav clicks, tab switches — fetches fresh.
     const cached = takeFeedMemory();
+    setFeedError("");
+    setRefreshMessage("");
+    setRefreshingFeed(false);
     if (cached) {
       setPage(cached.page);
       setTweetById(cached.tweetById);
       setTweetIds(cached.tweetIds);
-      return;
+      setLoadingFeed(false);
+    } else {
+      if (lastTab.current !== activeTab) {
+        setPage(null);
+        setTweetById({});
+        setTweetIds([]);
+      }
+      void loadFeed();
     }
-    void loadFeed();
+    lastTab.current = activeTab;
+    return () => {
+      requestRef.current?.controller.abort();
+      requestRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadFeed, refreshToken]);
+
+  const refreshFeed = useCallback(() => void loadFeed(undefined, false, true), [loadFeed]);
+  const pull = usePullToRefresh({
+    disabled: refreshingFeed || (loadingFeed && !page),
+    onRefresh: refreshFeed,
+    resetKey: activeTab,
+  });
 
   useEffect(() => {
     if (!visibleTweetIdsKey) {
@@ -1825,6 +1881,11 @@ function HomeView() {
   }, [visibleTweetIdsKey]);
 
   function insertPostedTweet(tweet: Tweet) {
+    // A first-page response requested before this post existed must not hide it.
+    requestRef.current?.controller.abort();
+    requestRef.current = null;
+    setLoadingFeed(false);
+    setRefreshingFeed(false);
     setTweetById((current) => ({
       ...current,
       [tweet.id]: tweet,
@@ -1833,11 +1894,11 @@ function HomeView() {
   }
 
   return (
-    <>
+    <div className="home-feed" ref={pull.ref}>
       {/* No title row here: the tabs say where you are, and on Home every
           vertical pixel above the composer is feed real estate. The h1 stays
           for screen readers and the document outline. */}
-      <FeedHeader>
+      <FeedHeader className="home-feed-header">
         <h1 className="visually-hidden">Home</h1>
         <div className="tab-list" role="tablist" aria-label="Timeline">
           <button
@@ -1857,11 +1918,40 @@ function HomeView() {
             Following
           </button>
         </div>
+        <button
+          type="button"
+          className="icon-button timeline-refresh-button"
+          aria-label="Refresh timeline"
+          title="Refresh timeline"
+          disabled={refreshingFeed || (loadingFeed && !page)}
+          onClick={refreshFeed}
+        >
+          <RotateCw size={18} className={refreshingFeed ? "spin" : undefined} aria-hidden="true" />
+        </button>
       </FeedHeader>
+
+      <div
+        className={`pull-refresh${pull.distance > 0 ? " pulling" : ""}`}
+        style={{ height: refreshingFeed ? 52 : pull.distance }}
+        aria-hidden="true"
+      >
+        {refreshingFeed ? <Loader2 size={18} className="spin" /> : (
+          <ArrowDown size={18} style={{ transform: pull.ready ? "rotate(180deg)" : undefined }} />
+        )}
+        <span>{refreshingFeed ? "Refreshing…" : pull.ready ? "Release to refresh" : "Pull to refresh"}</span>
+      </div>
+      <span className="visually-hidden" role="status">
+        {refreshingFeed ? "Refreshing timeline" : refreshMessage}
+      </span>
 
       <Composer currentUser={currentUser} onPosted={insertPostedTweet} />
 
-      {feedError ? <div className="status-panel error">{feedError}</div> : null}
+      {feedError ? (
+        <div className="status-panel error feed-error" role="alert">
+          <span>{feedError}</span>
+          <button type="button" className="text-button" onClick={() => retryRef.current()}>Retry</button>
+        </div>
+      ) : null}
       {!loadingFeed && tweets.length === 0 && !feedError ? (
         <div className="status-panel">No tweets yet.</div>
       ) : null}
@@ -1880,18 +1970,18 @@ function HomeView() {
           />
         ))}
       </section>
-      {loadingFeed ? (
+      {loadingFeed && !refreshingFeed ? (
         <div className="loading-row">
           <Loader2 className="spin" size={18} aria-hidden="true" />
           <span>Loading</span>
         </div>
       ) : null}
       <InfiniteScroll
-        hasMore={!!page?.next_cursor}
+        hasMore={!!page?.next_cursor && !feedError}
         loading={loadingFeed}
         onLoadMore={() => void loadFeed(page?.next_cursor, true)}
       />
-    </>
+    </div>
   );
 }
 
