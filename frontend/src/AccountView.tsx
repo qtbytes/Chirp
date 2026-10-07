@@ -29,6 +29,7 @@ import type {
 } from "./types";
 import { Avatar, formatCompactDate, getErrorMessage } from "./components";
 import { InfiniteScroll } from "./InfiniteScroll";
+import { FeedHeader } from "./MobileAccountMenu";
 import { ChangeEmailModal } from "./ChangeEmailModal";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 
@@ -62,11 +63,11 @@ export function AccountView({
 
   return (
     <>
-      <header className="feed-header">
+      <FeedHeader>
         <div className="feed-title-row">
           <h1>Settings</h1>
         </div>
-      </header>
+      </FeedHeader>
 
       {error ? <div className="status-panel error">{error}</div> : null}
 

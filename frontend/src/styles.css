@@ -805,6 +805,139 @@ button.rail-link:disabled:hover {
   border-bottom: 1px solid var(--line);
 }
 
+.mobile-account-trigger {
+  display: none;
+}
+
+.mobile-account-menu {
+  position: fixed;
+  inset: 54px auto auto max(12px, env(safe-area-inset-left, 0px));
+  margin: 0;
+  padding: 0;
+  width: min(340px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 76px - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.18);
+}
+
+.mobile-account-menu::backdrop {
+  background: rgba(15, 20, 25, 0.2);
+  backdrop-filter: blur(2px);
+}
+
+.mobile-menu-inner {
+  padding: 12px;
+}
+
+.mobile-menu-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.mobile-account-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 10px 22px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.mobile-account-card .avatar {
+  width: 44px;
+  height: 44px;
+}
+
+.mobile-account-card > span {
+  display: grid;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-account-card strong,
+.mobile-account-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-account-card strong {
+  font-size: 16px;
+}
+
+.mobile-account-card small {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.mobile-menu-links {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.mobile-menu-links a,
+.mobile-menu-action {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  min-height: 49px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  border-radius: 12px;
+  color: var(--ink);
+  text-align: left;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.mobile-account-card:hover,
+.mobile-menu-links a:hover,
+.mobile-menu-action:hover {
+  background: var(--soft);
+}
+
+.mobile-account-menu :is(a, button):focus-visible,
+.rail-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.mobile-account-menu svg {
+  flex-shrink: 0;
+}
+
+.mobile-menu-links a > span,
+.mobile-menu-action > span {
+  flex: 1;
+}
+
+.mobile-account-card > svg,
+.mobile-menu-links a > svg:last-child,
+.mobile-menu-action > svg:last-child,
+.mobile-menu-action small {
+  color: var(--muted);
+}
+
+.mobile-appearance {
+  margin-top: 8px;
+}
+
 .feed-header h1 {
   margin: 0;
   font-size: 22px;
@@ -2900,25 +3033,59 @@ button.media-grid__cell {
 @media (max-width: 720px) {
   .app-shell {
     display: block;
+    --mobile-nav-space: calc(96px + env(safe-area-inset-bottom, 0px));
+    --mobile-composer-bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-shell::after {
+    content: "";
+    position: fixed;
+    inset: auto 0 0;
+    height: calc(85px + env(safe-area-inset-bottom, 0px));
+    pointer-events: none;
+    z-index: 19;
+    background: linear-gradient(transparent, color-mix(in srgb, var(--panel) 75%, transparent));
+    transition: opacity 180ms ease;
   }
 
   .rail {
     position: fixed;
-    z-index: 4;
-    inset: auto 0 0 0;
-    /* viewport-fit=cover: keep the bar's content above the home indicator. */
-    height: calc(58px + env(safe-area-inset-bottom, 0px));
+    z-index: 20;
+    inset: auto auto calc(12px + env(safe-area-inset-bottom, 0px)) 50%;
+    transform: translateX(-50%);
+    width: min(360px, calc(100% - 32px));
+    height: 66px;
     flex-direction: row;
     align-items: center;
-    padding: 4px 10px calc(4px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid var(--line);
-    border-right: 0;
-    background: var(--panel);
+    padding: 6px;
+    border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+    border-radius: 28px;
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 5px 24px rgba(15, 30, 40, 0.12), 0 1px 3px rgba(15, 30, 40, 0.04);
+    transition: transform 180ms ease, opacity 180ms ease, visibility 180ms;
+  }
+
+  /* Only text entry hides navigation; toggling a checkbox or attaching media does not. */
+  body:has(:is(textarea, input:not([type]), input:is([type="text"], [type="search"], [type="email"], [type="password"], [type="tel"], [type="url"], [type="number"]), [contenteditable="true"]):focus) .app-shell {
+    --mobile-composer-bottom: 0px;
+  }
+
+  body:has(:is(textarea, input:not([type]), input:is([type="text"], [type="search"], [type="email"], [type="password"], [type="tel"], [type="url"], [type="number"]), [contenteditable="true"]):focus) .rail {
+    transform: translate(-50%, calc(100% + 24px + env(safe-area-inset-bottom, 0px)));
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  body:has(:is(textarea, input:not([type]), input:is([type="text"], [type="search"], [type="email"], [type="password"], [type="tel"], [type="url"], [type="number"]), [contenteditable="true"]):focus) .app-shell::after {
+    opacity: 0;
   }
 
   .rail-brand,
   .rail-user,
   .rail-link.muted,
+  .rail-link--secondary,
   /* The bottom bar has no room for a post pill; Home's inline composer covers it. */
   .rail-post-button {
     display: none;
@@ -2936,22 +3103,89 @@ button.media-grid__cell {
   .rail-nav {
     width: 100%;
     display: flex;
+    gap: 3px;
   }
 
   .rail-link {
     flex: 1;
-    min-height: 46px;
-    padding: 0;
+    min-width: 0;
+    height: 52px;
+    min-height: 52px;
+    gap: 4px;
+    flex-direction: column;
+    padding: 5px 0;
     justify-content: center;
+    border-radius: 22px;
+    color: var(--muted);
   }
 
   .rail-link > span:not(.rail-icon) {
-    display: none;
+    display: block;
+    font-size: 10px;
+    line-height: 12px;
+    font-weight: 600;
+  }
+
+  .rail-link.active {
+    color: var(--accent-strong);
+    background: color-mix(in srgb, var(--accent) 11%, var(--panel));
+  }
+
+  .rail-link.active svg {
+    stroke-width: 2.5;
+  }
+
+  .rail-badge {
+    top: -5px;
+    left: 13px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    font-size: 9px;
+    box-shadow: 0 0 0 2px var(--panel);
   }
 
   .feed-column {
     border-right: 0;
-    padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: var(--mobile-nav-space);
+  }
+
+  .feed-header--account {
+    padding-left: 52px;
+  }
+
+  .feed-header--account > .feed-title-row {
+    padding: 0 14px 0 4px;
+    gap: 8px;
+  }
+
+  .mobile-account-trigger {
+    position: absolute;
+    left: 8px;
+    top: 0;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    padding: 7px;
+    border-radius: 50%;
+    background: transparent;
+  }
+
+  .mobile-account-trigger .avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+
+  .mobile-account-trigger:hover {
+    background: var(--soft);
+  }
+
+  .mobile-account-trigger:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
 
   .tweet-card {
@@ -4232,9 +4466,17 @@ a.tab {
 }
 
 @media (max-width: 720px) {
-  /* The rail becomes a fixed bottom bar; keep the composer above it. */
+  /* Leave room for the floating navigation, reclaiming it during text entry. */
   .chat-composer-holder {
-    bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+    bottom: var(--mobile-composer-bottom);
+    padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail,
+  .app-shell::after {
+    transition: none;
   }
 }
 

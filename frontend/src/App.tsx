@@ -137,6 +137,7 @@ import { useEmojiField } from "./useEmojiField";
 import { useFeedMemory } from "./useFeedMemory";
 import { useMediaAttachment } from "./useMediaAttachment";
 import { InfiniteScroll } from "./InfiniteScroll";
+import { FeedHeader, MobileAccountProvider } from "./MobileAccountMenu";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
@@ -720,151 +721,170 @@ function AppLayout({
   }
 
   return (
-    <div className={hideDiscovery ? "app-shell app-shell--no-discovery" : "app-shell"}>
-      <aside className="rail">
-        <Link className="rail-brand" to="/" aria-label="Chirp home">
-          <Feather aria-hidden="true" />
-        </Link>
-        <nav className="rail-nav" aria-label="Primary">
-          <Link className={isHomeRoute ? "rail-link active" : "rail-link"} to="/">
-            <Home size={22} aria-hidden="true" />
-            <span>Home</span>
+    <MobileAccountProvider
+      currentUser={currentUser}
+      theme={theme}
+      onToggleTheme={onToggleTheme}
+      onLogout={handleLogout}
+    >
+      <div className={hideDiscovery ? "app-shell app-shell--no-discovery" : "app-shell"}>
+        <aside className="rail">
+          <Link className="rail-brand" to="/" aria-label="Chirp home">
+            <Feather aria-hidden="true" />
           </Link>
-          <Link className={isSearchRoute ? "rail-link active" : "rail-link"} to="/search">
-            <Search size={22} aria-hidden="true" />
-            <span>Search</span>
-          </Link>
-          <Link
-            className={isNotificationsRoute ? "rail-link active" : "rail-link"}
-            to="/notifications"
-            aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
-          >
-            <span className="rail-icon">
-              <Bell size={22} aria-hidden="true" />
-              {unread > 0 ? (
-                <span className="rail-badge" aria-hidden="true">
-                  {unread > 99 ? "99+" : unread}
-                </span>
-              ) : null}
-            </span>
-            <span>Notifications</span>
-          </Link>
-          <Link
-            className={isMessagesRoute ? "rail-link active" : "rail-link"}
-            to="/messages"
-            aria-label={dmUnread > 0 ? `Messages, ${dmUnread} unread` : "Messages"}
-          >
-            <span className="rail-icon">
-              <MessageCircle size={22} aria-hidden="true" />
-              {dmUnread > 0 ? (
-                <span className="rail-badge" aria-hidden="true">
-                  {dmUnread > 99 ? "99+" : dmUnread}
-                </span>
-              ) : null}
-            </span>
-            <span>Messages</span>
-          </Link>
-          {currentUser.is_moderator ? (
+          <nav className="rail-nav" aria-label="Primary">
             <Link
-              className={isModerationRoute ? "rail-link active" : "rail-link"}
-              to="/moderation"
+              className={isHomeRoute ? "rail-link active" : "rail-link"}
+              to="/"
+              aria-current={isHomeRoute ? "page" : undefined}
             >
-              <Shield size={22} aria-hidden="true" />
-              <span>Moderation</span>
+              <Home size={22} aria-hidden="true" />
+              <span>Home</span>
             </Link>
-          ) : null}
-          <Link
-            className={isSettingsRoute ? "rail-link active" : "rail-link"}
-            to="/settings"
-          >
-            <Settings size={22} aria-hidden="true" />
-            <span>Settings</span>
-          </Link>
-        </nav>
-        <button className="rail-post-button" onClick={() => setComposing(true)}>
-          <Feather className="rail-post-icon" size={20} aria-hidden="true" />
-          <span className="rail-post-label">Post</span>
-        </button>
-        <div className="rail-user">
-          <Link
-            to={`/${encodeURIComponent(currentUser.username)}`}
-            className="author-link"
-          >
-            <Avatar user={currentUser} size="small" />
-            <div>
-              <strong>{displayName(currentUser)}</strong>
-              <span>@{currentUser.username}</span>
-            </div>
-          </Link>
-          <div className="rail-user-actions">
-            <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} iconOnly />
-            <button className="icon-button" onClick={handleLogout} aria-label="Log out">
-              <LogOut size={18} aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      <main className="feed-column">
-        <Outlet
-          context={{ currentUser, refreshToken, onDiscoveryChanged, refreshUnread, setRelevantPeople } satisfies LayoutContext}
-        />
-      </main>
-
-      {hideDiscovery ? null : (
-        <aside className="discovery-column">
-          <SidebarSearchBar />
-          {relevantPeople.length > 0 ? (
-            <RelevantPeoplePanel
-              users={relevantPeople}
-              onChanged={onDiscoveryChanged}
-              refreshToken={refreshToken}
-            />
-          ) : null}
-          <TrendingPanel />
-          {relevantPeople.length > 0 ? null : (
-            <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideSearch />
-          )}
-        </aside>
-      )}
-
-      {composing ? (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onClick={() => setComposing(false)}
-        >
-          <div
-            className="compose-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Compose post"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="compose-modal-head">
-              <button
-                type="button"
-                className="icon-button"
-                onClick={() => setComposing(false)}
-                aria-label="Close"
+            <Link
+              className={isSearchRoute ? "rail-link active" : "rail-link"}
+              to="/search"
+              aria-current={isSearchRoute ? "page" : undefined}
+            >
+              <Search size={22} aria-hidden="true" />
+              <span>Search</span>
+            </Link>
+            <Link
+              className={isNotificationsRoute ? "rail-link active" : "rail-link"}
+              to="/notifications"
+              aria-current={isNotificationsRoute ? "page" : undefined}
+              aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
+            >
+              <span className="rail-icon">
+                <Bell size={22} aria-hidden="true" />
+                {unread > 0 ? (
+                  <span className="rail-badge" aria-hidden="true">
+                    {unread > 99 ? "99+" : unread}
+                  </span>
+                ) : null}
+              </span>
+              <span>Notifications</span>
+            </Link>
+            <Link
+              className={isMessagesRoute ? "rail-link active" : "rail-link"}
+              to="/messages"
+              aria-current={isMessagesRoute ? "page" : undefined}
+              aria-label={dmUnread > 0 ? `Messages, ${dmUnread} unread` : "Messages"}
+            >
+              <span className="rail-icon">
+                <MessageCircle size={22} aria-hidden="true" />
+                {dmUnread > 0 ? (
+                  <span className="rail-badge" aria-hidden="true">
+                    {dmUnread > 99 ? "99+" : dmUnread}
+                  </span>
+                ) : null}
+              </span>
+              <span>Messages</span>
+            </Link>
+            {currentUser.is_moderator ? (
+              <Link
+                className={`rail-link rail-link--secondary${isModerationRoute ? " active" : ""}`}
+                to="/moderation"
+                aria-current={isModerationRoute ? "page" : undefined}
               >
-                <X size={20} aria-hidden="true" />
+                <Shield size={22} aria-hidden="true" />
+                <span>Moderation</span>
+              </Link>
+            ) : null}
+            <Link
+              className={`rail-link rail-link--secondary${isSettingsRoute ? " active" : ""}`}
+              to="/settings"
+              aria-current={isSettingsRoute ? "page" : undefined}
+            >
+              <Settings size={22} aria-hidden="true" />
+              <span>Settings</span>
+            </Link>
+          </nav>
+          <button className="rail-post-button" onClick={() => setComposing(true)}>
+            <Feather className="rail-post-icon" size={20} aria-hidden="true" />
+            <span className="rail-post-label">Post</span>
+          </button>
+          <div className="rail-user">
+            <Link
+              to={`/${encodeURIComponent(currentUser.username)}`}
+              className="author-link"
+            >
+              <Avatar user={currentUser} size="small" />
+              <div>
+                <strong>{displayName(currentUser)}</strong>
+                <span>@{currentUser.username}</span>
+              </div>
+            </Link>
+            <div className="rail-user-actions">
+              <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} iconOnly />
+              <button className="icon-button" onClick={handleLogout} aria-label="Log out">
+                <LogOut size={18} aria-hidden="true" />
               </button>
             </div>
-            <Composer
-              currentUser={currentUser}
-              autoFocus
-              onPosted={() => {
-                setComposing(false);
-                // Bump the shared refresh token so an open timeline picks the
-                // new post up (the modal has no feed of its own to insert into).
-                onDiscoveryChanged();
-              }}
-            />
           </div>
-        </div>
-      ) : null}
-    </div>
+        </aside>
+
+        <main className="feed-column">
+          <Outlet
+            context={{ currentUser, refreshToken, onDiscoveryChanged, refreshUnread, setRelevantPeople } satisfies LayoutContext}
+          />
+        </main>
+
+        {hideDiscovery ? null : (
+          <aside className="discovery-column">
+            <SidebarSearchBar />
+            {relevantPeople.length > 0 ? (
+              <RelevantPeoplePanel
+                users={relevantPeople}
+                onChanged={onDiscoveryChanged}
+                refreshToken={refreshToken}
+              />
+            ) : null}
+            <TrendingPanel />
+            {relevantPeople.length > 0 ? null : (
+              <UserDiscoveryPanel onChanged={onDiscoveryChanged} hideSearch />
+            )}
+          </aside>
+        )}
+
+        {composing ? (
+          <div
+            className="modal-backdrop"
+            role="presentation"
+            onClick={() => setComposing(false)}
+          >
+            <div
+              className="compose-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Compose post"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="compose-modal-head">
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => setComposing(false)}
+                  aria-label="Close"
+                >
+                  <X size={20} aria-hidden="true" />
+                </button>
+              </div>
+              <Composer
+                currentUser={currentUser}
+                autoFocus
+                onPosted={() => {
+                  setComposing(false);
+                  // Bump the shared refresh token so an open timeline picks the
+                  // new post up (the modal has no feed of its own to insert into).
+                  onDiscoveryChanged();
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </MobileAccountProvider>
   );
 }
 
@@ -1030,7 +1050,7 @@ function SearchView() {
 
   return (
     <>
-      <header className="feed-header search-feed-header">
+      <FeedHeader className="search-feed-header">
         <div className="feed-title-row search-title-row">
           <h1>Search</h1>
         </div>
@@ -1082,7 +1102,7 @@ function SearchView() {
             </button>
           </div>
         ) : null}
-      </header>
+      </FeedHeader>
       {activeQuery ? (
         tab === "people" ? (
           <UserDiscoveryPanel
@@ -1401,7 +1421,7 @@ function HashtagView() {
 
   return (
     <>
-      <header className="feed-header">
+      <FeedHeader>
         <div className="detail-toolbar">
           <button className="icon-button" onClick={() => navigate(-1)} aria-label="Back">
             <ArrowLeft size={20} aria-hidden="true" />
@@ -1426,7 +1446,7 @@ function HashtagView() {
             Latest
           </button>
         </div>
-      </header>
+      </FeedHeader>
 
       {error ? <div className="status-panel error">{error}</div> : null}
       {!loading && tweets.length === 0 && !error ? (
@@ -1578,7 +1598,7 @@ function NotificationsView() {
 
   return (
     <>
-      <header className="feed-header">
+      <FeedHeader>
         <div className="feed-title-row">
           <h1>Notifications</h1>
           {hasUnread ? (
@@ -1587,7 +1607,7 @@ function NotificationsView() {
             </button>
           ) : null}
         </div>
-      </header>
+      </FeedHeader>
       {error ? <div className="status-panel error">{error}</div> : null}
       {!loading && items.length === 0 && !error ? (
         <div className="empty-state">
@@ -1817,7 +1837,7 @@ function HomeView() {
       {/* No title row here: the tabs say where you are, and on Home every
           vertical pixel above the composer is feed real estate. The h1 stays
           for screen readers and the document outline. */}
-      <header className="feed-header">
+      <FeedHeader>
         <h1 className="visually-hidden">Home</h1>
         <div className="tab-list" role="tablist" aria-label="Timeline">
           <button
@@ -1837,7 +1857,7 @@ function HomeView() {
             Following
           </button>
         </div>
-      </header>
+      </FeedHeader>
 
       <Composer currentUser={currentUser} onPosted={insertPostedTweet} />
 

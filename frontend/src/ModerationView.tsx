@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Loader2, ShieldCheck } from "lucide-react";
 
 import { useFeedMemory } from "./useFeedMemory";
+import { FeedHeader } from "./MobileAccountMenu";
 
 import {
   displayName,
@@ -192,7 +193,7 @@ export default function ModerationView() {
 
   return (
     <>
-      <header className="feed-header">
+      <FeedHeader>
         <div className="feed-title-row">
           <h1>Moderation</h1>
         </div>
@@ -214,7 +215,7 @@ export default function ModerationView() {
             Resolved
           </Link>
         </nav>
-      </header>
+      </FeedHeader>
 
       {error ? <div className="status-panel error">{error}</div> : null}
 

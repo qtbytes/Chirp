@@ -52,6 +52,7 @@ import {
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
 import { InfiniteScroll } from "./InfiniteScroll";
+import { FeedHeader } from "./MobileAccountMenu";
 
 const POLICY_LABELS: Record<DmPolicy, string> = {
   everyone: "Everyone",
@@ -90,7 +91,7 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
 
   return (
     <section className="messages-view" aria-label="Direct messages">
-      <header className="feed-header">
+      <FeedHeader>
         <div className="feed-title-row">
           <h1>Chats</h1>
           <div className="chat-header-actions">
@@ -104,7 +105,7 @@ export function MessagesView({ currentUser }: { currentUser: UserSummary }) {
             </button>
           </div>
         </div>
-      </header>
+      </FeedHeader>
 
       {error ? <div className="status-panel error">{error}</div> : null}
       {!loading && conversations.length === 0 && !error ? (
