@@ -113,12 +113,19 @@ export function HomeComposer({
       const trigger = document.querySelector<HTMLButtonElement>(
         window.matchMedia("(max-width: 720px)").matches ? ".mobile-compose-button" : ".rail-post-button",
       );
-      // Let the navigation become visible again after the text field blurs.
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (document.activeElement === document.body || element.contains(document.activeElement)) {
-          trigger?.focus({ preventScroll: true });
+      // Restore focus when the navigation is visible, rather than assuming its
+      // transition has advanced after a fixed number of animation frames.
+      const deadline = performance.now() + 300;
+      const restoreFocus = () => {
+        if (!trigger?.isConnected || trigger.closest("[inert]")) return;
+        if (document.activeElement !== document.body && !element.contains(document.activeElement)) return;
+        if (getComputedStyle(trigger).visibility === "visible") {
+          trigger.focus({ preventScroll: true });
+        } else if (performance.now() < deadline) {
+          requestAnimationFrame(restoreFocus);
         }
-      }));
+      };
+      requestAnimationFrame(restoreFocus);
     };
   }, [modal]);
 

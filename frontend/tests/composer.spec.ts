@@ -122,7 +122,8 @@ test("grows during native IME transcription and shrinks after commit", async ({
     selectionEnd: 2,
   });
   await expectDraftVisible(page, "修正");
-  expect(await height(field)).toBe(expanded);
+  // The sheet's transform can introduce subpixel rounding in its DOM rect.
+  expect(await height(field)).toBeCloseTo(expanded, 1);
   await ime.send("Input.insertText", { text: "修正" });
   await expectDraftVisible(page, "修正");
   await expect.poll(() => height(field)).toBeLessThan(expanded);

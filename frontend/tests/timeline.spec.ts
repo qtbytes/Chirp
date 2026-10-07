@@ -70,6 +70,112 @@ async function setup(
   await expect(page.locator("#post-1")).toBeVisible();
 }
 
+for (const tab of ["For you", "Following"]) {
+  test(`Home scrolls to the top before refreshing ${tab}, preserving the draft and history`, async ({ page }) => {
+    const requests: URL[] = [];
+    let held: Route | undefined;
+    let hold = false;
+    await setup(page, async (route, url) => {
+      requests.push(url);
+      if (hold) held = route;
+      else await route.fulfill({
+        json: url.searchParams.has("cursor") ? result([tweet(20)]) : result(oldPosts, "older"),
+      });
+    });
+    if (tab === "Following") {
+      await Promise.all([
+        page.waitForResponse((response) => response.url().includes("/timeline/home")),
+        page.getByRole("tab", { name: tab, exact: true }).click(),
+      ]);
+      await expect(page.getByRole("button", { name: "Refresh timeline" })).toBeEnabled();
+    }
+    await openComposer(page);
+    const field = page.getByRole("textbox", { name: "Tweet content" });
+    await field.fill("Keep my draft when I press Home");
+    await page.locator(".composer input[type=file]").setInputFiles({
+      name: "draft.png", mimeType: "image/png", buffer: png,
+    });
+    await expect(page.locator(".composer-media img")).toHaveCount(1);
+    await closeComposer(page);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await expect(page.locator("#post-20")).toBeVisible();
+    const home = page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true });
+    const key = await page.evaluate(() => history.state.key);
+    const before = requests.length;
+    hold = true;
+    await home.click();
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+    expect(requests).toHaveLength(before);
+    await expect(page.locator("#post-20")).toHaveCount(1);
+    await expect(page.getByRole("tab", { name: tab, exact: true })).toHaveAttribute("aria-selected", "true");
+    // At the top, Home invokes the same manual refresh as the toolbar button.
+    await home.click();
+    await expect.poll(() => Boolean(held)).toBe(true);
+    await home.click();
+    await home.click();
+    expect(requests).toHaveLength(before + 1);
+    expect(requests.at(-1)!.searchParams.has("cursor")).toBe(false);
+    if (tab === "Following") expect(requests.at(-1)!.searchParams.get("refresh")).toBe("true");
+    await held!.fulfill({ json: result([tweet(100), ...oldPosts]) });
+    await expect(page.locator("#post-100")).toBeVisible();
+    await expect(page.locator("#post-20")).toHaveCount(0);
+    expect(await page.evaluate(() => history.state.key)).toBe(key);
+    await expect(home).toHaveAttribute("href", tab === "Following" ? "/following" : "/");
+    await openComposer(page);
+    await expect(field).toHaveValue("Keep my draft when I press Home");
+    await expect(page.locator(".composer-media img")).toHaveCount(1);
+    await closeComposer(page);
+  });
+}
+
+test("Home returns from another page to the last selected timeline", async ({ page }) => {
+  const requests: URL[] = [];
+  await setup(page, async (route, url) => {
+    requests.push(url);
+    await route.fulfill({ json: result() });
+  });
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/timeline/home")),
+    page.getByRole("tab", { name: "Following", exact: true }).click(),
+  ]);
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await nav.getByRole("link", { name: "Search", exact: true }).click();
+  await expect(page).toHaveURL(/\/search$/);
+  const home = nav.getByRole("link", { name: "Home", exact: true });
+  await expect(home).toHaveAttribute("href", "/following");
+  const before = requests.length;
+  await home.click();
+  await expect(page).toHaveURL(/\/following$/);
+  await expect(page.locator("#post-1")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Following", exact: true })).toHaveAttribute("aria-selected", "true");
+  expect(requests.slice(before).every((url) => url.pathname.endsWith("/timeline/home"))).toBe(true);
+  expect(requests.length).toBeGreaterThan(before);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/search$/);
+});
+
+test("Home does not replace an initial timeline request already in flight", async ({ page }) => {
+  let held: Route | undefined;
+  let followingRequests = 0;
+  await setup(page, async (route, url) => {
+    if (url.pathname.endsWith("/home")) {
+      followingRequests++;
+      held = route;
+    } else await route.fulfill({ json: result() });
+  });
+  await page.getByRole("tab", { name: "Following", exact: true }).click();
+  await expect.poll(() => Boolean(held)).toBe(true);
+  const home = page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home", exact: true });
+  await home.click();
+  await home.click();
+  expect(followingRequests).toBe(1);
+  expect(held!.request().failure()).toBeNull();
+  await held!.fulfill({ json: result() });
+  await expect(page.locator("#post-1")).toBeVisible();
+  await expect(page).toHaveURL(/\/following$/);
+});
+
 test("refresh replaces pagination while preserving the draft and attached image", async ({
   page,
 }) => {

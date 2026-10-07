@@ -1,5 +1,6 @@
 import {
   FormEvent,
+  RefObject,
   createContext,
   useCallback,
   useContext,
@@ -154,6 +155,7 @@ type LayoutContext = {
   refreshToken: number;
   onDiscoveryChanged: () => void;
   refreshUnread: () => void;
+  homeAction: RefObject<(() => void) | null>;
   /** Detail views publish the post's participants here; the sidebar swaps its
       generic People list for a Twitter-style "Relevant people" panel. */
   setRelevantPeople: (users: UserSummary[]) => void;
@@ -716,6 +718,12 @@ function AppLayout({
   const isModerationRoute = location.pathname.startsWith("/moderation");
   const isHomeRoute =
     location.pathname === "/" || location.pathname === "/following";
+  const lastHomePath = useRef("/");
+  const homeAction = useRef<(() => void) | null>(null);
+  const homePath = isHomeRoute ? location.pathname : lastHomePath.current;
+  useEffect(() => {
+    if (isHomeRoute) lastHomePath.current = location.pathname;
+  }, [isHomeRoute, location.pathname]);
   const hideDiscovery =
     isSearchRoute ||
     isNotificationsRoute ||
@@ -795,8 +803,15 @@ function AppLayout({
           <nav className="rail-nav" aria-label="Primary">
             <Link
               className={isHomeRoute ? "rail-link active" : "rail-link"}
-              to="/"
+              to={homePath}
               aria-current={isHomeRoute ? "page" : undefined}
+              onClick={(event) => {
+                // Keep normal link behavior for modified clicks and other pages.
+                if (!isHomeRoute || event.defaultPrevented || event.button !== 0 ||
+                    event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                homeAction.current?.();
+              }}
             >
               <Home size={22} aria-hidden="true" />
               <span>Home</span>
@@ -899,7 +914,7 @@ function AppLayout({
 
         <main className="feed-column">
           <Outlet
-            context={{ currentUser, refreshToken, onDiscoveryChanged, refreshUnread, setRelevantPeople } satisfies LayoutContext}
+            context={{ currentUser, refreshToken, onDiscoveryChanged, refreshUnread, setRelevantPeople, homeAction } satisfies LayoutContext}
           />
         </main>
 
@@ -1724,7 +1739,7 @@ function NotificationsView() {
 }
 
 function HomeView() {
-  const { currentUser, refreshToken } = useOutletContext<LayoutContext>();
+  const { currentUser, refreshToken, homeAction } = useOutletContext<LayoutContext>();
   const navigate = useNavigate();
   const location = useLocation();
   const activeTab: TimelineKind = location.pathname === "/following" ? "following" : "for-you";
@@ -1884,6 +1899,21 @@ function HomeView() {
   }, [loadFeed, refreshToken]);
 
   const refreshFeed = useCallback(() => void loadFeed(undefined, false, true), [loadFeed]);
+  useEffect(() => {
+    homeAction.current = () => {
+      if (window.scrollY > 1) {
+        window.scrollTo({
+          top: 0,
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+        });
+        return;
+      }
+      // The initial page is already loading; loadFeed also deduplicates refreshes.
+      if (requestRef.current?.mode !== "load") refreshFeed();
+    };
+    return () => { homeAction.current = null; };
+  }, [homeAction, refreshFeed]);
+
   const pull = usePullToRefresh({
     disabled: refreshingFeed || (loadingFeed && !page),
     onRefresh: refreshFeed,
