@@ -1037,10 +1037,9 @@ button.rail-link:disabled:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   overflow: hidden;
-  color: var(--accent-strong);
-  font-size: 13px;
+  color: var(--muted);
+  overflow-anchor: none;
   transition: height 180ms ease;
 }
 
@@ -1048,8 +1047,27 @@ button.rail-link:disabled:hover {
   transition: none;
 }
 
-.pull-refresh svg {
+.pull-refresh-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.pull-refresh.ready .pull-refresh-icon,
+.pull-refresh:has(.spin) .pull-refresh-icon {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+
+.mobile-compose-entry,
+.home-compose-heading {
+  display: none;
 }
 
 .feed-error {
@@ -1068,10 +1086,83 @@ button.rail-link:disabled:hover {
   .timeline-refresh-button {
     top: 0;
   }
+
+  .mobile-compose-entry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 66px;
+    padding: 14px 18px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    background: var(--panel);
+    text-align: left;
+  }
+
+  .mobile-compose-entry:hover {
+    background: var(--hover);
+  }
+
+  .mobile-compose-entry:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -3px;
+  }
+
+  .mobile-compose-prompt {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+  }
+
+  .mobile-compose-icon {
+    flex-shrink: 0;
+    color: var(--accent);
+  }
+
+  .mobile-compose-draft {
+    padding: 3px 7px;
+    border-radius: 6px;
+    color: var(--accent-strong);
+    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .home-compose-layer:not(.modal-backdrop):not(:focus-within) {
+    display: none;
+  }
+
+  .home-compose-layer.modal-backdrop {
+    padding: 12px;
+    overscroll-behavior: contain;
+  }
+
+  .home-compose-dialog.compose-modal {
+    width: 100%;
+    max-height: 100%;
+    border-radius: 20px;
+  }
+
+  .home-compose-heading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+  }
+
+  .home-compose-heading strong {
+    font-size: 16px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pull-refresh {
+  .pull-refresh,
+  .pull-refresh-icon {
     transition: none;
   }
 
@@ -3175,7 +3266,7 @@ button.media-grid__cell {
   .rail-user,
   .rail-link.muted,
   .rail-link--secondary,
-  /* The bottom bar has no room for a post pill; Home's inline composer covers it. */
+  /* Home's compact compose entry provides the mobile posting action. */
   .rail-post-button {
     display: none;
   }

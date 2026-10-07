@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { closeComposer, openComposer } from "./composer-helpers";
 
 async function openApp(page: Page, moderator = true, path = "/") {
   const user = {
@@ -166,9 +167,10 @@ test.describe("mobile navigation", () => {
     page,
   }) => {
     await openApp(page);
+    await openComposer(page);
     await page.getByRole("textbox", { name: "Tweet content" }).focus();
     await expect(page.locator(".rail")).toBeHidden();
-    await page.getByRole("tab", { name: "For you", exact: true }).click();
+    await closeComposer(page);
     await expect(page.locator(".rail")).toBeVisible();
     await page.goto("/messages/friend");
     const input = page.getByPlaceholder("Message @friend");

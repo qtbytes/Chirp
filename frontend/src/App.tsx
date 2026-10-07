@@ -22,7 +22,6 @@ import {
 } from "react-router-dom";
 import {
   ArrowLeft,
-  ArrowDown,
   AtSign,
   BarChart2,
   Bell,
@@ -141,6 +140,7 @@ import { useMediaAttachment } from "./useMediaAttachment";
 import { InfiniteScroll } from "./InfiniteScroll";
 import { FeedHeader, MobileAccountProvider } from "./MobileAccountMenu";
 import { usePullToRefresh } from "./usePullToRefresh";
+import { HomeComposer } from "./HomeComposer";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
@@ -1930,21 +1930,22 @@ function HomeView() {
         </button>
       </FeedHeader>
 
+      <Composer currentUser={currentUser} onPosted={insertPostedTweet} compactOnMobile />
+
       <div
-        className={`pull-refresh${pull.distance > 0 ? " pulling" : ""}`}
-        style={{ height: refreshingFeed ? 52 : pull.distance }}
+        className={`pull-refresh${pull.distance > 0 ? " pulling" : ""}${pull.ready ? " ready" : ""}`}
+        style={{ height: refreshingFeed ? 48 : pull.distance * 0.75 }}
         aria-hidden="true"
       >
-        {refreshingFeed ? <Loader2 size={18} className="spin" /> : (
-          <ArrowDown size={18} style={{ transform: pull.ready ? "rotate(180deg)" : undefined }} />
-        )}
-        <span>{refreshingFeed ? "Refreshing…" : pull.ready ? "Release to refresh" : "Pull to refresh"}</span>
+        <span className="pull-refresh-icon">
+          {refreshingFeed ? <Loader2 size={18} className="spin" /> : (
+            <RotateCw size={18} style={{ transform: `rotate(${pull.distance * 3}deg)` }} />
+          )}
+        </span>
       </div>
       <span className="visually-hidden" role="status">
-        {refreshingFeed ? "Refreshing timeline" : refreshMessage}
+        {refreshingFeed ? "Refreshing timeline" : pull.ready ? "Release to refresh" : refreshMessage}
       </span>
-
-      <Composer currentUser={currentUser} onPosted={insertPostedTweet} />
 
       {feedError ? (
         <div className="status-panel error feed-error" role="alert">
@@ -2356,14 +2357,17 @@ function Composer({
   currentUser,
   onPosted,
   autoFocus = false,
+  compactOnMobile = false,
 }: {
   currentUser: UserSummary;
   onPosted: (tweet: Tweet) => void;
   autoFocus?: boolean;
+  compactOnMobile?: boolean;
 }) {
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [visibility, setVisibility] = useState<TweetVisibility>("public");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(content, setContent);
   const typeahead = useComposerTypeahead({
@@ -2395,6 +2399,7 @@ function Composer({
       setContent("");
       media.clear();
       setVisibility("public");
+      setExpanded(false);
       onPosted(tweet);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -2403,7 +2408,7 @@ function Composer({
     }
   }
 
-  return (
+  const form = (
     <form className="composer" onSubmit={handleSubmit}>
       <div className="composer-scroll">
         <Avatar user={currentUser} />
@@ -2443,6 +2448,18 @@ function Composer({
       </div>
     </form>
   );
+
+  return compactOnMobile ? (
+    <HomeComposer
+      currentUser={currentUser}
+      hasDraft={content.trim().length > 0 || media.mediaUrls.length > 0 || media.uploading}
+      open={expanded}
+      onOpen={() => setExpanded(true)}
+      onClose={() => setExpanded(false)}
+    >
+      {form}
+    </HomeComposer>
+  ) : form;
 }
 
 function TweetDetail({

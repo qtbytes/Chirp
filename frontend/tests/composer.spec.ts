@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { openComposer } from "./composer-helpers";
 
 const transcript =
   "语音输入会一次写入很长的中文句子，图片应当始终排列在完整文字的下方。".repeat(
@@ -46,6 +47,7 @@ test.beforeEach(async ({ page }) => {
     route.fulfill({ contentType: "image/png", body: png }),
   );
   await page.goto("/");
+  await openComposer(page);
   await expect(
     page.getByRole("textbox", { name: "Tweet content" }),
   ).toBeVisible();
