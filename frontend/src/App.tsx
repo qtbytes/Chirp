@@ -1,6 +1,8 @@
 import {
   FormEvent,
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -34,6 +36,7 @@ import {
   LogOut,
   Moon,
   MessageCircle,
+  Plus,
   Repeat2,
   RotateCw,
   Search,
@@ -96,6 +99,7 @@ import type {
 } from "./types";
 import {
   Avatar,
+  ImageLightbox,
   CommentCard,
   ConfirmDialog,
   CurrentUserProvider,
@@ -141,6 +145,7 @@ import { InfiniteScroll } from "./InfiniteScroll";
 import { FeedHeader, MobileAccountProvider } from "./MobileAccountMenu";
 import { usePullToRefresh } from "./usePullToRefresh";
 import { HomeComposer } from "./HomeComposer";
+import { getImageViewer } from "./imageViewerNavigation";
 
 type AuthMode = "login" | "register";
 type Theme = "light" | "dark";
@@ -153,6 +158,17 @@ type LayoutContext = {
       generic People list for a Twitter-style "Relevant people" panel. */
   setRelevantPeople: (users: UserSummary[]) => void;
 };
+
+type ComposerDraft = {
+  content: string;
+  setContent: (value: string) => void;
+  visibility: TweetVisibility;
+  setVisibility: (value: TweetVisibility) => void;
+  media: ReturnType<typeof useMediaAttachment>;
+  open: boolean;
+  setOpen: (value: boolean) => void;
+};
+const ComposerDraftContext = createContext<ComposerDraft | null>(null);
 
 const THEME_STORAGE_KEY = "twitter-system-theme";
 
@@ -199,6 +215,9 @@ function captureScrollRecord(): ScrollRecord {
 function ScrollMemory() {
   const location = useLocation();
   const navigationType = useNavigationType();
+  // A lightbox is a history entry over the same page, not a new scroll position.
+  const pageKey = getImageViewer(location.state)?.backgroundKey ?? location.key;
+  const restoredKey = useRef<string | null>(null);
   // The record as of the last scroll event. Captured continuously instead of
   // at save time because by then the next page's (shorter) DOM is already in
   // and both the offset and the anchor are gone.
@@ -228,15 +247,17 @@ function ScrollMemory() {
 
   // Remember where this history entry was when it is left…
   useLayoutEffect(() => {
-    const key = location.key;
+    const key = pageKey;
     return () => {
       scrollPositions.set(key, lastRecord.current);
     };
-  }, [location.key]);
+  }, [pageKey]);
 
   // …and put the viewport back there when it is returned to.
   useLayoutEffect(() => {
-    const saved = navigationType === "POP" ? scrollPositions.get(location.key) : undefined;
+    if (restoredKey.current === pageKey) return;
+    restoredKey.current = pageKey;
+    const saved = navigationType === "POP" ? scrollPositions.get(pageKey) : undefined;
     if (!saved || (saved.y === 0 && !saved.anchorId)) {
       window.scrollTo(0, 0);
       lastRecord.current = { y: 0, anchorId: null, anchorTop: 0 };
@@ -302,9 +323,29 @@ function ScrollMemory() {
     };
     pin();
     return stop;
-  }, [location.key, navigationType]);
+  }, [pageKey, navigationType]);
 
   return null;
+}
+
+function ImageViewerRoute() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const closing = useRef(false);
+  const viewer = getImageViewer(location.state);
+  useEffect(() => { closing.current = false; }, [location.key]);
+  return viewer ? (
+    <ImageLightbox
+      key={location.key}
+      images={viewer.images}
+      initialIndex={viewer.initialIndex}
+      onClose={() => {
+        if (closing.current) return;
+        closing.current = true;
+        navigate(-1);
+      }}
+    />
+  ) : null;
 }
 
 function App() {
@@ -453,6 +494,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    <ImageViewerRoute />
     </CurrentUserProvider>
   );
 }
@@ -661,6 +703,10 @@ function AppLayout({
   const [unread, setUnread] = useState(0);
   const [dmUnread, setDmUnread] = useState(0);
   const [composing, setComposing] = useState(false);
+  const [draftContent, setDraftContent] = useState("");
+  const [draftVisibility, setDraftVisibility] = useState<TweetVisibility>("public");
+  const draftMedia = useMediaAttachment();
+  const hasDraft = draftContent.trim().length > 0 || draftMedia.mediaUrls.length > 0 || draftMedia.uploading;
   const [relevantPeople, setRelevantPeople] = useState<UserSummary[]>([]);
   const location = useLocation();
   const isSearchRoute = location.pathname === "/search";
@@ -677,6 +723,8 @@ function AppLayout({
     isSettingsRoute ||
     isModerationRoute;
   const onDiscoveryChanged = () => setRefreshToken((value) => value + 1);
+
+  useEffect(() => setComposing(false), [location.pathname]);
 
   const refreshUnread = useCallback(async () => {
     try {
@@ -724,6 +772,15 @@ function AppLayout({
   }
 
   return (
+    <ComposerDraftContext.Provider value={{
+      content: draftContent,
+      setContent: setDraftContent,
+      visibility: draftVisibility,
+      setVisibility: setDraftVisibility,
+      media: draftMedia,
+      open: composing,
+      setOpen: setComposing,
+    }}>
     <MobileAccountProvider
       currentUser={currentUser}
       theme={theme}
@@ -752,6 +809,19 @@ function AppLayout({
               <Search size={22} aria-hidden="true" />
               <span>Search</span>
             </Link>
+            <button
+              type="button"
+              className="mobile-compose-button"
+              aria-label={hasDraft ? "Continue your draft" : "Compose post"}
+              aria-haspopup="dialog"
+              aria-expanded={composing}
+              aria-controls="post-composer"
+              title={hasDraft ? "Continue your draft" : "New post"}
+              onClick={() => setComposing(true)}
+            >
+              <Plus size={24} strokeWidth={2.2} aria-hidden="true" />
+              {hasDraft ? <span className="compose-draft-dot" aria-hidden="true" /> : null}
+            </button>
             <Link
               className={isNotificationsRoute ? "rail-link active" : "rail-link"}
               to="/notifications"
@@ -850,44 +920,12 @@ function AppLayout({
           </aside>
         )}
 
-        {composing ? (
-          <div
-            className="modal-backdrop"
-            role="presentation"
-            onClick={() => setComposing(false)}
-          >
-            <div
-              className="compose-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Compose post"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="compose-modal-head">
-                <button
-                  type="button"
-                  className="icon-button"
-                  onClick={() => setComposing(false)}
-                  aria-label="Close"
-                >
-                  <X size={20} aria-hidden="true" />
-                </button>
-              </div>
-              <Composer
-                currentUser={currentUser}
-                autoFocus
-                onPosted={() => {
-                  setComposing(false);
-                  // Bump the shared refresh token so an open timeline picks the
-                  // new post up (the modal has no feed of its own to insert into).
-                  onDiscoveryChanged();
-                }}
-              />
-            </div>
-          </div>
+        {!isHomeRoute ? (
+          <Composer currentUser={currentUser} onPosted={onDiscoveryChanged} inlineOnDesktop={false} />
         ) : null}
       </div>
     </MobileAccountProvider>
+    </ComposerDraftContext.Provider>
   );
 }
 
@@ -1930,7 +1968,7 @@ function HomeView() {
         </button>
       </FeedHeader>
 
-      <Composer currentUser={currentUser} onPosted={insertPostedTweet} compactOnMobile />
+      <Composer currentUser={currentUser} onPosted={insertPostedTweet} />
 
       <div
         className={`pull-refresh${pull.distance > 0 ? " pulling" : ""}${pull.ready ? " ready" : ""}`}
@@ -2356,26 +2394,21 @@ function ThemeToggle({
 function Composer({
   currentUser,
   onPosted,
-  autoFocus = false,
-  compactOnMobile = false,
+  inlineOnDesktop = true,
 }: {
   currentUser: UserSummary;
   onPosted: (tweet: Tweet) => void;
-  autoFocus?: boolean;
-  compactOnMobile?: boolean;
+  inlineOnDesktop?: boolean;
 }) {
-  const [content, setContent] = useState("");
+  const { content, setContent, visibility, setVisibility, media, open, setOpen } = useContext(ComposerDraftContext)!;
   const [error, setError] = useState("");
   const [posting, setPosting] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [visibility, setVisibility] = useState<TweetVisibility>("public");
   const { insertEmoji, fieldProps } = useEmojiField<HTMLTextAreaElement>(content, setContent);
   const typeahead = useComposerTypeahead({
     text: content,
     onTextChange: setContent,
     fieldRef: fieldProps.ref,
   });
-  const media = useMediaAttachment();
   const postLength = usePostLength();
   const remaining = postLength.limit - content.length;
   const canPost = (content.trim().length > 0 || media.mediaUrls.length > 0) && remaining >= 0;
@@ -2399,7 +2432,7 @@ function Composer({
       setContent("");
       media.clear();
       setVisibility("public");
-      setExpanded(false);
+      setOpen(false);
       onPosted(tweet);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -2422,7 +2455,6 @@ function Composer({
               rows={1}
               placeholder="What is happening?"
               aria-label="Tweet content"
-              autoFocus={autoFocus}
             />
             {typeahead.menu}
           </div>
@@ -2449,17 +2481,17 @@ function Composer({
     </form>
   );
 
-  return compactOnMobile ? (
+  return (
     <HomeComposer
-      currentUser={currentUser}
       hasDraft={content.trim().length > 0 || media.mediaUrls.length > 0 || media.uploading}
-      open={expanded}
-      onOpen={() => setExpanded(true)}
-      onClose={() => setExpanded(false)}
+      open={open}
+      onOpen={() => setOpen(true)}
+      onClose={() => setOpen(false)}
+      inlineOnDesktop={inlineOnDesktop}
     >
       {form}
     </HomeComposer>
-  ) : form;
+  );
 }
 
 function TweetDetail({

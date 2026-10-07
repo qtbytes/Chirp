@@ -88,6 +88,7 @@ import type {
 } from "./types";
 import { EmojiPicker } from "./EmojiPicker";
 import { useEmojiField } from "./useEmojiField";
+import { useOpenImageViewer } from "./imageViewerNavigation";
 import {
   ACCEPTED_MEDIA,
   MAX_ALT_LENGTH,
@@ -742,7 +743,7 @@ export function useComposerTypeahead({
 
 function InlineImage({ url }: { url: string }) {
   const [failed, setFailed] = useState(false);
-  const [viewing, setViewing] = useState(false);
+  const openViewer = useOpenImageViewer();
 
   if (failed) {
     return (
@@ -764,7 +765,7 @@ function InlineImage({ url }: { url: string }) {
         className="tweet-media-link"
         onClick={(event) => {
           event.stopPropagation();
-          setViewing(true);
+          openViewer([{ src: url, alt: "" }], 0);
         }}
       >
         <img
@@ -775,13 +776,6 @@ function InlineImage({ url }: { url: string }) {
           onError={() => setFailed(true)}
         />
       </button>
-      {viewing ? (
-        <ImageLightbox
-          images={[{ src: url, alt: "" }]}
-          initialIndex={0}
-          onClose={() => setViewing(false)}
-        />
-      ) : null}
     </>
   );
 }
@@ -1133,20 +1127,11 @@ export function MediaGallery({ urls, alts = [] }: { urls: string[]; alts?: strin
     .map((url, i) => ({ src: resolveMediaUrl(url), alt: alts[i] ?? "" }))
     .filter((item): item is LightboxImage => Boolean(item.src));
   const images = items.filter((item) => !isVideoUrl(item.src));
-  const [viewing, setViewing] = useState<number | null>(null);
+  const openViewer = useOpenImageViewer();
 
   if (items.length === 0) {
     return null;
   }
-
-  const viewer =
-    viewing != null ? (
-      <ImageLightbox
-        images={images}
-        initialIndex={viewing}
-        onClose={() => setViewing(null)}
-      />
-    ) : null;
 
   if (items.length === 1) {
     const item = items[0];
@@ -1160,13 +1145,12 @@ export function MediaGallery({ urls, alts = [] }: { urls: string[]; alts?: strin
             className="tweet-media-link"
             onClick={(event) => {
               event.stopPropagation();
-              setViewing(0);
+              openViewer(images, 0);
             }}
           >
             <img className="tweet-media-image" src={item.src} alt={item.alt} loading="lazy" />
           </button>
         )}
-        {viewer}
       </div>
     );
   }
@@ -1186,7 +1170,7 @@ export function MediaGallery({ urls, alts = [] }: { urls: string[]; alts?: strin
               className="media-grid__cell"
               onClick={(event) => {
                 event.stopPropagation();
-                setViewing(images.indexOf(item));
+                openViewer(images, images.indexOf(item));
               }}
             >
               <img src={item.src} alt={item.alt} loading="lazy" />
@@ -1194,7 +1178,6 @@ export function MediaGallery({ urls, alts = [] }: { urls: string[]; alts?: strin
           ),
         )}
       </div>
-      {viewer}
     </>
   );
 }

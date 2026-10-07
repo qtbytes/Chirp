@@ -281,7 +281,7 @@ test("mobile pull refresh has a threshold and excludes normal scrolling and text
   await pull(190, 300, 0, 160);
   expect(requests).toBe(baseline);
   await page.evaluate(() => window.scrollTo(0, 0));
-  const entry = page.locator(".mobile-compose-entry");
+  const entry = page.locator(".home-feed-header");
   const entryTop = (await entry.boundingBox())!.y;
   const firstPostTop = (await page.locator("#post-1").boundingBox())!.y;
   await touch.send("Input.dispatchTouchEvent", {
@@ -306,10 +306,10 @@ test("mobile pull refresh has a threshold and excludes normal scrolling and text
   );
 });
 
-test("mobile entry preserves the draft, attachments and audience when dismissed", async ({ page, isMobile }) => {
+test("mobile compose button preserves the draft, attachments and audience when dismissed", async ({ page, isMobile }) => {
   test.skip(!isMobile, "Mobile composer");
   await setup(page, async (route) => route.fulfill({ json: result() }));
-  const entry = page.locator(".mobile-compose-entry");
+  const entry = page.locator(".mobile-compose-button");
   const dialog = page.getByRole("dialog", { name: "Compose post", exact: true });
   const field = page.getByRole("textbox", { name: "Tweet content" });
   await expect(field).toBeHidden();
@@ -340,7 +340,7 @@ test("mobile entry preserves the draft, attachments and audience when dismissed"
   await expect(dialog).toBeHidden();
   await expect(entry).toBeFocused();
   await expect(entry).toHaveAccessibleName("Continue your draft");
-  await expect(entry).toContainText("Draft");
+  await expect(entry.locator(".compose-draft-dot")).toBeVisible();
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
   await page.getByRole("tab", { name: "Following", exact: true }).click();
   await page.getByRole("button", { name: "Refresh timeline" }).click();
@@ -380,7 +380,7 @@ test("responsive composer keeps the same editor through desktop and phone layout
   await expect(page.locator(".composer").getByRole("button", { name: "Post", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(close).toBeFocused();
-  await page.mouse.click(3, 640);
-  await expect(page.locator(".mobile-compose-entry")).toBeFocused();
+  await page.mouse.click(3, 100);
+  await expect(page.locator(".mobile-compose-button")).toBeFocused();
   await expect(field).toBeHidden();
 });

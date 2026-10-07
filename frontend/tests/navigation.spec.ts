@@ -69,7 +69,7 @@ async function openApp(page: Page, moderator = true, path = "/") {
 test.describe("mobile navigation", () => {
   test.beforeEach(({ isMobile }) => test.skip(!isMobile, "Mobile layout"));
 
-  test("keeps four destinations usable across phone widths and highlights the current route", async ({
+  test("keeps four destinations and a central compose button usable across phone widths", async ({
     page,
   }) => {
     await openApp(page);
@@ -87,6 +87,15 @@ test.describe("mobile navigation", () => {
       expect(rail!.x).toBeGreaterThan(0);
       expect(rail!.x + rail!.width).toBeLessThan(width);
       expect(rail!.y + rail!.height).toBeLessThan(800);
+      const compose = nav.getByRole("button", { name: "Compose post", exact: true });
+      const button = (await compose.boundingBox())!;
+      expect(button.width).toBe(44);
+      expect(button.height).toBe(44);
+      expect(button.x + button.width / 2).toBeCloseTo(width / 2, 0);
+      expect(button.y).toBeGreaterThan(rail!.y);
+      expect(button.y + button.height).toBeLessThan(rail!.y + rail!.height);
+      await expect(compose).toHaveCSS("-webkit-tap-highlight-color", "rgba(0, 0, 0, 0)");
+      await expect(page.locator(".mobile-compose-entry")).toHaveCount(0);
     }
     for (const [name, path] of [
       ["Search", "/search"],
@@ -107,6 +116,27 @@ test.describe("mobile navigation", () => {
     await expect(
       nav.getByRole("link", { name: "Home", exact: true }),
     ).toHaveAttribute("aria-current", "page");
+  });
+
+  test("opens a bottom sheet from every destination and carries its draft between pages", async ({ page }) => {
+    await openApp(page);
+    const nav = page.getByRole("navigation", { name: "Primary" });
+    const dialog = page.getByRole("dialog", { name: "Compose post", exact: true });
+    const field = page.getByRole("textbox", { name: "Tweet content" });
+    for (const name of ["Home", "Search", "Notifications, 2 unread", "Messages, 1 unread"]) {
+      await nav.getByRole("link", { name, exact: true }).click();
+      await openComposer(page);
+      await expect(dialog).toBeVisible();
+      if (name === "Home") await field.fill("A draft shared across pages");
+      else await expect(field).toHaveValue("A draft shared across pages");
+      await expect.poll(async () => {
+        const box = (await dialog.boundingBox())!;
+        return Math.abs(box.y + box.height - (await page.evaluate(() => innerHeight)));
+      }).toBeLessThan(2);
+      expect((await dialog.boundingBox())!.y).toBeGreaterThan(200);
+      await closeComposer(page);
+      await expect(nav.getByRole("button", { name: "Continue your draft" })).toBeFocused();
+    }
   });
 
   test("account menu preserves access to settings, moderation, profile and theme", async ({
@@ -140,6 +170,33 @@ test.describe("mobile navigation", () => {
     await expect(page).toHaveURL(/\/nav_test$/);
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
+
+  test("keeps the sheet toolbar and audience menu inside the viewport above the keyboard", async ({ page }) => {
+    await openApp(page);
+    await openComposer(page);
+    const field = page.getByRole("textbox", { name: "Tweet content" });
+    await field.fill("A long draft that must scroll within the sheet.\n".repeat(30));
+    // Model the visual viewport shrinking when a phone keyboard opens.
+    await page.evaluate(() => {
+      Object.defineProperty(window.visualViewport!, "height", { configurable: true, value: 360 });
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+    });
+    const dialog = page.getByRole("dialog", { name: "Compose post", exact: true });
+    await expect.poll(async () => {
+      const box = (await dialog.boundingBox())!;
+      return box.y + box.height;
+    }).toBeCloseTo(360, 0);
+    const post = page.locator(".composer").getByRole("button", { name: "Post", exact: true });
+    const postBox = (await post.boundingBox())!;
+    expect(postBox.y).toBeGreaterThan(0);
+    expect(postBox.y + postBox.height).toBeLessThanOrEqual(360);
+    await page.getByRole("button", { name: "Everyone can see" }).click();
+    const menu = await page.getByRole("menu", { name: "Who can see this?" }).boundingBox();
+    expect(menu!.y).toBeGreaterThanOrEqual(0);
+    expect(menu!.y + menu!.height).toBeLessThanOrEqual(360);
+    await page.getByRole("menuitemradio", { name: /Only you/ }).click();
+    await closeComposer(page);
   });
 
   test("regular accounts have no moderation entry and can log out", async ({
