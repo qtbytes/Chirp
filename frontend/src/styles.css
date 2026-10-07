@@ -657,18 +657,21 @@ button.rail-link:disabled:hover {
 
 .notif-link {
   display: grid;
-  grid-template-columns: 20px 36px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: start;
-  gap: 12px;
+  gap: 12px 14px;
   padding: 14px 18px;
   color: inherit;
   text-decoration: none;
 }
 
-/* Moderation notices carry no avatar; drop its column so the text doesn't
-   fall into the 36px slot. */
-.notif-link--no-avatar {
-  grid-template-columns: 20px minmax(0, 1fr);
+/* The avatar and event badge share the first cell; the text keeps one
+   consistent inset for both social activity and platform notices. */
+.notif-link > .avatar.small {
+  grid-column: 1;
+  grid-row: 1;
+  width: 40px;
+  height: 40px;
 }
 
 .notif-link:hover {
@@ -676,28 +679,48 @@ button.rail-link:disabled:hover {
 }
 
 .notif-icon {
-  margin-top: 3px;
+  --event-color: var(--accent);
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  align-self: start;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  transform: translate(25px, 25px);
+  border-radius: 50%;
+  color: var(--event-color);
+  background: color-mix(in srgb, var(--event-color) 17%, var(--panel));
+  box-shadow: 0 0 0 2px var(--panel);
+  stroke-width: 1.9;
 }
 
 .notif-icon.like {
-  color: var(--like);
+  --event-color: var(--like);
 }
 
 .notif-icon.retweet {
-  color: var(--retweet);
-}
-
-.notif-icon.comment,
-.notif-icon.follow,
-.notif-icon.mention {
-  color: var(--accent);
+  --event-color: var(--retweet);
 }
 
 .notif-icon.moderation {
-  color: var(--muted);
+  --event-color: var(--muted);
+}
+
+/* Platform notices have no actor avatar: use a standalone shield instead. */
+.notif-link--no-avatar .notif-icon {
+  width: 40px;
+  height: 40px;
+  padding: 11px;
+  transform: none;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--muted) 12%, var(--panel));
 }
 
 .notif-body {
+  grid-column: 2;
+  grid-row: 1;
   display: grid;
   gap: 3px;
   min-width: 0;
