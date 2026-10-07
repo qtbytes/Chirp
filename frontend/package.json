@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
+    "test:composer": "playwright test tests/composer.spec.ts",
     "generate:emoji": "node scripts/generate-emoji-data.mjs"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@emoji-mart/data": "^1.2.1",
+    "@types/node": "^22.20.5",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "typescript": "^5.9.3"

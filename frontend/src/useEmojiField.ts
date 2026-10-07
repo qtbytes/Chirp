@@ -34,12 +34,22 @@ export function useEmojiField<T extends Field>(
     // Own the sizing so a manual resize handle / scrollbar can't fight the grow.
     el.style.resize = "none";
     el.style.overflowY = "hidden";
+    if (composingRef.current) {
+      // Voice IMEs can keep a whole paragraph in composition. Keep it visible
+      // without collapsing to "auto", which can disturb the composing caret.
+      // Compare against clientHeight before adding the buffer so repeated
+      // measurements don't keep growing an already-fitting field.
+      if (el.scrollHeight > el.clientHeight) {
+        el.style.height = `${Math.ceil(el.scrollHeight) + TEXTAREA_HEIGHT_BUFFER}px`;
+      }
+      return;
+    }
     el.style.height = "auto";
     el.style.height = `${Math.ceil(el.scrollHeight) + TEXTAREA_HEIGHT_BUFFER}px`;
   }
 
   function scheduleResizeTextarea() {
-    if (composingRef.current || resizeFrameRef.current !== null) {
+    if (resizeFrameRef.current !== null) {
       return;
     }
     resizeFrameRef.current = requestAnimationFrame(() => {
@@ -52,9 +62,7 @@ export function useEmojiField<T extends Field>(
   // textarea height and clip the last line in .composer-highlight. This runs
   // on every render because attaching media changes the CSS sizing floor.
   useLayoutEffect(() => {
-    if (!composingRef.current) {
-      resizeTextarea();
-    }
+    resizeTextarea();
   });
 
   // A modal scrollbar can appear after the first measurement and make the
@@ -100,9 +108,10 @@ export function useEmojiField<T extends Field>(
     composingRef.current = true;
   }
 
-  function handleCompositionEnd() {
+  function finishComposition() {
     composingRef.current = false;
-    // Let the browser commit the composed text before measuring its final wrap.
+    // Also run on blur: leaving a voice IME may not deliver compositionend.
+    // Wait for the browser's final text before allowing the field to shrink.
     scheduleResizeTextarea();
   }
 
@@ -117,15 +126,24 @@ export function useEmojiField<T extends Field>(
   }
 
   function handleChange(event: ChangeEvent<T>) {
+    // Recover when a voice IME resumes ordinary input without compositionend.
+    if ((event.nativeEvent as InputEvent).isComposing === false) {
+      composingRef.current = false;
+    }
     onValueChange(event.target.value);
     rememberCaret();
+    // An IME may repeat the same value, so don't rely solely on a React render.
+    scheduleResizeTextarea();
   }
 
   function insertEmoji(emoji: string) {
     const el = ref.current;
     // Reading el.selectionStart here is unreliable because focus has moved to the
     // picker, so use the caret captured while the field last had focus.
-    const { start, end } = caretRef.current ?? { start: value.length, end: value.length };
+    const { start, end } = caretRef.current ?? {
+      start: value.length,
+      end: value.length,
+    };
     const next = value.slice(0, start) + emoji + value.slice(end);
     if (maxLength !== undefined && next.length > maxLength) {
       return;
@@ -147,8 +165,9 @@ export function useEmojiField<T extends Field>(
     onSelect: rememberCaret,
     onClick: rememberCaret,
     onKeyUp: rememberCaret,
+    onBlur: finishComposition,
     onCompositionStart: handleCompositionStart,
-    onCompositionEnd: handleCompositionEnd,
+    onCompositionEnd: finishComposition,
   };
 
   return { insertEmoji, fieldProps };
